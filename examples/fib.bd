@@ -1,0 +1,15 @@
+rule main() -> i64:
+  set n = 10.
+  set a: i64 = 0.
+  set b: i64 = 1.
+  set i: i64 = 0.
+
+  repeat while i < n:
+    set next = a + b.
+    put a = b.
+    put b = next.
+    put i = i + 1.
+  end
+
+  yield a.
+end

@@ -1,0 +1,11 @@
+rule main() -> i64:
+  set i = 0.
+  set sum: i64 = 0.
+
+  repeat while i < 10:
+    put sum = sum + i.
+    put i = i + 1.
+  end
+
+  yield sum.
+end

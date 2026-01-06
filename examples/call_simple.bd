@@ -1,0 +1,8 @@
+rule add(a: i64, b: i64) -> i64:
+  yield a + b.
+end
+
+rule main() -> i64:
+  set x = add(2, 3).
+  yield x.
+end

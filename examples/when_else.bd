@@ -1,0 +1,8 @@
+rule main() -> i64:
+  set x = 10.
+  when x > 5:
+    yield 1.
+  otherwise:
+    yield 2.
+  end
+end
