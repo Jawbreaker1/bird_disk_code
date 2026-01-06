@@ -36,6 +36,30 @@ rule main() -> i64:
 end
 ```
 
+Quick start
+1) Create a `.bd` file (BirdDisk source).
+```birddisk
+rule main() -> i64:
+  yield 42.
+end
+```
+2) Build the CLI.
+```sh
+cargo build -p birddiskc
+```
+3) Run in the VM.
+```sh
+./target/debug/birddisk run path/to/file.bd --engine vm --json
+```
+4) Run in WASM (optional).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine wasm --json
+```
+5) Inspect generated WAT (optional).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine wasm --emit wat
+```
+
 Typing model (v0.1)
 - Built-in types: i64, bool
 - Function params and return types are always explicit
