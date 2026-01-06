@@ -1,0 +1,9 @@
+[package]
+name = "birddisk_wasm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+birddisk_core = { path = "../birddisk_core" }
+wasmtime = "12"

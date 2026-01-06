@@ -1,0 +1,8 @@
+[workspace]
+members = [
+  "crates/birddisk_core",
+  "crates/birddiskc",
+  "crates/birddisk_vm",
+  "crates/birddisk_wasm",
+]
+resolver = "2"

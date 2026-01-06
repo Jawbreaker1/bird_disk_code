@@ -4,14 +4,25 @@ Keep scope tight. If it expands language surface area, it's likely out-of-scope 
 
 ---
 
+## Sprint 0 — VSCode extension (minimal) (0.5–1 day)
+- [ ] Create a VSCode extension for BirdDisk with syntax highlighting
+- [ ] Add basic language configuration (comments reserved, brackets, auto-closing)
+- [ ] Publish guidance for installing the extension locally
+
+Acceptance:
+- `.bd` files highlight correctly in VSCode
+- Extension can be installed locally from the repo
+
+---
+
 ## Sprint 0 — Repo bootstrap (0.5–1 day)
-- [ ] Initialize Rust workspace with crates:
-  - [ ] crates/birddisk_core
-  - [ ] crates/birddiskc
-  - [ ] crates/birddisk_vm
-  - [ ] crates/birddisk_wasm (stub)
-- [ ] Baseline: `cargo test` green
-- [ ] CLI stub: `birddisk --help`
+- [x] Initialize Rust workspace with crates:
+  - [x] crates/birddisk_core
+  - [x] crates/birddiskc
+  - [x] crates/birddisk_vm
+  - [x] crates/birddisk_wasm (stub)
+- [x] Baseline: `cargo test` green
+- [x] CLI stub: `birddisk --help`
 
 Acceptance:
 - `cargo test` passes
@@ -19,20 +30,29 @@ Acceptance:
 
 ---
 
+## Sprint 0.5 — Eval harness (minimal) (0.5 day)
+- [x] Add minimal eval harness in `eval/` (task schema + runner + seed tasks)
+- [x] Document expected JSON output for `check` and `run`
+
+Acceptance:
+- `python3 eval/run.py --birddisk <path>` runs tasks and reports pass/fail
+
+---
+
 ## Sprint 1 — Lexer + Parser + AST (2–7 days)
 Implement:
-- [ ] Lexer (tokens + spans)
-- [ ] Parser for:
-  - [ ] `rule` functions
-  - [ ] `set` / `put` / `yield`
-  - [ ] `when/otherwise/end`
-  - [ ] `repeat while/end`
-  - [ ] expressions with precedence (unary + binary)
-- [ ] AST nodes
+- [x] Lexer (tokens + spans)
+- [x] Parser for:
+  - [x] `rule` functions
+  - [x] `set` / `put` / `yield`
+  - [x] `when/otherwise/end`
+  - [x] `repeat while/end`
+  - [x] expressions with precedence (unary + binary)
+- [x] AST nodes
 
 Add tests:
-- [ ] parse valid programs
-- [ ] parse invalid programs (expect stable error codes + spans)
+- [x] parse valid programs
+- [x] parse invalid programs (expect stable error codes + spans)
 
 Acceptance:
 - Parse `docs/COOKBOOK.md` examples
@@ -42,16 +62,16 @@ Acceptance:
 
 ## Sprint 2 — Typechecking + local inference (3–10 days)
 Implement:
-- [ ] Types: i64, bool
-- [ ] Scopes + name resolution
-- [ ] Typechecking per `docs/SPEC.md`
-- [ ] Inference for `set name = expr.` where expr is inferable
-- [ ] Enforce explicit function param + return types
-- [ ] Diagnostics JSON (`birddisk check --json`) + basic fix-its
+- [x] Types: i64, bool
+- [x] Scopes + name resolution
+- [x] Typechecking per `docs/SPEC.md`
+- [x] Inference for `set name = expr.` where expr is inferable
+- [x] Enforce explicit function param + return types
+- [x] Diagnostics JSON (`birddisk check --json`) + basic fix-its
 
 Add tests:
-- [ ] typecheck happy paths
-- [ ] failures: unknown name, wrong arity, type mismatch, non-bool condition, non-inferable `set`
+- [x] typecheck happy paths
+- [x] failures: unknown name, wrong arity, type mismatch, non-bool condition, non-inferable `set`
 
 Acceptance:
 - `birddisk check --json` returns structured diagnostics
@@ -60,13 +80,13 @@ Acceptance:
 
 ## Sprint 3 — VM interpreter (golden) (3–10 days)
 Implement:
-- [ ] Evaluate typed AST (or minimal IR)
-- [ ] Deterministic execution
-- [ ] Entry: `rule main() -> i64`
+- [x] Evaluate typed AST (or minimal IR)
+- [x] Deterministic execution
+- [x] Entry: `rule main() -> i64`
 
 Add tests:
-- [ ] run fixtures (return values)
-- [ ] control flow correctness (when/repeat)
+- [x] run fixtures (return values)
+- [x] control flow correctness (when/repeat)
 
 Acceptance:
 - `birddisk run --engine vm examples/*.bd` works
@@ -88,8 +108,8 @@ Acceptance:
 
 ## Sprint 5 — WASM backend + differential harness (2–4 weeks)
 Implement:
-- [ ] WASM codegen (wasm32) for i64/bool ops, control flow, calls
-- [ ] Run WASM via `wasmtime` in tests
+- [x] WASM codegen (wasm32) for i64/bool ops, control flow, calls
+- [x] Run WASM via `wasmtime` in tests
 - [ ] Differential testing: VM result == WASM result
 
 Add tests:
@@ -103,11 +123,16 @@ Acceptance:
 ---
 
 ## Sprint 6 — AI-first diagnostics polish (ongoing)
-- [ ] Expand JSON diagnostics:
-  - [ ] `spec_refs` to doc anchors
-  - [ ] more fix-its
-  - [ ] “did you mean” suggestions (similar identifiers)
+- [x] Expand JSON diagnostics:
+  - [x] `spec_refs` to doc anchors
+  - [x] more fix-its
+  - [x] “did you mean” suggestions (similar identifiers)
 - [ ] Create `eval/` tasks to measure LLM-friendliness
 
 Acceptance:
 - common mistakes can be fixed mechanically from fix-its
+
+---
+
+## Future — Full eval suite
+- [ ] Expand `eval/` with mutations, report generation, and cross-language comparison

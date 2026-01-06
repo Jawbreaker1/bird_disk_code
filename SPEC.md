@@ -111,6 +111,7 @@ Boolean (bool, bool -> bool):
 
 Notes:
 - `==` and `!=` are only defined for `i64` in v0.1 to keep things simple.
+- Division or modulo by zero is a runtime error.
 
 ### 6.5 Function calls
 Syntax:

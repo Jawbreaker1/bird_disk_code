@@ -1,0 +1,17 @@
+rule add(a: i64, b: i64) -> i64:
+  yield a + b.
+end
+
+rule main() -> i64:
+  set i: i64 = 0.
+  set sum: i64 = 0.
+  repeat while i < 5:
+    put sum = add(sum, i).
+    put i = i + 1.
+  end
+  when sum > 6:
+    yield sum.
+  otherwise:
+    yield 0.
+  end
+end

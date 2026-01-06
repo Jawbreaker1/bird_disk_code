@@ -1,0 +1,66 @@
+[
+  {
+    "id": "run_minimal_main_001",
+    "kind": "run",
+    "input": "rule main() -> i64:\n  yield 0.\nend\n",
+    "expect": {
+      "ok": true,
+      "result": 0
+    }
+  },
+  {
+    "id": "run_sum_while_001",
+    "kind": "run",
+    "input": "rule main() -> i64:\n  set i = 0.\n  set sum: i64 = 0.\n\n  repeat while i < 10:\n    put sum = sum + i.\n    put i = i + 1.\n  end\n\n  yield sum.\nend\n",
+    "expect": {
+      "ok": true,
+      "result": 45
+    }
+  },
+  {
+    "id": "run_wasm_minimal_main_001",
+    "kind": "run",
+    "engine": "wasm",
+    "input": "rule main() -> i64:\n  yield 0.\nend\n",
+    "expect": {
+      "ok": true,
+      "result": 0
+    }
+  },
+  {
+    "id": "run_wasm_div_by_zero_001",
+    "kind": "run",
+    "engine": "wasm",
+    "input": "rule main() -> i64:\n  yield 1 / 0.\nend\n",
+    "expect": {
+      "ok": false,
+      "codes": ["E0402"]
+    }
+  },
+  {
+    "id": "run_missing_main_001",
+    "kind": "run",
+    "input": "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n",
+    "expect": {
+      "ok": false,
+      "codes": ["E0309"]
+    }
+  },
+  {
+    "id": "run_div_by_zero_001",
+    "kind": "run",
+    "input": "rule main() -> i64:\n  yield 1 / 0.\nend\n",
+    "expect": {
+      "ok": false,
+      "codes": ["E0402"]
+    }
+  },
+  {
+    "id": "check_non_bool_condition_001",
+    "kind": "check",
+    "input": "rule main() -> i64:\n  when 1:\n    yield 0.\n  otherwise:\n    yield 1.\n  end\nend\n",
+    "expect": {
+      "ok": false
+    }
+  }
+]

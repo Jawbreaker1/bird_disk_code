@@ -1,0 +1,7 @@
+[package]
+name = "birddisk_vm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+birddisk_core = { path = "../birddisk_core" }

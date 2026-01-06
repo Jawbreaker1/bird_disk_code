@@ -1,7 +1,7 @@
 # BirdDisk Cookbook (v0.1)
 
-All examples must parse, typecheck, and run in the VM (golden),
-and later match WASM output.
+All examples must parse, typecheck, and run in the VM (golden)
+and the WASM backend.
 
 ---
 
@@ -61,4 +61,7 @@ rule main() -> i64:
   yield a.
 end
 
+---
 
+Notes:
+- Division or modulo by zero is a runtime error.

@@ -1,4 +1,5 @@
 (* BirdDisk v0.1 EBNF *)
+(* Runtime errors (e.g., division by zero) are specified in SPEC.md. *)
 
 program       = { function } ;
 
