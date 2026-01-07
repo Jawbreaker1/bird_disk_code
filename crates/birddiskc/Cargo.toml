@@ -11,4 +11,5 @@ path = "src/main.rs"
 birddisk_core = { path = "../birddisk_core" }
 birddisk_vm = { path = "../birddisk_vm" }
 birddisk_wasm = { path = "../birddisk_wasm" }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -1,0 +1,11 @@
+rule double(x: i64) -> i64:
+  yield x + x.
+end
+
+rule add(a: i64, b: i64) -> i64:
+  yield a + b.
+end
+
+rule main() -> i64:
+  yield add(double(2), double(3)).
+end

@@ -1,0 +1,5 @@
+rule main() -> i64:
+  set xs: i64[] = array(2).
+  put xs[2] = 9.
+  yield xs[1].
+end

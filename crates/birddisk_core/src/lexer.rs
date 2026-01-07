@@ -11,6 +11,7 @@ pub enum TokenKind {
     Repeat,
     While,
     End,
+    Array,
     TypeI64,
     TypeBool,
     BoolLit(bool),
@@ -18,6 +19,8 @@ pub enum TokenKind {
     Ident(String),
     LParen,
     RParen,
+    LBracket,
+    RBracket,
     Comma,
     Colon,
     Dot,
@@ -91,6 +94,14 @@ impl Lexer {
                 ')' => {
                     self.advance();
                     TokenKind::RParen
+                }
+                '[' => {
+                    self.advance();
+                    TokenKind::LBracket
+                }
+                ']' => {
+                    self.advance();
+                    TokenKind::RBracket
                 }
                 ',' => {
                     self.advance();
@@ -258,6 +269,7 @@ impl Lexer {
             "repeat" => TokenKind::Repeat,
             "while" => TokenKind::While,
             "end" => TokenKind::End,
+            "array" => TokenKind::Array,
             "i64" => TokenKind::TypeI64,
             "bool" => TokenKind::TypeBool,
             "true" => TokenKind::BoolLit(true),

@@ -107,6 +107,7 @@ dependencies = [
  "anyhow",
  "birddisk_core",
  "wasmtime",
+ "wat",
 ]
 
 [[package]]
@@ -116,6 +117,7 @@ dependencies = [
  "birddisk_core",
  "birddisk_vm",
  "birddisk_wasm",
+ "serde",
  "serde_json",
 ]
 

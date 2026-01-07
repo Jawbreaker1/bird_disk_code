@@ -7,3 +7,4 @@ edition = "2021"
 anyhow = "1"
 birddisk_core = { path = "../birddisk_core" }
 wasmtime = "12"
+wat = "1"

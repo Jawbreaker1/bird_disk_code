@@ -49,6 +49,32 @@ Stability requirements
 	•	span must be best-effort accurate.
 	•	spec_refs should point to doc anchors where possible.
 
+## Test JSON output
+`birddisk test --json` returns a test report:
+```json
+{
+  "tool": "birddisk",
+  "version": "0.1",
+  "ok": false,
+  "cases": [
+    {
+      "path": "examples/minimal_main.bd",
+      "ok": true,
+      "vm_result": 0,
+      "wasm_result": 0,
+      "diagnostics": []
+    }
+  ],
+  "diagnostics": []
+}
+```
+Notes:
+	•	cases contains one entry per `.bd` file under the selected test directories.
+	•	diagnostics is reserved for harness-level errors (e.g. no examples found).
+	•	use `--dir` to scan other folders and `--tag` to filter by path/file tags.
+	•	default scan includes `examples/` and `tests/` if present.
+	•	`--engine vm` or `--engine wasm` runs a single backend; the other result field is null.
+
 ## Error code table (v0.1)
 These codes are the current stable set. New codes should only be added
 when needed and documented here.
@@ -80,10 +106,15 @@ E0306: Not all control-flow paths yield a value
 E0307: Duplicate function
 E0308: Duplicate parameter
 E0309: Missing 'main' entry point
+E0310: Array constructor requires explicit array type
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)
 E0402: Division or modulo by zero
+E0403: Array index out of bounds
+
+E0500: VM/WASM mismatch
+E0501: Test harness error
 
 Minimum required fields
 

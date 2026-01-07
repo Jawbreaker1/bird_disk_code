@@ -1,0 +1,8 @@
+rule main() -> i64:
+  set ok = true && false || true.
+  when ok:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

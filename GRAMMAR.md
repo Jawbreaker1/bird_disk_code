@@ -8,7 +8,8 @@ function      = "rule" ident "(" [ params ] ")" "->" type ":" { stmt } "end" ;
 params        = param { "," param } ;
 param         = ident ":" type ;
 
-type          = "i64" | "bool" ;
+type          = base_type { "[]" } ;
+base_type     = "i64" | "bool" ;
 
 stmt          = set_stmt
               | put_stmt
@@ -18,7 +19,7 @@ stmt          = set_stmt
               ;
 
 set_stmt      = "set" ident [ ":" type ] "=" expr "." ;
-put_stmt      = "put" ident "=" expr "." ;
+put_stmt      = "put" ident [ "[" expr "]" ] "=" expr "." ;
 yield_stmt    = "yield" expr "." ;
 
 when_stmt     = "when" expr ":" { stmt } "otherwise" ":" { stmt } "end" ;
@@ -33,16 +34,23 @@ equality      = compare { ( "==" | "!=" ) compare } ;
 compare       = add { ( "<" | "<=" | ">" | ">=" ) add } ;
 add           = mul { ( "+" | "-" ) mul } ;
 mul           = unary { ( "*" | "/" | "%" ) unary } ;
-unary         = ( "!" | "-" ) unary | primary ;
+unary         = ( "!" | "-" ) unary | postfix ;
+
+postfix       = primary { "[" expr "]" } ;
 
 primary       = int_lit
               | bool_lit
+              | array_lit
+              | array_new
               | call_or_ident
               | "(" expr ")"
               ;
 
 call_or_ident = ident [ "(" [ args ] ")" ] ;
 args          = expr { "," expr } ;
+
+array_lit     = "[" [ args ] "]" ;
+array_new     = "array" "(" expr ")" ;
 
 bool_lit      = "true" | "false" ;
 int_lit       = digit { digit } ;

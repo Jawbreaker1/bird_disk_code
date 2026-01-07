@@ -95,11 +95,11 @@ Acceptance:
 
 ## Sprint 4 — Formatter (2–7 days)
 Implement:
-- [ ] `birddisk fmt` prints canonical code from AST
-- [ ] Idempotent formatting: fmt(fmt(code)) == fmt(code)
+- [x] `birddisk fmt` prints canonical code from AST
+- [x] Idempotent formatting: fmt(fmt(code)) == fmt(code)
 
 Add tests:
-- [ ] golden formatting tests
+- [x] golden formatting tests
 
 Acceptance:
 - formatting is stable and idempotent
@@ -110,10 +110,10 @@ Acceptance:
 Implement:
 - [x] WASM codegen (wasm32) for i64/bool ops, control flow, calls
 - [x] Run WASM via `wasmtime` in tests
-- [ ] Differential testing: VM result == WASM result
+- [x] Differential testing: VM result == WASM result
 
 Add tests:
-- [ ] compile/run WASM for cookbook/examples
+- [x] compile/run WASM for examples
 - [ ] basic differential fuzz/mutations (optional stretch)
 
 Acceptance:

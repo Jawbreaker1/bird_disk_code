@@ -2,6 +2,7 @@
 
 pub mod ast;
 mod diagnostics;
+mod fmt;
 pub mod lexer;
 pub mod parser;
 mod typecheck;
@@ -79,8 +80,8 @@ pub fn run_json(path: &str, _engine: Engine) -> String {
     serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string())
 }
 
-pub fn fmt(_path: &str) -> Result<(), String> {
-    Err("formatter not implemented".to_string())
+pub fn fmt(path: &str) -> Result<(), String> {
+    fmt::format_path(path)
 }
 
 pub fn test_json() -> String {

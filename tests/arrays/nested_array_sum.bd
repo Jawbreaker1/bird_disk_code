@@ -1,0 +1,6 @@
+rule main() -> i64:
+  set grid: i64[][] = array(2).
+  put grid[0] = [1, 2].
+  put grid[1] = [3, 4].
+  yield grid[0][1] + grid[1][0].
+end

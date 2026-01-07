@@ -245,17 +245,25 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_type(&mut self, message: &str) -> Result<Type, ParseError> {
-        match self.peek_kind() {
+        let mut ty = match self.peek_kind() {
             TokenKind::TypeI64 => {
                 self.bump();
-                Ok(Type::I64)
+                Type::I64
             }
             TokenKind::TypeBool => {
                 self.bump();
-                Ok(Type::Bool)
+                Type::Bool
             }
-            _ => Err(self.error("E0206", message)),
+            _ => return Err(self.error("E0206", message)),
+        };
+
+        while matches!(self.peek_kind(), TokenKind::LBracket) {
+            self.bump();
+            self.expect_rbracket_with_fixit("Expected ']' after '[' in array type.")?;
+            ty = Type::Array(Box::new(ty));
         }
+
+        Ok(ty)
     }
 
     fn parse_statements_until(&mut self, terminator: Terminator) -> Result<Vec<Stmt>, ParseError> {
@@ -403,15 +411,33 @@ impl<'a> Parser<'a> {
 
     fn parse_put(&mut self) -> Result<Stmt, ParseError> {
         let start = self.expect_simple(TokenKind::Put, "Expected 'put'.")?;
-        let name = self.expect_ident("Expected binding name.")?;
+        let name_token = self.expect_ident_token("Expected binding name.")?;
+        let name = extract_ident(&name_token);
+        let index = if matches!(self.peek_kind(), TokenKind::LBracket) {
+            self.bump();
+            let expr = self.parse_expr("Expected index expression.")?;
+            self.expect_rbracket_with_fixit("Expected ']' after index expression.")?;
+            Some(expr)
+        } else {
+            None
+        };
         self.expect_simple(TokenKind::Assign, "Expected '=' in put statement.")?;
         let expr = self.parse_expr("Expected expression after '='.")?;
         let end = self.expect_dot(expr.span.end)?;
-        Ok(Stmt::Put {
-            name,
-            expr,
-            span: Span::new(start.span.start, end.span.end),
-        })
+        if let Some(index) = index {
+            Ok(Stmt::PutIndex {
+                name,
+                index,
+                expr,
+                span: Span::new(start.span.start, end.span.end),
+            })
+        } else {
+            Ok(Stmt::Put {
+                name,
+                expr,
+                span: Span::new(start.span.start, end.span.end),
+            })
+        }
     }
 
     fn parse_yield(&mut self) -> Result<Stmt, ParseError> {
@@ -465,11 +491,16 @@ impl<'a> Parser<'a> {
                 | TokenKind::Otherwise
                 | TokenKind::End
                 | TokenKind::RParen
+                | TokenKind::RBracket
         ) {
             Ok(expr)
         } else if matches!(
             self.peek_kind(),
-            TokenKind::Ident(_) | TokenKind::IntLit(_) | TokenKind::BoolLit(_)
+            TokenKind::Ident(_)
+                | TokenKind::IntLit(_)
+                | TokenKind::BoolLit(_)
+                | TokenKind::LBracket
+                | TokenKind::Array
         ) {
             let insert_at = self.tokens[self.index].span.start;
             Err(self.error_with_fixit(
@@ -654,7 +685,7 @@ impl<'a> Parser<'a> {
 
     fn parse_primary(&mut self) -> Result<Expr, ParseError> {
         let token = self.peek_kind().clone();
-        match token {
+        let expr = match token {
             TokenKind::IntLit(value) => {
                 let token = self.bump();
                 Ok(Expr {
@@ -670,6 +701,8 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::Ident(_) => self.parse_ident_or_call(),
+            TokenKind::Array => self.parse_array_new(),
+            TokenKind::LBracket => self.parse_array_literal(),
             TokenKind::LParen => {
                 let start = self.bump().span.start;
                 let expr = self.parse_expr("Expected expression in parentheses.")?;
@@ -692,7 +725,9 @@ impl<'a> Parser<'a> {
                 }
             }
             _ => Err(self.error("E0203", "Expected expression.")),
-        }
+        }?;
+
+        self.parse_postfix(expr)
     }
 
     fn parse_ident_or_call(&mut self) -> Result<Expr, ParseError> {
@@ -751,6 +786,97 @@ impl<'a> Parser<'a> {
                 span: token.span,
             })
         }
+    }
+
+    fn parse_array_literal(&mut self) -> Result<Expr, ParseError> {
+        let start = self.bump().span.start;
+        let mut elements = Vec::new();
+        if !matches!(self.peek_kind(), TokenKind::RBracket) {
+            loop {
+                let expr = self.parse_expr("Expected array element expression.")?;
+                elements.push(expr);
+                if matches!(self.peek_kind(), TokenKind::Comma) {
+                    self.bump();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        match self.expect_rbracket_with_fixit("Expected ']' after array literal.") {
+            Ok(end) => Ok(Expr {
+                kind: ExprKind::ArrayLit(elements),
+                span: Span::new(start, end.span.end),
+            }),
+            Err(err) => {
+                if self.recovering {
+                    self.pending_errors.push(err);
+                    let span_end = elements
+                        .last()
+                        .map(|expr| expr.span.end)
+                        .unwrap_or(start);
+                    Ok(Expr {
+                        kind: ExprKind::ArrayLit(elements),
+                        span: Span::new(start, span_end),
+                    })
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    fn parse_array_new(&mut self) -> Result<Expr, ParseError> {
+        let start = self.bump().span.start;
+        self.expect_simple(TokenKind::LParen, "Expected '(' after array.")?;
+        let len = self.parse_expr("Expected length expression for array.")?;
+        let end = self.expect_rparen_with_fixit("Expected ')' after array length.")?;
+        Ok(Expr {
+            kind: ExprKind::ArrayNew {
+                len: Box::new(len),
+            },
+            span: Span::new(start, end.span.end),
+        })
+    }
+
+    fn parse_postfix(&mut self, mut expr: Expr) -> Result<Expr, ParseError> {
+        loop {
+            if matches!(self.peek_kind(), TokenKind::LBracket) {
+                self.bump();
+                let index = self.parse_expr("Expected index expression.")?;
+                match self.expect_rbracket_with_fixit("Expected ']' after index expression.") {
+                    Ok(end) => {
+                        let span = Span::new(expr.span.start, end.span.end);
+                        expr = Expr {
+                            kind: ExprKind::Index {
+                                base: Box::new(expr),
+                                index: Box::new(index),
+                            },
+                            span,
+                        };
+                    }
+                    Err(err) => {
+                        if self.recovering {
+                            self.pending_errors.push(err);
+                            let span = Span::new(expr.span.start, index.span.end);
+                            expr = Expr {
+                                kind: ExprKind::Index {
+                                    base: Box::new(expr),
+                                    index: Box::new(index),
+                                },
+                                span,
+                            };
+                            break;
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
     }
 
     fn expect_simple(&mut self, expected: TokenKind, message: &str) -> Result<Token, ParseError> {
@@ -823,6 +949,23 @@ impl<'a> Parser<'a> {
                     title: "Insert ')' to close",
                     span: Span::new(insert_at, insert_at),
                     replacement: ")".to_string(),
+                },
+            ))
+        }
+    }
+
+    fn expect_rbracket_with_fixit(&mut self, message: &str) -> Result<Token, ParseError> {
+        if matches!(self.peek_kind(), TokenKind::RBracket) {
+            Ok(self.bump())
+        } else {
+            let insert_at = self.tokens[self.index].span.start;
+            Err(self.error_with_fixit(
+                "E0200",
+                message,
+                FixItHint {
+                    title: "Insert ']' to close",
+                    span: Span::new(insert_at, insert_at),
+                    replacement: "]".to_string(),
                 },
             ))
         }
@@ -1065,6 +1208,32 @@ mod tests {
         assert_eq!(err.code, "E0200");
         let fixit = err.fixit.expect("missing fixit");
         assert!(fixit.replacement.contains(")"));
+    }
+
+    #[test]
+    fn parse_array_literal_and_index() {
+        let source = "rule main() -> i64:\n  set xs: i64[] = [1, 2].\n  yield xs[0].\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        assert_eq!(program.functions.len(), 1);
+    }
+
+    #[test]
+    fn parse_put_index() {
+        let source = "rule main() -> i64:\n  set xs: i64[] = [0].\n  put xs[0] = 1.\n  yield xs[0].\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        assert_eq!(program.functions.len(), 1);
+    }
+
+    #[test]
+    fn parse_missing_rbracket_fixit() {
+        let source = "rule main() -> i64:\n  set xs: i64[] = [1, 2.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let err = parse(&tokens).unwrap_err();
+        assert_eq!(err.code, "E0200");
+        let fixit = err.fixit.expect("missing fixit");
+        assert_eq!(fixit.replacement, "]");
     }
 
     #[test]

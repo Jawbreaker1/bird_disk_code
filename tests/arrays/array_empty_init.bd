@@ -1,0 +1,4 @@
+rule main() -> i64:
+  set xs: i64[] = [].
+  yield 0.
+end

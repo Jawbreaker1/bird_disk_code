@@ -21,10 +21,11 @@ pub struct Param {
     pub span: Span,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     I64,
     Bool,
+    Array(Box<Type>),
 }
 
 #[derive(Debug, Clone)]
@@ -37,6 +38,12 @@ pub enum Stmt {
     },
     Put {
         name: String,
+        expr: Expr,
+        span: Span,
+    },
+    PutIndex {
+        name: String,
+        index: Expr,
         expr: Expr,
         span: Span,
     },
@@ -69,6 +76,9 @@ pub enum ExprKind {
     Bool(bool),
     Ident(String),
     Call { name: String, args: Vec<Expr> },
+    ArrayLit(Vec<Expr>),
+    ArrayNew { len: Box<Expr> },
+    Index { base: Box<Expr>, index: Box<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
     Binary {
         left: Box<Expr>,
@@ -77,10 +87,11 @@ pub enum ExprKind {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     I64(i64),
     Bool(bool),
+    Array { elements: Vec<Value>, elem_type: Type },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,0 +1,8 @@
+rule main() -> i64:
+  set flags: bool[] = [true, false, true].
+  when flags[0] && !flags[1]:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

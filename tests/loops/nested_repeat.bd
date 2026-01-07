@@ -1,0 +1,13 @@
+rule main() -> i64:
+  set i = 0.
+  set sum: i64 = 0.
+  repeat while i < 3:
+    set j = 0.
+    repeat while j < 2:
+      put sum = sum + i + j.
+      put j = j + 1.
+    end
+    put i = i + 1.
+  end
+  yield sum.
+end

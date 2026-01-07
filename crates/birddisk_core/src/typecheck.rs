@@ -2,10 +2,11 @@ use crate::ast::{BinaryOp, Expr, ExprKind, Program, Stmt, Type, UnaryOp};
 use crate::diagnostics::{diagnostic, Diagnostic, Edit, FixIt, Position, Span};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Ty {
     I64,
     Bool,
+    Array(Box<Ty>),
     Unknown,
 }
 
@@ -14,14 +15,16 @@ impl Ty {
         match ty {
             Type::I64 => Ty::I64,
             Type::Bool => Ty::Bool,
+            Type::Array(inner) => Ty::Array(Box::new(Ty::from_ast(*inner))),
         }
     }
 
-    fn name(self) -> &'static str {
+    fn name(&self) -> String {
         match self {
-            Ty::I64 => "i64",
-            Ty::Bool => "bool",
-            Ty::Unknown => "unknown",
+            Ty::I64 => "i64".to_string(),
+            Ty::Bool => "bool".to_string(),
+            Ty::Array(inner) => format!("{}[]", inner.name()),
+            Ty::Unknown => "unknown".to_string(),
         }
     }
 }
@@ -74,10 +77,14 @@ impl<'a> Checker<'a> {
                 ));
                 continue;
             }
-            let params = function.params.iter().map(|p| Ty::from_ast(p.ty)).collect();
+            let params = function
+                .params
+                .iter()
+                .map(|p| Ty::from_ast(p.ty.clone()))
+                .collect();
             let sig = FunctionSig {
                 params,
-                return_type: Ty::from_ast(function.return_type),
+                return_type: Ty::from_ast(function.return_type.clone()),
             };
             self.functions.insert(function.name.clone(), sig);
         }
@@ -119,7 +126,7 @@ impl<'a> Checker<'a> {
     fn check_function(&mut self, function: &crate::ast::Function) {
         self.scopes.clear();
         self.push_scope();
-        self.current_return = Ty::from_ast(function.return_type);
+        self.current_return = Ty::from_ast(function.return_type.clone());
 
         for param in &function.params {
             if self.scopes[0].contains_key(&param.name) {
@@ -135,7 +142,7 @@ impl<'a> Checker<'a> {
                     None,
                 ));
             } else {
-                self.scopes[0].insert(param.name.clone(), Ty::from_ast(param.ty));
+                self.scopes[0].insert(param.name.clone(), Ty::from_ast(param.ty.clone()));
             }
         }
 
@@ -163,19 +170,33 @@ impl<'a> Checker<'a> {
     fn check_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Set { name, ty, expr, span } => {
-                let expr_ty = self.check_expr(expr);
+                let mut skip_infer_error = false;
+                let expr_ty = match &expr.kind {
+                    ExprKind::ArrayNew { len } => {
+                        if ty.is_none() {
+                            skip_infer_error = true;
+                        }
+                        let expected = ty.as_ref().map(|ty| Ty::from_ast(ty.clone()));
+                        self.check_array_new(len, expected.as_ref(), *span)
+                    }
+                    _ => self.check_expr(expr),
+                };
                 let bound_ty = if let Some(ty) = ty {
-                    let annotated = Ty::from_ast(*ty);
+                    let annotated = Ty::from_ast(ty.clone());
                     if expr_ty != Ty::Unknown && expr_ty != annotated {
                         self.diagnostics.push(type_mismatch(
                             self.file,
                             *span,
-                            annotated,
-                            expr_ty,
+                            annotated.clone(),
+                            expr_ty.clone(),
                         ));
                     }
                     annotated
                 } else if expr_ty == Ty::Unknown {
+                    if skip_infer_error {
+                        self.current_scope_mut().insert(name.clone(), Ty::Unknown);
+                        return;
+                    }
                     self.diagnostics.push(diagnostic(
                         "E0305",
                         "error",
@@ -194,15 +215,21 @@ impl<'a> Checker<'a> {
                 self.current_scope_mut().insert(name.clone(), bound_ty);
             }
             Stmt::Put { name, expr, span } => {
-                let expr_ty = self.check_expr(expr);
+                let expr_ty = match &expr.kind {
+                    ExprKind::ArrayNew { len } => {
+                        let expected = self.lookup(name);
+                        self.check_array_new(len, expected.as_ref(), *span)
+                    }
+                    _ => self.check_expr(expr),
+                };
                 match self.lookup(name) {
                     Some(expected) => {
                         if expr_ty != Ty::Unknown && expected != expr_ty {
                             self.diagnostics.push(type_mismatch(
                                 self.file,
                                 *span,
-                                expected,
-                                expr_ty,
+                                expected.clone(),
+                                expr_ty.clone(),
                             ));
                         }
                     }
@@ -226,14 +253,81 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
+            Stmt::PutIndex {
+                name,
+                index,
+                expr,
+                span,
+            } => {
+                let expected = match self.lookup(name) {
+                    Some(expected) => expected,
+                    None => {
+                        let suggestion = self.suggest_name(name);
+                        let notes = notes_with_suggestion(
+                            vec!["Declare it with `set` before use.".to_string()],
+                            suggestion,
+                        );
+                        self.diagnostics.push(diagnostic(
+                            "E0301",
+                            "error",
+                            format!("Unknown name '{name}'."),
+                            self.file,
+                            *span,
+                            notes,
+                            vec!["SPEC.md#3-names-scope-and-shadowing".to_string()],
+                            Vec::new(),
+                            None,
+                        ));
+                        return;
+                    }
+                };
+
+                let elem_ty = match &expected {
+                    Ty::Array(elem) => *elem.clone(),
+                    _ => {
+                        self.diagnostics.push(diagnostic(
+                            "E0300",
+                            "error",
+                            "Index assignment requires array type.".to_string(),
+                            self.file,
+                            *span,
+                            vec!["Use `name[index] = value` only on arrays.".to_string()],
+                            vec!["SPEC.md#8-arrays".to_string()],
+                            Vec::new(),
+                            None,
+                        ));
+                        return;
+                    }
+                };
+
+                let index_ty = self.check_expr(index);
+                if index_ty != Ty::Unknown && index_ty != Ty::I64 {
+                    self.diagnostics.push(type_mismatch(
+                        self.file,
+                        index.span,
+                        Ty::I64,
+                        index_ty,
+                    ));
+                }
+
+                let expr_ty = self.check_expr(expr);
+                if expr_ty != Ty::Unknown && expr_ty != elem_ty {
+                    self.diagnostics.push(type_mismatch(
+                        self.file,
+                        expr.span,
+                        elem_ty,
+                        expr_ty,
+                    ));
+                }
+            }
             Stmt::Yield { expr, span } => {
                 let expr_ty = self.check_expr(expr);
                 if expr_ty != Ty::Unknown && self.current_return != expr_ty {
                     self.diagnostics.push(type_mismatch(
                         self.file,
                         *span,
-                        self.current_return,
-                        expr_ty,
+                        self.current_return.clone(),
+                        expr_ty.clone(),
                     ));
                 }
             }
@@ -320,6 +414,22 @@ impl<'a> Checker<'a> {
                 Ty::Unknown
             }),
             ExprKind::Call { name, args } => self.check_call(expr.span, name, args),
+            ExprKind::ArrayLit(elements) => self.check_array_literal(elements, expr.span),
+            ExprKind::ArrayNew { .. } => {
+                self.diagnostics.push(diagnostic(
+                    "E0310",
+                    "error",
+                    "Array constructor requires explicit array type.".to_string(),
+                    self.file,
+                    expr.span,
+                    vec!["Use `set name: i64[] = array(len).`".to_string()],
+                    vec!["SPEC.md#8-arrays".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+                Ty::Unknown
+            }
+            ExprKind::Index { base, index } => self.check_index(expr.span, base, index),
             ExprKind::Unary { op, expr: inner } => {
                 let inner_ty = self.check_expr(inner);
                 match op {
@@ -331,7 +441,7 @@ impl<'a> Checker<'a> {
                                 self.file,
                                 expr.span,
                                 Ty::I64,
-                                other,
+                                other.clone(),
                             ));
                             Ty::Unknown
                         }
@@ -344,7 +454,7 @@ impl<'a> Checker<'a> {
                                 self.file,
                                 expr.span,
                                 Ty::Bool,
-                                other,
+                                other.clone(),
                             ));
                             Ty::Unknown
                         }
@@ -352,6 +462,121 @@ impl<'a> Checker<'a> {
                 }
             }
             ExprKind::Binary { left, op, right } => self.check_binary(expr.span, *op, left, right),
+        }
+    }
+
+    fn check_array_new(&mut self, len: &Expr, expected: Option<&Ty>, span: Span) -> Ty {
+        let expected = match expected {
+            Some(Ty::Array(elem)) => Some(elem.as_ref()),
+            Some(_) => {
+                self.diagnostics.push(diagnostic(
+                    "E0310",
+                    "error",
+                    "Array constructor requires array type.".to_string(),
+                    self.file,
+                    span,
+                    vec!["Use `set name: i64[] = array(len).`".to_string()],
+                    vec!["SPEC.md#8-arrays".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+                return Ty::Unknown;
+            }
+            None => {
+                self.diagnostics.push(diagnostic(
+                    "E0310",
+                    "error",
+                    "Array constructor requires explicit array type.".to_string(),
+                    self.file,
+                    span,
+                    vec!["Use `set name: i64[] = array(len).`".to_string()],
+                    vec!["SPEC.md#8-arrays".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+                return Ty::Unknown;
+            }
+        };
+
+        let len_ty = self.check_expr(len);
+        if len_ty != Ty::Unknown && len_ty != Ty::I64 {
+            self.diagnostics
+                .push(type_mismatch(self.file, len.span, Ty::I64, len_ty));
+        }
+
+        match expected {
+            Some(elem) => Ty::Array(Box::new(elem.clone())),
+            None => Ty::Unknown,
+        }
+    }
+
+    fn check_array_literal(&mut self, elements: &[Expr], span: Span) -> Ty {
+        if elements.is_empty() {
+            return Ty::Unknown;
+        }
+
+        let first_ty = self.check_expr(&elements[0]);
+        if first_ty == Ty::Unknown {
+            for element in elements.iter().skip(1) {
+                self.check_expr(element);
+            }
+            return Ty::Unknown;
+        }
+
+        let mut ok = true;
+        for element in elements.iter().skip(1) {
+            let ty = self.check_expr(element);
+            if ty != Ty::Unknown && ty != first_ty {
+                ok = false;
+                self.diagnostics
+                    .push(type_mismatch(self.file, element.span, first_ty.clone(), ty));
+            }
+        }
+
+        if ok {
+            Ty::Array(Box::new(first_ty))
+        } else {
+            self.diagnostics.push(diagnostic(
+                "E0300",
+                "error",
+                "Array literal elements must have the same type.".to_string(),
+                self.file,
+                span,
+                vec!["Ensure all elements have the same type.".to_string()],
+                vec!["SPEC.md#8-arrays".to_string()],
+                Vec::new(),
+                None,
+            ));
+            Ty::Unknown
+        }
+    }
+
+    fn check_index(&mut self, span: Span, base: &Expr, index: &Expr) -> Ty {
+        let base_ty = self.check_expr(base);
+        let index_ty = self.check_expr(index);
+
+        if index_ty != Ty::Unknown && index_ty != Ty::I64 {
+            self.diagnostics
+                .push(type_mismatch(self.file, index.span, Ty::I64, index_ty));
+        }
+
+        match base_ty {
+            Ty::Array(elem) => *elem,
+            Ty::Unknown => Ty::Unknown,
+            _ => {
+                self.diagnostics.push(diagnostic(
+                    "E0300",
+                    "error",
+                    "Indexing requires array type.".to_string(),
+                    self.file,
+                    span,
+                    vec!["Use `name[index]` only on arrays.".to_string()],
+                    vec!["SPEC.md#8-arrays".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+                Ty::Unknown
+            }
         }
     }
 
@@ -397,8 +622,13 @@ impl<'a> Checker<'a> {
 
         for (arg, expected) in args.iter().zip(sig.params.iter()) {
             let actual = self.check_expr(arg);
-            if actual != Ty::Unknown && *expected != actual {
-                self.diagnostics.push(type_mismatch(self.file, arg.span, *expected, actual));
+            if actual != Ty::Unknown && expected != &actual {
+                self.diagnostics.push(type_mismatch(
+                    self.file,
+                    arg.span,
+                    expected.clone(),
+                    actual,
+                ));
             }
         }
 
@@ -455,7 +685,7 @@ impl<'a> Checker<'a> {
         let mut ok = true;
         if left_ty != expected {
             self.diagnostics
-                .push(type_mismatch(self.file, left.span, expected, left_ty));
+                .push(type_mismatch(self.file, left.span, expected.clone(), left_ty));
             ok = false;
         }
         if right_ty != expected {
@@ -469,7 +699,7 @@ impl<'a> Checker<'a> {
     fn lookup(&self, name: &str) -> Option<Ty> {
         for scope in self.scopes.iter().rev() {
             if let Some(ty) = scope.get(name) {
-                return Some(*ty);
+                return Some(ty.clone());
             }
         }
         None
@@ -508,7 +738,11 @@ fn type_mismatch(file: &str, span: Span, expected: Ty, actual: Ty) -> Diagnostic
     diagnostic(
         "E0300",
         "error",
-        format!("Type mismatch: expected {}, got {}.", expected.name(), actual.name()),
+        format!(
+            "Type mismatch: expected {}, got {}.",
+            expected.name(),
+            actual.name()
+        ),
         file,
         span,
         vec!["Expression type must match the expected type.".to_string()],
@@ -592,19 +826,28 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
             ..
         } => block_always_yields(then_body) && block_always_yields(else_body),
         Stmt::Repeat { .. } => false,
-        Stmt::Set { .. } | Stmt::Put { .. } => false,
+        Stmt::Set { .. } | Stmt::Put { .. } | Stmt::PutIndex { .. } => false,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{lexer, parser};
+    use crate::{lexer, parser, parse_and_typecheck};
+    use std::path::PathBuf;
 
     fn check(source: &str) -> Vec<Diagnostic> {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
         typecheck(&program, "test.bd")
+    }
+
+    fn fixture_path(rel: &str) -> PathBuf {
+        let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        root.pop();
+        root.pop();
+        root.push(rel);
+        root
     }
 
     #[test]
@@ -685,5 +928,36 @@ mod tests {
                 && d.message.contains("expected i64")
                 && d.message.contains("got bool")
         }));
+    }
+
+    #[test]
+    fn typecheck_infers_array_literal() {
+        let diags = check("rule main() -> i64:\n  set xs = [1, 2].\n  yield xs[1].\nend\n");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_rejects_empty_array_without_annotation() {
+        let diags = check("rule main() -> i64:\n  set xs = [].\n  yield 0.\nend\n");
+        assert!(diags.iter().any(|d| d.code == "E0305"));
+    }
+
+    #[test]
+    fn typecheck_rejects_array_constructor_without_annotation() {
+        let diags = check("rule main() -> i64:\n  set xs = array(3).\n  yield 0.\nend\n");
+        assert!(diags.iter().any(|d| d.code == "E0310"));
+    }
+
+    #[test]
+    fn typecheck_rejects_array_constructor_non_i64_len() {
+        let diags = check("rule main() -> i64:\n  set xs: i64[] = array(true).\n  yield 0.\nend\n");
+        assert!(diags.iter().any(|d| d.code == "E0300"));
+    }
+
+    #[test]
+    fn typecheck_rejects_index_type_fixture() {
+        let path = fixture_path("vm_error_tests/arrays/array_index_type_error.bd");
+        let diags = parse_and_typecheck(path.to_str().unwrap()).unwrap_err();
+        assert!(diags.iter().any(|d| d.code == "E0300"));
     }
 }

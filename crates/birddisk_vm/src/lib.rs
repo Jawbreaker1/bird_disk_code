@@ -1,6 +1,6 @@
 //! BirdDisk VM interpreter (placeholder).
 
-use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Program, Stmt, UnaryOp, Value};
+use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Program, Stmt, Type, UnaryOp, Value};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -46,7 +46,9 @@ impl<'a> Vm<'a> {
         let value = self.eval_function(main, &[])?;
         match value {
             Value::I64(value) => Ok(value),
-            Value::Bool(_) => Err(runtime_error("E0400", "main must return i64")),
+            Value::Bool(_) | Value::Array { .. } => {
+                Err(runtime_error("E0400", "main must return i64"))
+            }
         }
     }
 
@@ -69,7 +71,7 @@ impl<'a> Vm<'a> {
         self.push_scope();
         for (param, arg) in function.params.iter().zip(args.iter()) {
             self.current_scope_mut()
-                .insert(param.name.clone(), *arg);
+                .insert(param.name.clone(), arg.clone());
         }
         let result = self.eval_block(&function.body);
         self.pop_scope();
@@ -94,16 +96,120 @@ impl<'a> Vm<'a> {
 
     fn eval_stmt(&mut self, stmt: &Stmt) -> Result<Option<Value>, RuntimeError> {
         match stmt {
-            Stmt::Set { name, expr, .. } => {
-                let value = self.eval_expr(expr)?;
+            Stmt::Set { name, ty, expr, .. } => {
+                let value = match &expr.kind {
+                    ExprKind::ArrayNew { len } => {
+                        let elem_ty = ty.as_ref().ok_or_else(|| {
+                            runtime_error("E0400", "array constructor requires explicit array type")
+                        })?;
+                        match elem_ty {
+                            Type::Array(inner) => self.eval_array_new(len, inner)?,
+                            _ => {
+                                return Err(runtime_error(
+                                    "E0400",
+                                    "array constructor requires array type",
+                                ))
+                            }
+                        }
+                    }
+                    ExprKind::ArrayLit(elements) if elements.is_empty() => {
+                        let elem_ty = ty.as_ref().ok_or_else(|| {
+                            runtime_error("E0400", "array literal requires explicit array type")
+                        })?;
+                        match elem_ty {
+                            Type::Array(inner) => Value::Array {
+                                elements: Vec::new(),
+                                elem_type: (*inner.clone()),
+                            },
+                            _ => {
+                                return Err(runtime_error(
+                                    "E0400",
+                                    "array literal requires array type",
+                                ))
+                            }
+                        }
+                    }
+                    _ => self.eval_expr(expr)?,
+                };
                 self.current_scope_mut().insert(name.clone(), value);
                 Ok(None)
             }
             Stmt::Put { name, expr, .. } => {
-                let value = self.eval_expr(expr)?;
+                let value = match &expr.kind {
+                    ExprKind::ArrayNew { len } => {
+                        let elem_ty = match self.lookup(name) {
+                            Some(Value::Array { elem_type, .. }) => elem_type.clone(),
+                            Some(_) => {
+                                return Err(runtime_error(
+                                    "E0400",
+                                    "array constructor requires array target",
+                                ))
+                            }
+                            None => {
+                                return Err(runtime_error(
+                                    "E0400",
+                                    format!("Unknown name '{name}' at runtime."),
+                                ))
+                            }
+                        };
+                        self.eval_array_new(len, &elem_ty)?
+                    }
+                    ExprKind::ArrayLit(elements) if elements.is_empty() => {
+                        let elem_ty = match self.lookup(name) {
+                            Some(Value::Array { elem_type, .. }) => elem_type.clone(),
+                            Some(_) => {
+                                return Err(runtime_error(
+                                    "E0400",
+                                    "array literal requires array target",
+                                ))
+                            }
+                            None => {
+                                return Err(runtime_error(
+                                    "E0400",
+                                    format!("Unknown name '{name}' at runtime."),
+                                ))
+                            }
+                        };
+                        Value::Array {
+                            elements: Vec::new(),
+                            elem_type: elem_ty,
+                        }
+                    }
+                    _ => self.eval_expr(expr)?,
+                };
                 if let Some(existing) = self.lookup_mut(name) {
                     *existing = value;
                     Ok(None)
+                } else {
+                    Err(runtime_error(
+                        "E0400",
+                        format!("Unknown name '{name}' at runtime."),
+                    ))
+                }
+            }
+            Stmt::PutIndex {
+                name,
+                index,
+                expr,
+                ..
+            } => {
+                let idx = self.eval_index_value(index)?;
+                let value = self.eval_expr(expr)?;
+                if let Some(existing) = self.lookup_mut(name) {
+                    match existing {
+                        Value::Array { elements, .. } => {
+                            if idx < 0 {
+                                return Err(runtime_error("E0403", "Array index out of bounds."));
+                            }
+                            let idx = idx as usize;
+                            if idx >= elements.len() {
+                                return Err(runtime_error("E0403", "Array index out of bounds."));
+                            }
+                            elements[idx] = value;
+                            Ok(None)
+                        }
+                        _ => Err(runtime_error("E0400", "Index assignment on non-array.")),
+                    }
                 } else {
                     Err(runtime_error(
                         "E0400",
@@ -160,7 +266,7 @@ impl<'a> Vm<'a> {
         match &expr.kind {
             ExprKind::Int(value) => Ok(Value::I64(*value)),
             ExprKind::Bool(value) => Ok(Value::Bool(*value)),
-            ExprKind::Ident(name) => self.lookup(name).copied().ok_or_else(|| {
+            ExprKind::Ident(name) => self.lookup(name).cloned().ok_or_else(|| {
                 runtime_error("E0400", format!("Unknown name '{name}' at runtime."))
             }),
             ExprKind::Call { name, args } => {
@@ -173,6 +279,37 @@ impl<'a> Vm<'a> {
                 }
                 self.eval_function(function, &values)
             }
+            ExprKind::ArrayLit(elements) => {
+                if elements.is_empty() {
+                    return Err(runtime_error(
+                        "E0400",
+                        "array literal requires explicit array type",
+                    ));
+                }
+                let mut values = Vec::new();
+                for element in elements {
+                    values.push(self.eval_expr(element)?);
+                }
+                let elem_type = value_type(&values[0])?;
+                for value in values.iter().skip(1) {
+                    let ty = value_type(value)?;
+                    if ty != elem_type {
+                        return Err(runtime_error(
+                            "E0400",
+                            "array literal elements must have the same type",
+                        ));
+                    }
+                }
+                Ok(Value::Array {
+                    elements: values,
+                    elem_type,
+                })
+            }
+            ExprKind::ArrayNew { .. } => Err(runtime_error(
+                "E0400",
+                "array constructor requires explicit array type",
+            )),
+            ExprKind::Index { base, index } => self.eval_index_expr(base, index),
             ExprKind::Unary { op, expr } => {
                 let value = self.eval_expr(expr)?;
                 match (op, value) {
@@ -214,6 +351,51 @@ impl<'a> Vm<'a> {
         }
     }
 
+    fn eval_index_value(&mut self, index: &Expr) -> Result<i64, RuntimeError> {
+        match self.eval_expr(index)? {
+            Value::I64(value) => Ok(value),
+            _ => Err(runtime_error("E0400", "array index must be i64")),
+        }
+    }
+
+    fn eval_index_expr(&mut self, base: &Expr, index: &Expr) -> Result<Value, RuntimeError> {
+        let idx = self.eval_index_value(index)?;
+        let base_value = self.eval_expr(base)?;
+        match base_value {
+            Value::Array { elements, .. } => {
+                if idx < 0 {
+                    return Err(runtime_error("E0403", "Array index out of bounds."));
+                }
+                let idx = idx as usize;
+                if idx >= elements.len() {
+                    return Err(runtime_error("E0403", "Array index out of bounds."));
+                }
+                Ok(elements[idx].clone())
+            }
+            _ => Err(runtime_error("E0400", "indexing requires array")),
+        }
+    }
+
+    fn eval_array_new(&mut self, len: &Expr, elem_ty: &Type) -> Result<Value, RuntimeError> {
+        let len_value = self.eval_expr(len)?;
+        let len = match len_value {
+            Value::I64(value) => value,
+            _ => return Err(runtime_error("E0400", "array length must be i64")),
+        };
+        if len < 0 {
+            return Err(runtime_error("E0400", "array length must be >= 0"));
+        }
+        let mut elements = Vec::with_capacity(len as usize);
+        let default = default_value(elem_ty);
+        for _ in 0..len {
+            elements.push(default.clone());
+        }
+        Ok(Value::Array {
+            elements,
+            elem_type: elem_ty.clone(),
+        })
+    }
+
     fn push_scope(&mut self) {
         self.scopes.push(HashMap::new());
     }
@@ -247,15 +429,43 @@ impl<'a> Vm<'a> {
     }
 }
 
+fn default_value(ty: &Type) -> Value {
+    match ty {
+        Type::I64 => Value::I64(0),
+        Type::Bool => Value::Bool(false),
+        Type::Array(inner) => Value::Array {
+            elements: Vec::new(),
+            elem_type: (*inner.clone()),
+        },
+    }
+}
+
+fn value_type(value: &Value) -> Result<Type, RuntimeError> {
+    match value {
+        Value::I64(_) => Ok(Type::I64),
+        Value::Bool(_) => Ok(Type::Bool),
+        Value::Array { elem_type, .. } => Ok(Type::Array(Box::new(elem_type.clone()))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use birddisk_core::{lexer, parser};
+    use birddisk_core::{lexer, parser, parse_and_typecheck};
+    use std::path::PathBuf;
 
     fn eval_source(source: &str) -> i64 {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
         eval(&program).unwrap()
+    }
+
+    fn fixture_path(rel: &str) -> PathBuf {
+        let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        root.pop();
+        root.pop();
+        root.push(rel);
+        root
     }
 
     #[test]
@@ -304,5 +514,37 @@ mod tests {
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0400");
         assert!(err.message.contains("expected 2"));
+    }
+
+    #[test]
+    fn eval_array_literal_index() {
+        let result = eval_source(
+            "rule main() -> i64:\n  set xs: i64[] = [1, 2, 3].\n  yield xs[1].\nend\n",
+        );
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn eval_array_new_and_put_index() {
+        let result = eval_source(
+            "rule main() -> i64:\n  set xs: i64[] = array(3).\n  put xs[1] = 7.\n  yield xs[1].\nend\n",
+        );
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn eval_array_index_out_of_bounds() {
+        let tokens = lexer::lex("rule main() -> i64:\n  set xs: i64[] = [1].\n  yield xs[2].\nend\n").unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0403");
+    }
+
+    #[test]
+    fn eval_array_out_of_bounds_fixture() {
+        let path = fixture_path("vm_error_tests/arrays/array_index_out_of_bounds.bd");
+        let program = parse_and_typecheck(path.to_str().unwrap()).unwrap();
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0403");
     }
 }

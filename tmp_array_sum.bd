@@ -1,0 +1,12 @@
+rule main() -> i64:
+  set xs: i64[] = [2, 3, 5, 7].
+  set i: i64 = 0.
+  set sum: i64 = 0.
+
+  repeat while i < 4:
+    put sum = sum + xs[i].
+    put i = i + 1.
+  end
+
+  yield sum.
+end

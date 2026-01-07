@@ -13,6 +13,7 @@ The entry point is:
 Built-in types:
 - `i64`
 - `bool`
+- `T[]` array type (where `T` is a built-in type)
 
 No implicit casts.
 No floats in v0.1.
@@ -48,10 +49,13 @@ Rules:
 ### 5.2 Assignment (`put`)
 Syntax:
 - `put name = expr.`
+- `put name[index] = expr.`
 
 Rules:
 - `name` must resolve to an existing binding in scope.
 - `expr` must typecheck to exactly the type of `name`.
+- For indexed assignment, `name` must be an array, `index` must be `i64`,
+  and `expr` must match the array element type.
 
 ### 5.3 Return (`yield`)
 Syntax:
@@ -122,6 +126,15 @@ Rules:
 - Arity must match.
 - Argument types must match exactly.
 
+### 6.6 Arrays
+Syntax:
+- Array literal: `[expr1, expr2, ...]` (or `[]`)
+- Array constructor: `array(len)`
+- Indexing: `expr[index]`
+
+Rules:
+- Full semantics are defined in section 8.
+
 ## 7. Type inference (v0.1)
 Inference only applies to `set name = expr.` when `expr` has a well-defined type.
 
@@ -133,3 +146,47 @@ The type of `expr` is inferred by these rules:
 - identifier expressions: from binding type
 
 If any step is ambiguous or unknown (e.g. unresolved name), inference fails and should surface as an error.
+
+Notes:
+- Empty array literals (`[]`) and `array(len)` require explicit array type context.
+
+## 8. Arrays (v0.1)
+BirdDisk supports fixed-length arrays in v0.1.
+
+### 8.1 Types
+- Array types use `T[]` where `T` is a built-in type or another array type.
+- Nested arrays are allowed, e.g. `i64[][]`.
+- Arrays have fixed length; elements are mutable via indexed assignment.
+
+### 8.2 Array literals
+Syntax:
+- `[expr1, expr2, ...]`
+- `[]`
+
+Rules:
+- All elements must have the same type.
+- The array literal type is `T[]` where `T` is the element type.
+- `[]` requires an explicit array type (e.g. `set xs: i64[] = [].`).
+
+### 8.3 Array constructor
+Syntax:
+- `array(len)`
+
+Rules:
+- `len` must be `i64`.
+- `array(len)` requires explicit array type context, e.g.:
+  `set xs: i64[] = array(10).`
+- The array is filled with default values (`0` for `i64`, `false` for `bool`).
+- Negative lengths are runtime errors (E0400).
+
+### 8.4 Indexing
+Syntax:
+- `xs[index]`
+- `put xs[index] = expr.`
+
+Rules:
+- `xs` must be an array.
+- `index` must be `i64`.
+- The expression `xs[index]` has the element type of the array.
+- `put xs[index] = expr.` requires `expr` to match the element type.
+- Negative or out-of-bounds indices are runtime errors (E0403).

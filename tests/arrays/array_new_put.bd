@@ -1,0 +1,8 @@
+rule main() -> i64:
+  set xs: i64[] = array(4).
+  put xs[0] = 5.
+  put xs[1] = 7.
+  put xs[2] = 11.
+  put xs[3] = 13.
+  yield xs[0] + xs[1] + xs[2] + xs[3].
+end

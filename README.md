@@ -59,9 +59,27 @@ cargo build -p birddiskc
 ```sh
 ./target/debug/birddisk run path/to/file.bd --engine wasm --emit wat
 ```
+6) Write a .wasm artifact (optional).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine wasm --emit wasm
+```
+If the program uses arrays, the emitted WASM module imports `env.bd_trap`
+for runtime error reporting; `birddisk run` provides it automatically.
+7) Run differential tests (optional).
+```sh
+./target/debug/birddisk test --json
+```
+8) Filter tests by directory, tag, or engine (optional).
+```sh
+./target/debug/birddisk test --json --dir examples --tag while
+./target/debug/birddisk test --json --engine vm --dir vm_tests
+```
+Tags match directory names and file stem tokens (split on non-alphanumeric).
+Default test dirs are `examples/` and `tests/` if present.
 
 Typing model (v0.1)
 - Built-in types: i64, bool
+- Array types: T[]
 - Function params and return types are always explicit
 - set name = expr. may omit the type if expr is inferable
 - No implicit casts
@@ -88,16 +106,19 @@ crates/
   birddisk_wasm/    # wasm codegen
 examples/
 tests/
+vm_tests/          # VM-only fixtures (reserved for future features)
+vm_error_tests/    # VM fixtures expected to fail (diagnostics/runtime errors)
 eval/               # LLM syntax evaluation tasks + scoring notes
 
 CLI (current)
 
 - JSON output is supported for check/run/test; non-JSON paths are stubbed.
-- birddisk fmt <file|dir> (stub)
+- birddisk fmt <file|dir> (canonical formatter)
 - birddisk check <file|dir> [--json] (JSON implemented)
 - birddisk run <file> [--engine vm|wasm] [--json] (VM + WASM implemented)
 - birddisk run <file> --engine wasm --emit wat (print generated WAT)
-- birddisk test [--json] (stub)
+- birddisk run <file> --engine wasm --emit wasm [--out <file>] (write .wasm)
+- birddisk test [--json] [--engine vm|wasm] [--dir <path>] [--tag <tag>] (VM vs WASM diff by default)
 
 Development principles
 	•	Keep the language core small and orthogonal.
@@ -119,8 +140,12 @@ Status
 - Implemented: JSON diagnostics (check/run) + fix-its + suggestions
 - Implemented: eval harness with task runner
 - Implemented: WASM backend (minimal, via wasmtime)
+- Implemented: WASM emission via `birddisk run --engine wasm --emit wasm`
 - Implemented: WAT emission via `birddisk run --engine wasm --emit wat`
-- Stubbed: formatter, non-JSON CLI paths
+- Implemented: differential test harness (`birddisk test --json`)
+- Implemented: formatter (`birddisk fmt`)
+- Implemented: arrays + indexing (VM + WASM)
+- Stubbed: non-JSON CLI paths
 
 License
 

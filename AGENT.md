@@ -22,20 +22,21 @@ Implement BirdDisk v0.1 incrementally with tight verification loops.
 
 ### Types
 - Built-in: `i64`, `bool`
+- Array types: `T[]`
 - Strong static typing
 - Function params + return types are explicit
 - Local type inference allowed for `set name = expr.` only when inferable
 - No implicit casts
 
 ### Out of scope (v0.1)
-No floats, generics, concurrency, exceptions, closures, arrays, structs, pattern matching.
+No floats, generics, concurrency, exceptions, closures, structs, pattern matching.
 
 ## Always follow this workflow
 - Make a change
 - Run tests
 - If syntax/semantics changed:
   - update `docs/SPEC.md`
-  - update `docs/GRAMMAR.ebnf`
+  - update `docs/GRAMMAR.md`
   - add/update an example in `docs/COOKBOOK.md`
   - add tests (VM now; VM+WASM parity once WASM exists)
 

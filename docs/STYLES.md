@@ -36,6 +36,7 @@ end
 repeat while i < 10:
   put i = i + 1.
 end
+```
 
 Functions
 
@@ -69,6 +70,16 @@ Expressions
 	•	Parentheses are allowed for clarity
 
 set x = (a + b) * c.
+
+Arrays
+	•	Array types are written as T[]: i64[], bool[]
+	•	Array literals use [a, b, c] with spaces after commas
+	•	Array constructor uses array(len)
+	•	Indexing has no spaces: xs[0], xs[i]
+
+set xs: i64[] = [1, 2, 3].
+put xs[1] = 7.
+yield xs[0] + xs[1].
 
 Control flow
 
@@ -108,5 +119,3 @@ The formatter must be:
 	•	Lossless (no semantic changes)
 
 If the formatter changes code, it must only change whitespace and layout.
-
-
