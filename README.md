@@ -99,6 +99,7 @@ docs/
   DIAGNOSTICS.md
   COOKBOOK.md
   STYLES.md
+  DECISIONS.md
 crates/
   birddiskc/        # CLI compiler driver
   birddisk_core/    # lexer/parser/AST/types/diagnostics/formatter
