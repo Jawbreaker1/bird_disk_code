@@ -62,5 +62,95 @@
     "expect": {
       "ok": false
     }
+  },
+  {
+    "id": "compare_minimal_main_001",
+    "expect": {
+      "ok": true,
+      "result": 0
+    },
+    "cases": [
+      {
+        "lang": "birddisk",
+        "kind": "run",
+        "input": "rule main() -> i64:\n  yield 0.\nend\n"
+      },
+      {
+        "lang": "python",
+        "kind": "run",
+        "input": "print(0)\n"
+      },
+      {
+        "lang": "javascript",
+        "kind": "run",
+        "input": "console.log(0);\n"
+      },
+      {
+        "lang": "java",
+        "kind": "run",
+        "wrap": true,
+        "input": "System.out.println(0);"
+      }
+    ]
+  },
+  {
+    "id": "compare_sum_while_001",
+    "expect": {
+      "ok": true,
+      "result": 45
+    },
+    "cases": [
+      {
+        "lang": "birddisk",
+        "kind": "run",
+        "input": "rule main() -> i64:\n  set i = 0.\n  set sum: i64 = 0.\n\n  repeat while i < 10:\n    put sum = sum + i.\n    put i = i + 1.\n  end\n\n  yield sum.\nend\n"
+      },
+      {
+        "lang": "python",
+        "kind": "run",
+        "input": "i = 0\nsum_val = 0\nwhile i < 10:\n    sum_val += i\n    i += 1\nprint(sum_val)\n"
+      },
+      {
+        "lang": "javascript",
+        "kind": "run",
+        "input": "let i = 0;\nlet sum = 0;\nwhile (i < 10) {\n  sum += i;\n  i += 1;\n}\nconsole.log(sum);\n"
+      },
+      {
+        "lang": "java",
+        "kind": "run",
+        "wrap": true,
+        "input": "int i = 0;\nint sum = 0;\nwhile (i < 10) {\n  sum += i;\n  i += 1;\n}\nSystem.out.println(sum);"
+      }
+    ]
+  },
+  {
+    "id": "compare_string_eq_001",
+    "expect": {
+      "ok": true,
+      "result": 0
+    },
+    "cases": [
+      {
+        "lang": "birddisk",
+        "kind": "run",
+        "input": "import std::string.\nrule main() -> i64:\n  set left: string = \"bird\".\n  set right: string = \"disk\".\n  when std::string::eq(left, right):\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n"
+      },
+      {
+        "lang": "python",
+        "kind": "run",
+        "input": "left = \"bird\"\nright = \"disk\"\nprint(1 if left == right else 0)\n"
+      },
+      {
+        "lang": "javascript",
+        "kind": "run",
+        "input": "const left = \"bird\";\nconst right = \"disk\";\nconsole.log(left === right ? 1 : 0);\n"
+      },
+      {
+        "lang": "java",
+        "kind": "run",
+        "wrap": true,
+        "input": "String left = \"bird\";\nString right = \"disk\";\nSystem.out.println(left.equals(right) ? 1 : 0);"
+      }
+    ]
   }
 ]

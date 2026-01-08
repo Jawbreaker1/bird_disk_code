@@ -1,0 +1,7 @@
+import std::math.
+
+rule main() -> i64:
+  set value: i64 = std::math::abs(0 - 7).
+  set clamped: i64 = std::math::clamp(value, 0, 10).
+  yield std::math::add(clamped, 1).
+end

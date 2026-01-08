@@ -1,0 +1,13 @@
+book Thing:
+  field x: i64.
+
+  rule init(self: Thing, value: i64) -> Thing:
+    put self::x = value.
+    yield self.
+  end
+end
+
+rule main() -> i64:
+  set t: Thing = new Thing().
+  yield 0.
+end

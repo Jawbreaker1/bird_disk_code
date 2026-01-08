@@ -1,0 +1,25 @@
+book Account:
+  field balance: i64.
+
+  rule init(self: Account, start: i64) -> Account:
+    put self::balance = start.
+    yield self.
+  end
+
+  rule deposit(self: Account, amount: i64) -> i64:
+    put self::balance = self::balance + amount.
+    yield self::balance.
+  end
+
+  rule withdraw(self: Account, amount: i64) -> i64:
+    put self::balance = self::balance - amount.
+    yield self::balance.
+  end
+end
+
+rule main() -> i64:
+  set acct: Account = new Account(100).
+  set after_deposit: i64 = acct::deposit(40).
+  set after_withdraw: i64 = acct::withdraw(10).
+  yield after_deposit + after_withdraw.
+end

@@ -1,0 +1,7 @@
+import std::math.
+
+rule main() -> i64:
+  set g: i64 = std::math::gcd(0 - 48, 18).
+  set l: i64 = std::math::lcm(6, 8).
+  yield std::math::add(g, l).
+end

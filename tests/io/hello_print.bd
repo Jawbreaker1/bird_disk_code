@@ -1,0 +1,5 @@
+import std::io.
+
+rule main() -> i64:
+  yield std::io::print("Hello").
+end

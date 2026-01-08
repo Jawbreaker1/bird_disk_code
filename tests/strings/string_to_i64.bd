@@ -1,0 +1,11 @@
+import std::string.
+
+rule main() -> i64:
+  set value: i64 = std::string::to_i64("120").
+  set text: string = std::string::from_i64(value).
+  when std::string::eq(text, "120"):
+    yield value + 2.
+  otherwise:
+    yield 0.
+  end
+end

@@ -1,0 +1,7 @@
+import std::math.
+
+rule main() -> i64:
+  set low: i64 = std::math::min(7, -3).
+  set high: i64 = std::math::max(2, 5).
+  yield std::math::add(low, high).
+end

@@ -1,0 +1,10 @@
+book Box:
+  field xs: i64[].
+end
+
+rule main() -> i64:
+  set b: Box = new Box().
+  set xs: i64[] = [1].
+  put b::xs = xs.
+  yield b::xs[2].
+end

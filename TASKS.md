@@ -127,23 +127,44 @@ Acceptance:
   - [x] `spec_refs` to doc anchors
   - [x] more fix-its
   - [x] “did you mean” suggestions (similar identifiers)
-- [ ] Create `eval/` tasks to measure LLM-friendliness
+- [x] Add runtime stack traces in JSON diagnostics (function + line/col)
+- [x] Add minimal cross-language eval tasks (Python/JS/Java)
+- [ ] Expand `eval/` tasks to measure LLM-friendliness
+- [ ] Expand cross-language eval suite as the language matures (arrays/IO/OO/error cases)
+- [ ] Add `std::time` (clock/timers) once runtime APIs are defined
 
 Acceptance:
 - common mistakes can be fixed mechanically from fix-its
 
 ---
 
+## Sprint 6.5 — Refactor pass (recurring)
+Goal: keep core modules readable as the language grows.
+
+Implement:
+- [ ] Establish a refactor checkpoint rule (split modules once they exceed ~800–1000 LOC)
+- [ ] Split `crates/birddisk_vm/src/lib.rs` into focused modules (vm, builtins, values, errors)
+- [ ] Split `crates/birddisk_wasm/src/lib.rs` into emitter + runtime helpers
+- [ ] Split `crates/birddisk_core/src/typecheck.rs` into submodules (stdlib, oo, core)
+
+Add tests:
+- [ ] Ensure existing tests still pass after module moves
+
+Acceptance:
+- Core modules are under the checkpoint threshold or clearly partitioned
+
+---
+
 ## Sprint 7 — Decision sprint (priority, 1–3 days)
 Record decisions in `docs/DECISIONS.md` for each item before implementation.
 
-- [ ] Member access syntax (confirmed: `::`) and method call shape
-- [ ] Object model scope: class/struct keywords, methods, constructors
-- [ ] Memory model/GC strategy
-- [ ] Runtime error model + stack trace format
-- [ ] String type + literal syntax + encoding
-- [ ] Primitive types beyond `i64`/`bool`
-- [ ] Stdlib scope and module/import system
+- [x] Member access syntax (confirmed: `::`) and method call shape
+- [x] Object model scope: class/struct keywords, methods, constructors
+- [x] Memory model/GC strategy
+- [x] Runtime error model + stack trace format
+- [x] String type + literal syntax + encoding
+- [x] Primitive types beyond `i64`/`bool`
+- [x] Stdlib scope and module/import system
 - [ ] Native backend approach (Cranelift vs LLVM) + target order
 
 Acceptance:
@@ -153,14 +174,14 @@ Acceptance:
 
 ## Sprint 8 — Strings + minimal stdlib (1–2 weeks)
 Implement:
-- [ ] `string` type (literal parsing, typechecking, runtime)
-- [ ] core string ops (len, concat, equality; optional slice)
-- [ ] stdlib module layout + `import` syntax (minimal)
- - [ ] `std::string` module (core string ops)
+- [x] `string` type (literal parsing, typechecking, runtime)
+- [x] core string ops (len, concat, equality; optional slice)
+- [x] stdlib module layout + `import` syntax (minimal)
+ - [x] `std::string` module (core string ops)
 
 Add tests:
-- [ ] parse/typecheck string literals
-- [ ] runtime tests for string ops (VM + WASM parity)
+- [x] parse/typecheck string literals
+- [x] runtime tests for string ops (VM + WASM parity)
 
 Acceptance:
 - `string` works end-to-end in VM + WASM
@@ -169,13 +190,13 @@ Acceptance:
 
 ## Sprint 8.5 — Basic IO stdlib (0.5–1 week)
 Implement:
-- [ ] `std::io::print(string)`
-- [ ] `std::io::read_line() -> string`
-- [ ] WASM host imports for IO in `birddisk_wasm`
-- [ ] VM IO bindings
+- [x] `std::io::print(string)`
+- [x] `std::io::read_line() -> string`
+- [x] WASM host imports for IO in `birddisk_wasm`
+- [x] VM IO bindings
 
 Add tests:
-- [ ] harnessed IO tests with fixed input/output
+- [x] harnessed IO tests with fixed input/output
 
 Acceptance:
 - IO works in VM + WASM with deterministic harnessed inputs
@@ -184,17 +205,34 @@ Acceptance:
 
 ## Sprint 9 — OO core (2–4 weeks)
 Implement:
-- [ ] `class` or `struct` declarations
-- [ ] member access using `::`
-- [ ] methods with `self`/`this`
-- [ ] constructor story (`new` or `init`)
+- [x] `class` or `struct` declarations
+- [x] member access using `::`
+- [x] methods with `self`/`this`
+- [x] constructor story (`new` or `init`)
 
 Add tests:
-- [ ] member access + method calls
-- [ ] simple object construction and method invocation
+- [x] member access + method calls
+- [x] simple object construction and method invocation
 
 Acceptance:
 - OO "hello world" compiles and runs in VM + WASM
+
+---
+
+## Sprint 9.5 — Stdlib in BirdDisk (scaffold) (1–2 weeks)
+Implement:
+- [x] Define stdlib packaging layout (`stdlib/`), module naming rules, and import resolution
+- [x] Add compiler support for cross-module compilation + linking (BirdDisk sources)
+- [x] Establish versioning + compatibility story for stdlib modules
+- [x] Implement first pure-BirdDisk module (e.g. `std::math` or `std::util`)
+- [x] Decide boundary: which stdlib modules remain in Rust (strings/bytes/IO) for now
+
+Add tests:
+- [x] Cross-module compile tests (stdlib + user module)
+- [x] Simple stdlib unit tests authored in BirdDisk
+
+Acceptance:
+- At least one stdlib module implemented in BirdDisk and imported by user code
 
 ---
 

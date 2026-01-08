@@ -1,5 +1,5 @@
 use crate::ast::{
-    BinaryOp, Expr, ExprKind, Function, Param, Program, Stmt, Type, UnaryOp,
+    BinaryOp, Book, Expr, ExprKind, Field, Function, Import, Param, Program, Stmt, Type, UnaryOp,
 };
 use crate::diagnostics::{Position, Span};
 use crate::lexer::{Token, TokenKind};
@@ -25,17 +25,37 @@ pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
 
 pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>> {
     let mut parser = Parser::new_with_recovery(tokens);
+    let mut imports = Vec::new();
+    let mut books = Vec::new();
     let mut functions = Vec::new();
     let mut errors = Vec::new();
 
     while !parser.is_eof() {
-        if matches!(parser.peek_kind(), TokenKind::Rule) {
-            if let Some(function) = parser.parse_function_with_recovery(&mut errors) {
-                functions.push(function);
+        match parser.peek_kind() {
+            TokenKind::Import => match parser.parse_import() {
+                Ok(import) => imports.push(import),
+                Err(err) => {
+                    errors.push(err);
+                    parser.sync_to_next_top_level();
+                }
+            },
+            TokenKind::Book => {
+                if let Some(book) = parser.parse_book_with_recovery(&mut errors) {
+                    books.push(book);
+                }
             }
-        } else {
-            errors.push(parser.error("E0201", "Expected 'rule' to start a function."));
-            parser.sync_to_next_rule();
+            TokenKind::Rule => {
+                if let Some(function) = parser.parse_function_with_recovery(&mut errors) {
+                    functions.push(function);
+                }
+            }
+            _ => {
+                errors.push(parser.error(
+                    "E0201",
+                    "Expected 'import', 'book', or 'rule' at top level.",
+                ));
+                parser.sync_to_next_top_level();
+            }
         }
     }
 
@@ -44,7 +64,11 @@ pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>>
     }
 
     if errors.is_empty() {
-        Ok(Program { functions })
+        Ok(Program {
+            imports,
+            books,
+            functions,
+        })
     } else {
         Err(errors)
     }
@@ -77,12 +101,19 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_program(mut self) -> Result<Program, ParseError> {
+        let mut imports = Vec::new();
+        let mut books = Vec::new();
         let mut functions = Vec::new();
         while !self.is_eof() {
-            if matches!(self.peek_kind(), TokenKind::Rule) {
-                functions.push(self.parse_function()?);
-            } else {
-                return Err(self.error("E0201", "Expected 'rule' to start a function."));
+            match self.peek_kind() {
+                TokenKind::Import => imports.push(self.parse_import()?),
+                TokenKind::Book => books.push(self.parse_book()?),
+                TokenKind::Rule => functions.push(self.parse_function()?),
+                _ => {
+                    return Err(
+                        self.error("E0201", "Expected 'import', 'book', or 'rule' at top level.")
+                    );
+                }
             }
         }
 
@@ -90,7 +121,33 @@ impl<'a> Parser<'a> {
             return Err(self.error("E0201", "Expected at least one function rule."));
         }
 
-        Ok(Program { functions })
+        Ok(Program {
+            imports,
+            books,
+            functions,
+        })
+    }
+
+    fn parse_import(&mut self) -> Result<Import, ParseError> {
+        let start = self.expect_simple(TokenKind::Import, "Expected 'import'.")?;
+        let (path, end_span) = self.parse_import_path()?;
+        let end = self.expect_dot(end_span.end)?;
+        Ok(Import {
+            path,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_import_path(&mut self) -> Result<(Vec<String>, Span), ParseError> {
+        let (first, mut end) = self.expect_path_segment("Expected module name after 'import'.")?;
+        let mut path = vec![first];
+        while matches!(self.peek_kind(), TokenKind::DoubleColon) {
+            self.bump();
+            let (part, span) = self.expect_path_segment("Expected module name after '::'.")?;
+            path.push(part);
+            end = Span::new(end.start, span.end);
+        }
+        Ok((path, end))
     }
 
     fn parse_function(&mut self) -> Result<Function, ParseError> {
@@ -112,6 +169,46 @@ impl<'a> Parser<'a> {
             return_type,
             body,
             span,
+        })
+    }
+
+    fn parse_book(&mut self) -> Result<Book, ParseError> {
+        let start = self.expect_simple(TokenKind::Book, "Expected 'book' keyword.")?;
+        let name = self.expect_ident("Expected book name.")?;
+        self.expect_colon_with_fixit()?;
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        while !self.is_eof() && !matches!(self.peek_kind(), TokenKind::End) {
+            match self.peek_kind() {
+                TokenKind::Field => fields.push(self.parse_field()?),
+                TokenKind::Rule => methods.push(self.parse_function()?),
+                _ => {
+                    return Err(self.error(
+                        "E0201",
+                        "Expected 'field', 'rule', or 'end' inside book.",
+                    ));
+                }
+            }
+        }
+        let end = self.expect_simple(TokenKind::End, "Expected 'end' to close book.")?;
+        Ok(Book {
+            name,
+            fields,
+            methods,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_field(&mut self) -> Result<Field, ParseError> {
+        let start = self.expect_simple(TokenKind::Field, "Expected 'field' keyword.")?;
+        let name = self.expect_ident("Expected field name.")?;
+        self.expect_simple(TokenKind::Colon, "Expected ':' after field name.")?;
+        let ty = self.parse_type("Expected field type.")?;
+        let end = self.expect_dot(start.span.end)?;
+        Ok(Field {
+            name,
+            ty,
+            span: Span::new(start.span.start, end.span.end),
         })
     }
 
@@ -206,6 +303,76 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_book_with_recovery(&mut self, errors: &mut Vec<ParseError>) -> Option<Book> {
+        let start = match self.expect_simple(TokenKind::Book, "Expected 'book' keyword.") {
+            Ok(token) => token,
+            Err(err) => {
+                errors.push(err);
+                self.sync_to_next_top_level();
+                return None;
+            }
+        };
+
+        let name = match self.expect_ident("Expected book name.") {
+            Ok(name) => name,
+            Err(err) => {
+                errors.push(err);
+                self.sync_to_next_top_level();
+                return None;
+            }
+        };
+
+        if let Err(err) = self.expect_colon_with_fixit() {
+            errors.push(err);
+            self.sync_to_next_top_level();
+            return None;
+        }
+
+        let mut fields = Vec::new();
+        let mut methods = Vec::new();
+        while !self.is_eof() && !matches!(self.peek_kind(), TokenKind::End) {
+            match self.peek_kind() {
+                TokenKind::Field => match self.parse_field() {
+                    Ok(field) => fields.push(field),
+                    Err(err) => {
+                        errors.push(err);
+                        self.sync_to_next_rule();
+                        return None;
+                    }
+                },
+                TokenKind::Rule => {
+                    if let Some(method) = self.parse_function_with_recovery(errors) {
+                        methods.push(method);
+                    }
+                }
+                _ => {
+                    errors.push(self.error(
+                        "E0201",
+                        "Expected 'field', 'rule', or 'end' inside book.",
+                    ));
+                    self.sync_to_next_top_level();
+                    return None;
+                }
+            }
+        }
+
+        let end = match self.expect_simple(TokenKind::End, "Expected 'end' to close book.") {
+            Ok(token) => token,
+            Err(err) => {
+                errors.push(err);
+                self.sync_to_next_top_level();
+                return None;
+            }
+        };
+
+        Some(Book {
+            name,
+            fields,
+            methods,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
     fn parse_params(&mut self) -> Result<Vec<Param>, ParseError> {
         let mut params = Vec::new();
         if matches!(self.peek_kind(), TokenKind::RParen) {
@@ -253,6 +420,18 @@ impl<'a> Parser<'a> {
             TokenKind::TypeBool => {
                 self.bump();
                 Type::Bool
+            }
+            TokenKind::TypeString => {
+                self.bump();
+                Type::String
+            }
+            TokenKind::TypeU8 => {
+                self.bump();
+                Type::U8
+            }
+            TokenKind::Ident(_) => {
+                let token = self.bump();
+                Type::Book(extract_ident(&token))
             }
             _ => return Err(self.error("E0206", message)),
         };
@@ -413,6 +592,19 @@ impl<'a> Parser<'a> {
         let start = self.expect_simple(TokenKind::Put, "Expected 'put'.")?;
         let name_token = self.expect_ident_token("Expected binding name.")?;
         let name = extract_ident(&name_token);
+        if matches!(self.peek_kind(), TokenKind::DoubleColon) {
+            self.bump();
+            let field = self.expect_ident("Expected field name after '::'.")?;
+            self.expect_simple(TokenKind::Assign, "Expected '=' in put statement.")?;
+            let expr = self.parse_expr("Expected expression after '='.")?;
+            let end = self.expect_dot(expr.span.end)?;
+            return Ok(Stmt::PutField {
+                base: name,
+                field,
+                expr,
+                span: Span::new(start.span.start, end.span.end),
+            });
+        }
         let index = if matches!(self.peek_kind(), TokenKind::LBracket) {
             self.bump();
             let expr = self.parse_expr("Expected index expression.")?;
@@ -499,6 +691,7 @@ impl<'a> Parser<'a> {
             TokenKind::Ident(_)
                 | TokenKind::IntLit(_)
                 | TokenKind::BoolLit(_)
+                | TokenKind::StringLit(_)
                 | TokenKind::LBracket
                 | TokenKind::Array
         ) {
@@ -700,7 +893,15 @@ impl<'a> Parser<'a> {
                     span: token.span,
                 })
             }
+            TokenKind::StringLit(value) => {
+                let token = self.bump();
+                Ok(Expr {
+                    kind: ExprKind::String(value),
+                    span: token.span,
+                })
+            }
             TokenKind::Ident(_) => self.parse_ident_or_call(),
+            TokenKind::New => self.parse_new_expr(),
             TokenKind::Array => self.parse_array_new(),
             TokenKind::LBracket => self.parse_array_literal(),
             TokenKind::LParen => {
@@ -731,37 +932,17 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_ident_or_call(&mut self) -> Result<Expr, ParseError> {
-        let token = self.expect_ident_token("Expected identifier.")?;
-        let name = extract_ident(&token);
+        let (segments, span, qualified) = self.parse_qualified_name()?;
         if matches!(self.peek_kind(), TokenKind::LParen) {
-            let start = token.span.start;
+            let start = span.start;
             self.bump();
-            let mut args = Vec::new();
-            if !matches!(self.peek_kind(), TokenKind::RParen) {
-                loop {
-                    let expr = self.parse_expr("Expected call argument.")?;
-                    args.push(expr);
-                    if matches!(self.peek_kind(), TokenKind::Comma) {
-                        self.bump();
-                    } else if matches!(self.peek_kind(), TokenKind::Ident(_)) {
-                        let insert_at = self.tokens[self.index].span.start;
-                        return Err(self.error_with_fixit(
-                            "E0200",
-                            "Expected ',' between arguments.",
-                            FixItHint {
-                                title: "Insert ',' between arguments",
-                                span: Span::new(insert_at, insert_at),
-                                replacement: ", ".to_string(),
-                            },
-                        ));
-                    } else {
-                        break;
-                    }
-                }
-            }
+            let args = self.parse_call_args()?;
             match self.expect_rparen_with_fixit("Expected ')' after arguments.") {
                 Ok(end) => Ok(Expr {
-                    kind: ExprKind::Call { name, args },
+                    kind: ExprKind::Call {
+                        name: segments.join("::"),
+                        args,
+                    },
                     span: Span::new(start, end.span.end),
                 }),
                 Err(err) => {
@@ -772,7 +953,10 @@ impl<'a> Parser<'a> {
                             .map(|expr| expr.span.end)
                             .unwrap_or(start);
                         Ok(Expr {
-                            kind: ExprKind::Call { name, args },
+                            kind: ExprKind::Call {
+                                name: segments.join("::"),
+                                args,
+                            },
                             span: Span::new(start, span_end),
                         })
                     } else {
@@ -780,12 +964,66 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
+        } else if qualified {
+            if segments.len() == 2 {
+                Ok(Expr {
+                    kind: ExprKind::MemberAccess {
+                        base: segments[0].clone(),
+                        field: segments[1].clone(),
+                    },
+                    span,
+                })
+            } else {
+                Err(self.error(
+                    "E0203",
+                    "Expected function call after module path.",
+                ))
+            }
         } else {
             Ok(Expr {
-                kind: ExprKind::Ident(name),
-                span: token.span,
+                kind: ExprKind::Ident(segments[0].clone()),
+                span,
             })
         }
+    }
+
+    fn parse_new_expr(&mut self) -> Result<Expr, ParseError> {
+        let start = self.expect_simple(TokenKind::New, "Expected 'new'.")?;
+        let book = self.expect_ident("Expected book name after 'new'.")?;
+        self.expect_simple(TokenKind::LParen, "Expected '(' after book name.")?;
+        let args = self.parse_call_args()?;
+        let end = self.expect_rparen_with_fixit("Expected ')' after arguments.")?;
+        Ok(Expr {
+            kind: ExprKind::New { book, args },
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_call_args(&mut self) -> Result<Vec<Expr>, ParseError> {
+        let mut args = Vec::new();
+        if !matches!(self.peek_kind(), TokenKind::RParen) {
+            loop {
+                let expr = self.parse_expr("Expected call argument.")?;
+                args.push(expr);
+                if matches!(self.peek_kind(), TokenKind::Comma) {
+                    self.bump();
+                } else if matches!(self.peek_kind(), TokenKind::Ident(_)) {
+                    let insert_at = self.tokens[self.index].span.start;
+                    return Err(self.error_with_fixit(
+                        "E0200",
+                        "Expected ',' between arguments.",
+                        FixItHint {
+                            title: "Insert ',' between arguments",
+                            span: Span::new(insert_at, insert_at),
+                            replacement: ", ".to_string(),
+                        },
+                    ));
+                } else {
+                    break;
+                }
+            }
+        }
+        Ok(args)
     }
 
     fn parse_array_literal(&mut self) -> Result<Expr, ParseError> {
@@ -982,6 +1220,21 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn sync_to_next_top_level(&mut self) {
+        if self.is_eof() {
+            return;
+        }
+
+        while !self.is_eof()
+            && !matches!(
+                self.peek_kind(),
+                TokenKind::Rule | TokenKind::Import | TokenKind::Book
+            )
+        {
+            self.bump();
+        }
+    }
+
     fn sync_to_statement_boundary(&mut self, terminator: Terminator) {
         while !self.is_eof() {
             match self.peek_kind() {
@@ -1003,6 +1256,48 @@ impl<'a> Parser<'a> {
     fn drain_pending_errors(&mut self, errors: &mut Vec<ParseError>) {
         if !self.pending_errors.is_empty() {
             errors.extend(self.pending_errors.drain(..));
+        }
+    }
+
+    fn parse_qualified_name(&mut self) -> Result<(Vec<String>, Span, bool), ParseError> {
+        let first = self.expect_ident_token("Expected identifier.")?;
+        let mut segments = vec![extract_ident(&first)];
+        let mut span = first.span;
+        let mut qualified = false;
+        while matches!(self.peek_kind(), TokenKind::DoubleColon) {
+            qualified = true;
+            self.bump();
+            let (segment, seg_span) =
+                self.expect_path_segment("Expected identifier after '::'.")?;
+            segments.push(segment);
+            span = Span::new(span.start, seg_span.end);
+        }
+        Ok((segments, span, qualified))
+    }
+
+    fn expect_path_segment(&mut self, message: &str) -> Result<(String, Span), ParseError> {
+        match self.peek_kind() {
+            TokenKind::Ident(_) => {
+                let token = self.bump();
+                Ok((extract_ident(&token), token.span))
+            }
+            TokenKind::TypeI64 => {
+                let token = self.bump();
+                Ok(("i64".to_string(), token.span))
+            }
+            TokenKind::TypeBool => {
+                let token = self.bump();
+                Ok(("bool".to_string(), token.span))
+            }
+            TokenKind::TypeString => {
+                let token = self.bump();
+                Ok(("string".to_string(), token.span))
+            }
+            TokenKind::TypeU8 => {
+                let token = self.bump();
+                Ok(("u8".to_string(), token.span))
+            }
+            _ => Err(self.error("E0205", message)),
         }
     }
 
@@ -1275,5 +1570,25 @@ mod tests {
         let tokens = lexer::lex(source).unwrap();
         let err = parse_with_recovery(&tokens).unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn parse_import_and_qualified_call() {
+        let source = "import std::string.\nrule main() -> i64:\n  set s: string = \"hi\".\n  yield std::string::len(s).\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        assert_eq!(program.imports.len(), 1);
+        assert_eq!(program.functions.len(), 1);
+    }
+
+    #[test]
+    fn parse_book_with_field_and_method() {
+        let source = "book Counter:\n  field value: i64.\n  rule init(self: Counter, start: i64) -> Counter:\n    put self::value = start.\n    yield self.\n  end\nend\n\nrule main() -> i64:\n  set c: Counter = new Counter(1).\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        assert_eq!(program.books.len(), 1);
+        assert_eq!(program.books[0].fields.len(), 1);
+        assert_eq!(program.books[0].methods.len(), 1);
+        assert_eq!(program.functions.len(), 1);
     }
 }

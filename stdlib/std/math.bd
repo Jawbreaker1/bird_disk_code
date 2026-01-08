@@ -1,0 +1,110 @@
+rule add(a: i64, b: i64) -> i64:
+  yield a + b.
+end
+
+rule sub(a: i64, b: i64) -> i64:
+  yield a - b.
+end
+
+rule mul(a: i64, b: i64) -> i64:
+  yield a * b.
+end
+
+rule div(a: i64, b: i64) -> i64:
+  yield a / b.
+end
+
+rule mod(a: i64, b: i64) -> i64:
+  yield a % b.
+end
+
+rule abs(value: i64) -> i64:
+  when value < 0:
+    yield 0 - value.
+  otherwise:
+    yield value.
+  end
+end
+
+rule sign(value: i64) -> i64:
+  when value < 0:
+    yield 0 - 1.
+  otherwise:
+    when value > 0:
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  end
+end
+
+rule is_even(value: i64) -> bool:
+  yield value % 2 == 0.
+end
+
+rule clamp(value: i64, low: i64, high: i64) -> i64:
+  when value < low:
+    yield low.
+  otherwise:
+    when value > high:
+      yield high.
+    otherwise:
+      yield value.
+    end
+  end
+end
+
+rule min(a: i64, b: i64) -> i64:
+  when a < b:
+    yield a.
+  otherwise:
+    yield b.
+  end
+end
+
+rule max(a: i64, b: i64) -> i64:
+  when a > b:
+    yield a.
+  otherwise:
+    yield b.
+  end
+end
+
+rule pow(base: i64, exp: i64) -> i64:
+  when exp < 0:
+    yield 0.
+  otherwise:
+    set result: i64 = 1.
+    set i: i64 = 0.
+    repeat while i < exp:
+      put result = result * base.
+      put i = i + 1.
+    end
+    yield result.
+  end
+end
+
+rule gcd(a: i64, b: i64) -> i64:
+  set x: i64 = abs(a).
+  set y: i64 = abs(b).
+  repeat while y != 0:
+    set temp: i64 = x % y.
+    put x = y.
+    put y = temp.
+  end
+  yield x.
+end
+
+rule lcm(a: i64, b: i64) -> i64:
+  when a == 0:
+    yield 0.
+  otherwise:
+    when b == 0:
+      yield 0.
+    otherwise:
+      set g: i64 = gcd(a, b).
+      set product: i64 = abs(a) * abs(b).
+      yield product / g.
+    end
+  end
+end

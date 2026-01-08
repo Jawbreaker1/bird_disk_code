@@ -1,0 +1,6 @@
+import std::string.
+rule main() -> i64:
+  set bytes: u8[] = [104, 105].
+  set text: string = std::string::from_bytes(bytes).
+  yield std::string::len(text).
+end

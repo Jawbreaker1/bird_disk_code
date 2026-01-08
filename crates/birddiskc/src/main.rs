@@ -12,7 +12,7 @@ Usage:
 Commands:
   fmt <file|dir>
   check <file|dir> [--json]
-  run <file> [--engine vm|wasm] [--json] [--emit wat|wasm] [--out <file>]
+  run <file> [--engine vm|wasm] [--json] [--emit wat|wasm] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
   test [--json] [--engine vm|wasm] [--dir <path>] [--tag <tag>]
 
 Options:
@@ -39,13 +39,16 @@ Options:
 
 const RUN_HELP: &str = "\
 Usage:
-  birddisk run <file> [--engine vm|wasm] [--json] [--emit wat|wasm] [--out <file>]
+  birddisk run <file> [--engine vm|wasm] [--json] [--emit wat|wasm] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
 
 Options:
   --engine       Execution engine (vm or wasm)
   --json         Emit JSON output
   --emit         Emit compiled output (wat or wasm)
   --out          Output file for --emit
+  --stdin        Read stdin from file
+  --stdout       Write stdout to file (JSON still printed to stdout)
+  --report       Write JSON report to file (stdout becomes program output unless --json is set)
   -h, --help     Show this help message
 ";
 
@@ -71,6 +74,9 @@ enum Command {
         json: bool,
         emit: Option<EmitFormat>,
         out: Option<String>,
+        stdin: Option<String>,
+        stdout: Option<String>,
+        report: Option<String>,
     },
     Test {
         json: bool,
@@ -92,6 +98,8 @@ struct TestCase {
     ok: bool,
     vm_result: Option<i64>,
     wasm_result: Option<i64>,
+    vm_stdout: Option<String>,
+    wasm_stdout: Option<String>,
     diagnostics: Vec<birddisk_core::Diagnostic>,
 }
 
@@ -166,7 +174,12 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
 
 fn parse_fmt(args: &[String]) -> Result<Command, String> {
     let parsed =
-        parse_path_and_flags(args, ParseConfig::new(true, false, false, false, false, false, false))?;
+        parse_path_and_flags(
+            args,
+            ParseConfig::new(
+                true, false, false, false, false, false, false, false, false, false,
+            ),
+        )?;
     let path = parsed
         .path
         .ok_or_else(|| "missing path for fmt".to_string())?;
@@ -175,7 +188,12 @@ fn parse_fmt(args: &[String]) -> Result<Command, String> {
 
 fn parse_check(args: &[String]) -> Result<Command, String> {
     let parsed =
-        parse_path_and_flags(args, ParseConfig::new(true, false, true, false, false, false, false))?;
+        parse_path_and_flags(
+            args,
+            ParseConfig::new(
+                true, false, true, false, false, false, false, false, false, false,
+            ),
+        )?;
     let path = parsed
         .path
         .ok_or_else(|| "missing path for check".to_string())?;
@@ -187,7 +205,10 @@ fn parse_check(args: &[String]) -> Result<Command, String> {
 
 fn parse_run(args: &[String]) -> Result<Command, String> {
     let parsed =
-        parse_path_and_flags(args, ParseConfig::new(true, true, true, true, true, false, false))?;
+        parse_path_and_flags(
+            args,
+            ParseConfig::new(true, true, true, true, true, false, false, true, true, true),
+        )?;
     let path = parsed
         .path
         .ok_or_else(|| "missing path for run".to_string())?;
@@ -197,19 +218,33 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
     if parsed.emit.is_none() && parsed.out.is_some() {
         return Err("--out requires --emit".to_string());
     }
+    if parsed.emit.is_some()
+        && (parsed.stdin.is_some() || parsed.stdout.is_some() || parsed.report.is_some())
+    {
+        return Err("--stdin/--stdout/--report are not supported with --emit".to_string());
+    }
+    if !parsed.json
+        && parsed.report.is_none()
+        && (parsed.stdin.is_some() || parsed.stdout.is_some())
+    {
+        return Err("--stdin/--stdout require --json or --report".to_string());
+    }
     Ok(Command::Run {
         path,
         engine: parsed.engine.unwrap_or(birddisk_core::Engine::Vm),
         json: parsed.json,
         emit: parsed.emit,
         out: parsed.out,
+        stdin: parsed.stdin,
+        stdout: parsed.stdout,
+        report: parsed.report,
     })
 }
 
 fn parse_test(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(false, true, true, false, false, true, true),
+        ParseConfig::new(false, true, true, false, false, true, true, false, false, false),
     )?;
     if parsed.path.is_some() {
         return Err("unexpected path for test".to_string());
@@ -231,6 +266,9 @@ struct ParseConfig {
     allow_out: bool,
     allow_dir: bool,
     allow_tag: bool,
+    allow_stdin: bool,
+    allow_stdout: bool,
+    allow_report: bool,
 }
 
 impl ParseConfig {
@@ -242,6 +280,9 @@ impl ParseConfig {
         allow_out: bool,
         allow_dir: bool,
         allow_tag: bool,
+        allow_stdin: bool,
+        allow_stdout: bool,
+        allow_report: bool,
     ) -> Self {
         Self {
             allow_path,
@@ -251,6 +292,9 @@ impl ParseConfig {
             allow_out,
             allow_dir,
             allow_tag,
+            allow_stdin,
+            allow_stdout,
+            allow_report,
         }
     }
 }
@@ -263,6 +307,9 @@ struct ParsedArgs {
     out: Option<String>,
     dirs: Vec<String>,
     tags: Vec<String>,
+    stdin: Option<String>,
+    stdout: Option<String>,
+    report: Option<String>,
 }
 
 fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedArgs, String> {
@@ -273,6 +320,9 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
     let mut out = None;
     let mut dirs = Vec::new();
     let mut tags = Vec::new();
+    let mut stdin = None;
+    let mut stdout = None;
+    let mut report = None;
     let mut iter = args.iter();
 
     while let Some(arg) = iter.next() {
@@ -328,6 +378,33 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
                     .ok_or_else(|| "missing value for --tag".to_string())?;
                 tags.push(value.to_string());
             }
+            "--stdin" => {
+                if !config.allow_stdin {
+                    return Err("unexpected --stdin".to_string());
+                }
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --stdin".to_string())?;
+                stdin = Some(value.to_string());
+            }
+            "--stdout" => {
+                if !config.allow_stdout {
+                    return Err("unexpected --stdout".to_string());
+                }
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --stdout".to_string())?;
+                stdout = Some(value.to_string());
+            }
+            "--report" => {
+                if !config.allow_report {
+                    return Err("unexpected --report".to_string());
+                }
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --report".to_string())?;
+                report = Some(value.to_string());
+            }
             flag if flag.starts_with('-') => {
                 return Err(format!("unknown option '{flag}'"));
             }
@@ -351,6 +428,9 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
         out,
         dirs,
         tags,
+        stdin,
+        stdout,
+        report,
     })
 }
 
@@ -391,15 +471,41 @@ fn execute(command: Command) -> Result<(), String> {
             json,
             emit,
             out,
+            stdin,
+            stdout,
+            report,
         } => {
             if let Some(format) = emit {
                 return emit_compiled(&path, engine, format, out);
             }
-            if json {
-                println!("{}", run_json(&path, engine));
+            if json || report.is_some() {
+                let input = match stdin {
+                    Some(path) => std::fs::read_to_string(&path)
+                        .map_err(|err| format!("unable to read --stdin file '{path}': {err}"))?,
+                    None => String::new(),
+                };
+                let run_report = run_report(&path, engine, &input);
+                let report_json =
+                    serde_json::to_string_pretty(&run_report).unwrap_or_else(|_| "{}".to_string());
+                if let Some(path) = report.as_deref() {
+                    std::fs::write(path, &report_json)
+                        .map_err(|err| format!("unable to write --report file '{path}': {err}"))?;
+                }
+                if json {
+                    println!("{report_json}");
+                }
+                if let Some(output) = run_report.stdout.as_deref() {
+                    if let Some(path) = stdout {
+                        std::fs::write(&path, output).map_err(|err| {
+                            format!("unable to write --stdout file '{path}': {err}")
+                        })?;
+                    } else if report.is_some() && !json {
+                        print!("{output}");
+                    }
+                }
                 Ok(())
             } else {
-                Err("run not implemented (use --json for stub output)".to_string())
+                Err("run not implemented (use --json or --report)".to_string())
             }
         }
         Command::Test {
@@ -418,15 +524,20 @@ fn execute(command: Command) -> Result<(), String> {
     }
 }
 
-fn run_json(path: &str, engine: birddisk_core::Engine) -> String {
-    let report = match birddisk_core::parse_and_typecheck(path) {
+fn run_report(
+    path: &str,
+    engine: birddisk_core::Engine,
+    input: &str,
+) -> birddisk_core::RunReport {
+    match birddisk_core::parse_and_typecheck(path) {
         Ok(program) => match engine {
-            birddisk_core::Engine::Vm => match birddisk_vm::eval(&program) {
-                Ok(result) => birddisk_core::RunReport {
+            birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io(&program, input) {
+                Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
                     ok: true,
                     result: Some(result),
+                    stdout: Some(stdout),
                     diagnostics: Vec::new(),
                 },
                 Err(err) => birddisk_core::RunReport {
@@ -434,20 +545,23 @@ fn run_json(path: &str, engine: birddisk_core::Engine) -> String {
                     version: birddisk_core::VERSION,
                     ok: false,
                     result: None,
+                    stdout: None,
                     diagnostics: vec![runtime_diagnostic(
                         path,
                         err.message,
                         err.code,
                         runtime_spec_refs(err.code),
+                        err.trace,
                     )],
                 },
             },
-            birddisk_core::Engine::Wasm => match birddisk_wasm::run(&program) {
-                Ok(result) => birddisk_core::RunReport {
+            birddisk_core::Engine::Wasm => match birddisk_wasm::run_with_io(&program, input) {
+                Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
                     ok: true,
                     result: Some(result),
+                    stdout: Some(stdout),
                     diagnostics: Vec::new(),
                 },
                 Err(err) => birddisk_core::RunReport {
@@ -455,11 +569,13 @@ fn run_json(path: &str, engine: birddisk_core::Engine) -> String {
                     version: birddisk_core::VERSION,
                     ok: false,
                     result: None,
+                    stdout: None,
                     diagnostics: vec![runtime_diagnostic(
                         path,
                         err.message,
                         err.code,
                         runtime_spec_refs(err.code),
+                        err.trace,
                     )],
                 },
             },
@@ -469,11 +585,10 @@ fn run_json(path: &str, engine: birddisk_core::Engine) -> String {
             version: birddisk_core::VERSION,
             ok: false,
             result: None,
+            stdout: None,
             diagnostics,
         },
-    };
-
-    serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string())
+    }
 }
 
 fn run_tests_json(
@@ -579,6 +694,61 @@ fn collect_bd_files(
     Ok(())
 }
 
+fn companion_path(path: &str, extension: &str) -> String {
+    let mut output = std::path::PathBuf::from(path);
+    output.set_extension(extension);
+    output.to_string_lossy().to_string()
+}
+
+fn read_optional_file(path: &str) -> Result<Option<String>, String> {
+    if std::path::Path::new(path).exists() {
+        std::fs::read_to_string(path)
+            .map(Some)
+            .map_err(|err| err.to_string())
+    } else {
+        Ok(None)
+    }
+}
+
+fn read_test_input(path: &str) -> Result<String, String> {
+    let stdin_path = companion_path(path, "stdin");
+    Ok(read_optional_file(&stdin_path)?.unwrap_or_default())
+}
+
+fn read_expected_output(path: &str) -> Result<Option<String>, String> {
+    let stdout_path = companion_path(path, "stdout");
+    read_optional_file(&stdout_path)
+}
+
+fn read_expected_error(path: &str) -> Result<Option<Vec<String>>, String> {
+    let error_path = companion_path(path, "error");
+    match read_optional_file(&error_path)? {
+        Some(contents) => Ok(Some(parse_expected_error(&contents)?)),
+        None => Ok(None),
+    }
+}
+
+fn parse_expected_error(contents: &str) -> Result<Vec<String>, String> {
+    let mut codes = Vec::new();
+    for line in contents.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        for token in trimmed.split_whitespace() {
+            if token.starts_with('#') {
+                break;
+            }
+            codes.push(token.to_string());
+        }
+    }
+    if codes.is_empty() {
+        Err("expected error file did not contain any codes".to_string())
+    } else {
+        Ok(codes)
+    }
+}
+
 fn matches_tags(path: &str, tags: &[String]) -> bool {
     if tags.is_empty() {
         return true;
@@ -612,23 +782,98 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
         ok: true,
         vm_result: None,
         wasm_result: None,
+        vm_stdout: None,
+        wasm_stdout: None,
         diagnostics: Vec::new(),
+    };
+
+    let input = match read_test_input(path) {
+        Ok(input) => input,
+        Err(err) => {
+            case.ok = false;
+            case.diagnostics
+                .push(harness_diagnostic(path, err, "E0501"));
+            return case;
+        }
+    };
+    let expected_output = match read_expected_output(path) {
+        Ok(output) => output,
+        Err(err) => {
+            case.ok = false;
+            case.diagnostics
+                .push(harness_diagnostic(path, err, "E0501"));
+            return case;
+        }
+    };
+    let expected_error = match read_expected_error(path) {
+        Ok(error) => error,
+        Err(err) => {
+            case.ok = false;
+            case.diagnostics
+                .push(harness_diagnostic(path, err, "E0501"));
+            return case;
+        }
     };
 
     let program = match birddisk_core::parse_and_typecheck(path) {
         Ok(program) => program,
         Err(diagnostics) => {
+            if let Some(expected) = expected_error.as_ref() {
+                if diagnostics_match(expected, &diagnostics) {
+                    return case;
+                }
+                case.ok = false;
+                case.diagnostics = diagnostics;
+                case.diagnostics.push(expected_error_diagnostic(
+                    path,
+                    format!(
+                        "Expected error code(s) {}, but parser/typechecker reported different codes.",
+                        expected.join(", ")
+                    ),
+                ));
+                return case;
+            }
             case.ok = false;
             case.diagnostics = diagnostics;
             return case;
         }
     };
 
+    if let Some(expected) = expected_error.as_ref() {
+        match engine {
+            Some(birddisk_core::Engine::Vm) => {
+                let vm = birddisk_vm::eval_with_io(&program, &input);
+                if !check_expected_vm_error(vm, expected, &mut case) {
+                    return case;
+                }
+            }
+            Some(birddisk_core::Engine::Wasm) => {
+                let wasm = birddisk_wasm::run_with_io(&program, &input);
+                if !check_expected_wasm_error(wasm, expected, &mut case) {
+                    return case;
+                }
+            }
+            None => {
+                let vm = birddisk_vm::eval_with_io(&program, &input);
+                let wasm = birddisk_wasm::run_with_io(&program, &input);
+                let vm_ok = check_expected_vm_error(vm, expected, &mut case);
+                let wasm_ok = check_expected_wasm_error(wasm, expected, &mut case);
+                if !vm_ok || !wasm_ok {
+                    return case;
+                }
+            }
+        }
+        return case;
+    }
+
     match engine {
         Some(birddisk_core::Engine::Vm) => {
-            let vm = birddisk_vm::eval(&program);
+            let vm = birddisk_vm::eval_with_io(&program, &input);
             match vm {
-                Ok(result) => case.vm_result = Some(result),
+                Ok((result, stdout)) => {
+                    case.vm_result = Some(result);
+                    case.vm_stdout = Some(stdout);
+                }
                 Err(err) => {
                     case.ok = false;
                     case.diagnostics.push(runtime_diagnostic(
@@ -636,14 +881,18 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         err.message,
                         err.code,
                         runtime_spec_refs(err.code),
+                        err.trace,
                     ));
                 }
             }
         }
         Some(birddisk_core::Engine::Wasm) => {
-            let wasm = birddisk_wasm::run(&program);
+            let wasm = birddisk_wasm::run_with_io(&program, &input);
             match wasm {
-                Ok(result) => case.wasm_result = Some(result),
+                Ok((result, stdout)) => {
+                    case.wasm_result = Some(result);
+                    case.wasm_stdout = Some(stdout);
+                }
                 Err(err) => {
                     case.ok = false;
                     case.diagnostics.push(runtime_diagnostic(
@@ -651,16 +900,20 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         err.message,
                         err.code,
                         runtime_spec_refs(err.code),
+                        err.trace,
                     ));
                 }
             }
         }
         None => {
-            let vm = birddisk_vm::eval(&program);
-            let wasm = birddisk_wasm::run(&program);
+            let vm = birddisk_vm::eval_with_io(&program, &input);
+            let wasm = birddisk_wasm::run_with_io(&program, &input);
 
             match vm {
-                Ok(result) => case.vm_result = Some(result),
+                Ok((result, stdout)) => {
+                    case.vm_result = Some(result);
+                    case.vm_stdout = Some(stdout);
+                }
                 Err(err) => {
                     case.ok = false;
                     case.diagnostics.push(runtime_diagnostic(
@@ -668,12 +921,16 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         err.message,
                         err.code,
                         runtime_spec_refs(err.code),
+                        err.trace,
                     ));
                 }
             }
 
             match wasm {
-                Ok(result) => case.wasm_result = Some(result),
+                Ok((result, stdout)) => {
+                    case.wasm_result = Some(result);
+                    case.wasm_stdout = Some(stdout);
+                }
                 Err(err) => {
                     case.ok = false;
                     case.diagnostics.push(runtime_diagnostic(
@@ -681,6 +938,7 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         err.message,
                         err.code,
                         runtime_spec_refs(err.code),
+                        err.trace,
                     ));
                 }
             }
@@ -695,9 +953,127 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                     .push(mismatch_diagnostic(path, vm_result, wasm_result));
             }
         }
+        if let (Some(vm_stdout), Some(wasm_stdout)) =
+            (case.vm_stdout.as_ref(), case.wasm_stdout.as_ref())
+        {
+            if vm_stdout != wasm_stdout {
+                case.ok = false;
+                case.diagnostics
+                    .push(output_mismatch_diagnostic(path, "vm", "wasm", vm_stdout, wasm_stdout));
+            }
+        }
+        if let Some(expected) = expected_output.as_ref() {
+            if let Some(vm_stdout) = case.vm_stdout.as_ref() {
+                if vm_stdout != expected {
+                    case.ok = false;
+                    case.diagnostics.push(output_expected_diagnostic(
+                        path,
+                        "vm",
+                        expected,
+                        vm_stdout,
+                    ));
+                }
+            }
+            if let Some(wasm_stdout) = case.wasm_stdout.as_ref() {
+                if wasm_stdout != expected {
+                    case.ok = false;
+                    case.diagnostics.push(output_expected_diagnostic(
+                        path,
+                        "wasm",
+                        expected,
+                        wasm_stdout,
+                    ));
+                }
+            }
+        }
     }
 
     case
+}
+
+fn diagnostics_match(
+    expected: &[String],
+    diagnostics: &[birddisk_core::Diagnostic],
+) -> bool {
+    diagnostics
+        .iter()
+        .any(|diag| expected.iter().any(|code| code == diag.code))
+}
+
+fn check_expected_vm_error(
+    result: Result<(i64, String), birddisk_vm::RuntimeError>,
+    expected: &[String],
+    case: &mut TestCase,
+) -> bool {
+    match result {
+        Ok((result, stdout)) => {
+            case.ok = false;
+            case.vm_result = Some(result);
+            case.vm_stdout = Some(stdout);
+            case.diagnostics.push(expected_error_diagnostic(
+                &case.path,
+                format!(
+                    "Expected error code(s) {}, but vm succeeded.",
+                    expected.join(", ")
+                ),
+            ));
+            false
+        }
+        Err(err) => {
+            if expected.iter().any(|code| code == err.code) {
+                true
+            } else {
+                case.ok = false;
+                case.diagnostics.push(expected_error_diagnostic(
+                    &case.path,
+                    format!(
+                        "Expected error code(s) {}, got {} from vm.",
+                        expected.join(", "),
+                        err.code
+                    ),
+                ));
+                false
+            }
+        }
+    }
+}
+
+fn check_expected_wasm_error(
+    result: Result<(i64, String), birddisk_wasm::WasmError>,
+    expected: &[String],
+    case: &mut TestCase,
+) -> bool {
+    match result {
+        Ok((result, stdout)) => {
+            case.ok = false;
+            case.wasm_result = Some(result);
+            case.wasm_stdout = Some(stdout);
+            case.diagnostics.push(expected_error_diagnostic(
+                &case.path,
+                format!(
+                    "Expected error code(s) {}, but wasm succeeded.",
+                    expected.join(", ")
+                ),
+            ));
+            false
+        }
+        Err(err) => {
+            if expected.iter().any(|code| code == err.code) {
+                true
+            } else {
+                case.ok = false;
+                case.diagnostics.push(expected_error_diagnostic(
+                    &case.path,
+                    format!(
+                        "Expected error code(s) {}, got {} from wasm.",
+                        expected.join(", "),
+                        err.code
+                    ),
+                ));
+                false
+            }
+        }
+    }
 }
 
 fn emit_compiled(
@@ -753,7 +1129,83 @@ fn mismatch_diagnostic(path: &str, vm_result: i64, wasm_result: i64) -> birddisk
         ),
         file: path.to_string(),
         span: default_span(),
+        trace: Vec::new(),
         notes: vec!["Differential test failure.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+fn output_mismatch_diagnostic(
+    path: &str,
+    left_engine: &str,
+    right_engine: &str,
+    left: &str,
+    right: &str,
+) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "E0502",
+        severity: "error",
+        message: format!(
+            "VM/WASM output mismatch: {left_engine}='{left}', {right_engine}='{right}'."
+        ),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["IO output differs between backends.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+fn output_expected_diagnostic(
+    path: &str,
+    engine: &str,
+    expected: &str,
+    actual: &str,
+) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "E0502",
+        severity: "error",
+        message: format!(
+            "Output mismatch ({engine}): expected='{expected}', got='{actual}'."
+        ),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Output does not match .stdout fixture.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+fn expected_error_diagnostic(path: &str, message: impl Into<String>) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "E0503",
+        severity: "error",
+        message: message.into(),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Expected error did not match.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+fn harness_diagnostic(path: &str, message: String, code: &'static str) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code,
+        severity: "error",
+        message,
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Test harness error.".to_string()],
         spec_refs: Vec::new(),
         fixits: Vec::new(),
         help: None,
@@ -767,6 +1219,7 @@ fn test_harness_diagnostic(message: impl Into<String>) -> birddisk_core::Diagnos
         message: message.into(),
         file: "<tests>".to_string(),
         span: default_span(),
+        trace: Vec::new(),
         notes: vec!["Test harness error.".to_string()],
         spec_refs: Vec::new(),
         fixits: Vec::new(),
@@ -786,6 +1239,7 @@ fn runtime_diagnostic(
     message: String,
     code: &'static str,
     spec_refs: Vec<String>,
+    trace: Vec<birddisk_core::TraceFrame>,
 ) -> birddisk_core::Diagnostic {
     birddisk_core::Diagnostic {
         code,
@@ -796,6 +1250,7 @@ fn runtime_diagnostic(
             birddisk_core::Position::new(1, 1),
             birddisk_core::Position::new(1, 1),
         ),
+        trace,
         notes: vec!["Runtime error".to_string()],
         spec_refs,
         fixits: Vec::new(),
@@ -831,6 +1286,9 @@ mod tests {
                 json: true,
                 emit: None,
                 out: None,
+                stdin: None,
+                stdout: None,
+                report: None,
             }
         );
     }
@@ -846,6 +1304,9 @@ mod tests {
                 json: false,
                 emit: Some(EmitFormat::Wat),
                 out: None,
+                stdin: None,
+                stdout: None,
+                report: None,
             }
         );
     }
@@ -871,6 +1332,9 @@ mod tests {
                 json: false,
                 emit: Some(EmitFormat::Wasm),
                 out: Some("main.wasm".to_string()),
+                stdin: None,
+                stdout: None,
+                report: None,
             }
         );
     }
@@ -894,6 +1358,71 @@ mod tests {
     fn parse_run_rejects_out_without_emit() {
         let err = cmd(&["run", "main.bd", "--out", "main.wasm"]).unwrap_err();
         assert!(err.contains("--out requires --emit"));
+    }
+
+    #[test]
+    fn parse_run_with_stdin_stdout() {
+        let command = cmd(&[
+            "run",
+            "--json",
+            "main.bd",
+            "--stdin",
+            "input.txt",
+            "--stdout",
+            "output.txt",
+        ])
+        .unwrap();
+        assert_eq!(
+            command,
+            Command::Run {
+                path: "main.bd".to_string(),
+                engine: birddisk_core::Engine::Vm,
+                json: true,
+                emit: None,
+                out: None,
+                stdin: Some("input.txt".to_string()),
+                stdout: Some("output.txt".to_string()),
+                report: None,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_run_rejects_stdin_without_json() {
+        let err = cmd(&["run", "main.bd", "--stdin", "input.txt"]).unwrap_err();
+        assert!(err.contains("--stdin/--stdout require --json or --report"));
+    }
+
+    #[test]
+    fn parse_run_rejects_stdout_with_emit() {
+        let err = cmd(&[
+            "run",
+            "main.bd",
+            "--emit",
+            "wat",
+            "--stdout",
+            "out.txt",
+        ])
+        .unwrap_err();
+        assert!(err.contains("--stdin/--stdout/--report are not supported with --emit"));
+    }
+
+    #[test]
+    fn parse_run_with_report() {
+        let command = cmd(&["run", "main.bd", "--report", "report.json"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Run {
+                path: "main.bd".to_string(),
+                engine: birddisk_core::Engine::Vm,
+                json: false,
+                emit: None,
+                out: None,
+                stdin: None,
+                stdout: None,
+                report: Some("report.json".to_string()),
+            }
+        );
     }
 
     #[test]

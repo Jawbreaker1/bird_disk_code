@@ -2,6 +2,7 @@ use crate::diagnostics::{Position, Span};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
+    Import,
     Rule,
     Set,
     Put,
@@ -10,12 +11,18 @@ pub enum TokenKind {
     Otherwise,
     Repeat,
     While,
+    Book,
+    Field,
+    New,
     End,
     Array,
     TypeI64,
     TypeBool,
+    TypeString,
+    TypeU8,
     BoolLit(bool),
     IntLit(i64),
+    StringLit(String),
     Ident(String),
     LParen,
     RParen,
@@ -23,6 +30,7 @@ pub enum TokenKind {
     RBracket,
     Comma,
     Colon,
+    DoubleColon,
     Dot,
     Arrow,
     Assign,
@@ -109,7 +117,12 @@ impl Lexer {
                 }
                 ':' => {
                     self.advance();
-                    TokenKind::Colon
+                    if self.peek() == Some(':') {
+                        self.advance();
+                        TokenKind::DoubleColon
+                    } else {
+                        TokenKind::Colon
+                    }
                 }
                 '.' => {
                     self.advance();
@@ -220,6 +233,14 @@ impl Lexer {
                         _ => TokenKind::Slash,
                     }
                 }
+                '"' => {
+                    let (value, span) = self.lex_string(start)?;
+                    tokens.push(Token {
+                        kind: TokenKind::StringLit(value),
+                        span,
+                    });
+                    continue;
+                }
                 ch if is_letter(ch) => self.lex_identifier(),
                 ch if is_digit(ch) => {
                     let (value, span) = self.lex_number(start)?;
@@ -260,6 +281,7 @@ impl Lexer {
         }
 
         match buf.as_str() {
+            "import" => TokenKind::Import,
             "rule" => TokenKind::Rule,
             "set" => TokenKind::Set,
             "put" => TokenKind::Put,
@@ -268,10 +290,15 @@ impl Lexer {
             "otherwise" => TokenKind::Otherwise,
             "repeat" => TokenKind::Repeat,
             "while" => TokenKind::While,
+            "book" => TokenKind::Book,
+            "field" => TokenKind::Field,
+            "new" => TokenKind::New,
             "end" => TokenKind::End,
             "array" => TokenKind::Array,
             "i64" => TokenKind::TypeI64,
             "bool" => TokenKind::TypeBool,
+            "string" => TokenKind::TypeString,
+            "u8" => TokenKind::TypeU8,
             "true" => TokenKind::BoolLit(true),
             "false" => TokenKind::BoolLit(false),
             _ => TokenKind::Ident(buf),
@@ -299,6 +326,47 @@ impl Lexer {
                 span,
             }),
         }
+    }
+
+    fn lex_string(&mut self, start: Position) -> Result<(String, Span), LexError> {
+        let mut buf = String::new();
+        self.advance();
+        while let Some(ch) = self.peek() {
+            match ch {
+                '"' => {
+                    self.advance();
+                    let span = Span::new(start, self.position());
+                    return Ok((buf, span));
+                }
+                '\\' => {
+                    self.advance();
+                    let escaped = match self.peek() {
+                        Some('"') => '"',
+                        Some('\\') => '\\',
+                        Some('n') => '\n',
+                        Some(other) => {
+                            self.advance();
+                            let message = format!("Invalid escape '\\{other}'.");
+                            return Err(self.error("E0104", &message, start));
+                        }
+                        None => {
+                            return Err(self.error("E0103", "Unterminated string literal.", start));
+                        }
+                    };
+                    self.advance();
+                    buf.push(escaped);
+                }
+                '\n' => {
+                    return Err(self.error("E0103", "Unterminated string literal.", start));
+                }
+                _ => {
+                    buf.push(ch);
+                    self.advance();
+                }
+            }
+        }
+
+        Err(self.error("E0103", "Unterminated string literal.", start))
     }
 
     fn error(&self, code: &'static str, message: &str, start: Position) -> LexError {
@@ -371,5 +439,25 @@ mod tests {
     fn lex_rejects_unknown_character() {
         let err = lex("@").unwrap_err();
         assert_eq!(err.code, "E0100");
+    }
+
+    #[test]
+    fn lex_string_literal_with_escape() {
+        let source = "rule main() -> i64:\n  set s: string = \"hi\\n\".\n  yield 0.\nend\n";
+        let tokens = lex(source).unwrap();
+        assert!(tokens.iter().any(|token| {
+            matches!(token.kind, TokenKind::StringLit(ref value) if value == "hi\n")
+        }));
+    }
+
+    #[test]
+    fn lex_import_path() {
+        let source = "import std::string.\nrule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lex(source).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Import);
+        assert_eq!(tokens[1].kind, TokenKind::Ident("std".to_string()));
+        assert_eq!(tokens[2].kind, TokenKind::DoubleColon);
+        assert_eq!(tokens[3].kind, TokenKind::TypeString);
+        assert_eq!(tokens[4].kind, TokenKind::Dot);
     }
 }

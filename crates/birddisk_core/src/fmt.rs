@@ -1,4 +1,6 @@
-use crate::ast::{BinaryOp, Expr, ExprKind, Function, Program, Stmt, Type, UnaryOp};
+use crate::ast::{
+    BinaryOp, Book, Expr, ExprKind, Field, Function, Program, Stmt, Type, UnaryOp,
+};
 use crate::{lexer, parser};
 use std::fs;
 use std::path::Path;
@@ -44,6 +46,23 @@ fn format_file(path: &Path) -> Result<(), String> {
 
 fn format_program(program: &Program) -> String {
     let mut fmt = Formatter::new();
+    for import in &program.imports {
+        let path = import.path.join("::");
+        fmt.push_line(&format!("import {path}."));
+    }
+    if !program.imports.is_empty() && (!program.books.is_empty() || !program.functions.is_empty())
+    {
+        fmt.push_line("");
+    }
+    for (idx, book) in program.books.iter().enumerate() {
+        if idx > 0 {
+            fmt.push_line("");
+        }
+        fmt.format_book(book);
+    }
+    if !program.books.is_empty() && !program.functions.is_empty() {
+        fmt.push_line("");
+    }
     for (idx, func) in program.functions.iter().enumerate() {
         if idx > 0 {
             fmt.push_line("");
@@ -102,6 +121,33 @@ impl Formatter {
         self.push_line("end");
     }
 
+    fn format_book(&mut self, book: &Book) {
+        self.push_line(&format!("book {}:", book.name));
+        self.indent += 1;
+        for field in &book.fields {
+            self.format_field(field);
+        }
+        if !book.fields.is_empty() && !book.methods.is_empty() {
+            self.push_line("");
+        }
+        for (idx, method) in book.methods.iter().enumerate() {
+            if idx > 0 {
+                self.push_line("");
+            }
+            self.format_function(method);
+        }
+        self.indent -= 1;
+        self.push_line("end");
+    }
+
+    fn format_field(&mut self, field: &Field) {
+        self.push_line(&format!(
+            "field {}: {}.",
+            field.name,
+            format_type(&field.ty)
+        ));
+    }
+
     fn format_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Set { name, ty, expr, .. } => {
@@ -125,6 +171,15 @@ impl Formatter {
                 let value_expr = format_expr(expr, 0);
                 let line = format!("put {name}[{index_expr}] = {value_expr}.");
                 self.push_line(&line);
+            }
+            Stmt::PutField {
+                base,
+                field,
+                expr,
+                ..
+            } => {
+                let value_expr = format_expr(expr, 0);
+                self.push_line(&format!("put {base}::{field} = {value_expr}."));
             }
             Stmt::Yield { expr, .. } => {
                 let line = format!("yield {}.", format_expr(expr, 0));
@@ -167,7 +222,10 @@ fn format_type(ty: &Type) -> String {
     match ty {
         Type::I64 => "i64".to_string(),
         Type::Bool => "bool".to_string(),
+        Type::String => "string".to_string(),
+        Type::U8 => "u8".to_string(),
         Type::Array(inner) => format!("{}[]", format_type(inner)),
+        Type::Book(name) => name.clone(),
     }
 }
 
@@ -175,6 +233,7 @@ fn format_expr(expr: &Expr, parent_prec: u8) -> String {
     match &expr.kind {
         ExprKind::Int(value) => value.to_string(),
         ExprKind::Bool(value) => value.to_string(),
+        ExprKind::String(value) => format!("\"{}\"", escape_string(value)),
         ExprKind::Ident(name) => name.clone(),
         ExprKind::Call { name, args } => {
             let mut rendered = String::new();
@@ -189,6 +248,18 @@ fn format_expr(expr: &Expr, parent_prec: u8) -> String {
             rendered.push(')');
             rendered
         }
+        ExprKind::New { book, args } => {
+            let mut rendered = format!("new {book}(");
+            for (idx, arg) in args.iter().enumerate() {
+                if idx > 0 {
+                    rendered.push_str(", ");
+                }
+                rendered.push_str(&format_expr(arg, 0));
+            }
+            rendered.push(')');
+            rendered
+        }
+        ExprKind::MemberAccess { base, field } => format!("{base}::{field}"),
         ExprKind::ArrayLit(elements) => {
             let mut rendered = String::new();
             rendered.push('[');
@@ -249,6 +320,19 @@ fn format_binary_op(op: BinaryOp) -> &'static str {
         BinaryOp::AndAnd => "&&",
         BinaryOp::OrOr => "||",
     }
+}
+
+fn escape_string(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 fn precedence(expr: &Expr) -> u8 {
@@ -318,5 +402,12 @@ mod tests {
         let expected = "rule main() -> i64:\n  yield add(1, 2) + -3.\nend\n\nrule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n";
         let formatted = format_source(source).unwrap();
         assert_eq!(formatted, expected);
+    }
+
+    #[test]
+    fn format_import_and_string_literal() {
+        let source = "import std::string.\n\nrule main() -> i64:\n  set s: string = \"hi\\n\".\n  yield std::string::len(s).\nend\n";
+        let formatted = format_source(source).unwrap();
+        assert_eq!(formatted, source);
     }
 }

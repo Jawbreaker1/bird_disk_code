@@ -2,7 +2,30 @@ use crate::diagnostics::Span;
 
 #[derive(Debug, Clone)]
 pub struct Program {
+    pub imports: Vec<Import>,
+    pub books: Vec<Book>,
     pub functions: Vec<Function>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Import {
+    pub path: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Book {
+    pub name: String,
+    pub fields: Vec<Field>,
+    pub methods: Vec<Function>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct Field {
+    pub name: String,
+    pub ty: Type,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -25,7 +48,10 @@ pub struct Param {
 pub enum Type {
     I64,
     Bool,
+    String,
+    U8,
     Array(Box<Type>),
+    Book(String),
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +70,12 @@ pub enum Stmt {
     PutIndex {
         name: String,
         index: Expr,
+        expr: Expr,
+        span: Span,
+    },
+    PutField {
+        base: String,
+        field: String,
         expr: Expr,
         span: Span,
     },
@@ -74,8 +106,11 @@ pub struct Expr {
 pub enum ExprKind {
     Int(i64),
     Bool(bool),
+    String(String),
     Ident(String),
     Call { name: String, args: Vec<Expr> },
+    New { book: String, args: Vec<Expr> },
+    MemberAccess { base: String, field: String },
     ArrayLit(Vec<Expr>),
     ArrayNew { len: Box<Expr> },
     Index { base: Box<Expr>, index: Box<Expr> },
@@ -91,7 +126,10 @@ pub enum ExprKind {
 pub enum Value {
     I64(i64),
     Bool(bool),
+    String(String),
+    U8(u8),
     Array { elements: Vec<Value>, elem_type: Type },
+    Object { book: String, fields: Vec<Value> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

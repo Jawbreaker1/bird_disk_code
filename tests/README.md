@@ -5,7 +5,7 @@ test harness (`birddisk test --json`).
 
 ## Conventions
 - Keep each file small and focused (one feature per file).
-- Prefer predictable outputs (no randomness, no IO).
+- Prefer predictable outputs (no randomness; IO requires fixtures).
 - Avoid redundant combinations; use tags to group related cases.
 
 ## Tags
@@ -37,3 +37,14 @@ diagnostics.
 1) Pick a folder or create a new tag folder.
 2) Add a `.bd` file with a `rule main() -> i64:` entry point.
 3) Keep the expected result obvious and stable.
+
+## IO fixtures
+For IO tests, place optional companion files alongside the `.bd` source:
+- `<name>.stdin` supplies stdin content.
+- `<name>.stdout` is the expected stdout string.
+
+## Expected error fixtures
+To assert a compile-time or runtime error, add a companion `.error` file:
+- `<name>.error` contains one or more diagnostic codes (whitespace-separated).
+- The test harness passes if any reported diagnostic matches one of the codes.
+- If the program typechecks, both VM and WASM must report a matching error code.

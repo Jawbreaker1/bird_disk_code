@@ -1,0 +1,6 @@
+import std::math.
+
+rule main() -> i64:
+  set value: i64 = std::math::div(42, 6).
+  yield std::math::add(value, 1).
+end

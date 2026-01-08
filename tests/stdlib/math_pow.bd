@@ -1,0 +1,7 @@
+import std::math.
+
+rule main() -> i64:
+  set value: i64 = std::math::pow(2, 5).
+  set neg: i64 = std::math::pow(3, 0 - 1).
+  yield std::math::add(value, neg).
+end

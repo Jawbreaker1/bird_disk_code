@@ -1,15 +1,20 @@
 (* BirdDisk v0.1 EBNF *)
 (* Runtime errors (e.g., division by zero) are specified in SPEC.md. *)
 
-program       = { function } ;
+program       = { import } { book | function } ;
+
+import        = "import" module_path "." ;
+module_path   = ident { "::" ident } ;
 
 function      = "rule" ident "(" [ params ] ")" "->" type ":" { stmt } "end" ;
+book          = "book" ident ":" { field | function } "end" ;
+field         = "field" ident ":" type "." ;
 
 params        = param { "," param } ;
 param         = ident ":" type ;
 
 type          = base_type { "[]" } ;
-base_type     = "i64" | "bool" ;
+base_type     = "i64" | "bool" | "string" | "u8" | ident ;
 
 stmt          = set_stmt
               | put_stmt
@@ -19,7 +24,7 @@ stmt          = set_stmt
               ;
 
 set_stmt      = "set" ident [ ":" type ] "=" expr "." ;
-put_stmt      = "put" ident [ "[" expr "]" ] "=" expr "." ;
+put_stmt      = "put" ( ident [ "[" expr "]" ] | member_access ) "=" expr "." ;
 yield_stmt    = "yield" expr "." ;
 
 when_stmt     = "when" expr ":" { stmt } "otherwise" ":" { stmt } "end" ;
@@ -40,21 +45,27 @@ postfix       = primary { "[" expr "]" } ;
 
 primary       = int_lit
               | bool_lit
+              | string_lit
               | array_lit
               | array_new
+              | new_expr
               | call_or_ident
               | "(" expr ")"
               ;
 
-call_or_ident = ident [ "(" [ args ] ")" ] ;
+call_or_ident = qualified_ident [ "(" [ args ] ")" ] ;
 args          = expr { "," expr } ;
 
 array_lit     = "[" [ args ] "]" ;
 array_new     = "array" "(" expr ")" ;
+new_expr      = "new" ident "(" [ args ] ")" ;
 
 bool_lit      = "true" | "false" ;
+string_lit    = "\"" { char } "\"" ; (* escapes: \", \\, \n *)
 int_lit       = digit { digit } ;
 
+qualified_ident = ident { "::" ident } ;
+member_access = ident "::" ident ;
 ident         = letter { letter | digit | "_" } ;
 
 letter        = "A"…"Z" | "a"…"z" ;

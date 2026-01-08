@@ -1,0 +1,20 @@
+import std::math.
+
+rule main() -> i64:
+  set total: i64 = 0.
+  when std::math::is_even(10):
+    put total = total + 1.
+  otherwise:
+    put total = total + 0.
+  end
+  when std::math::is_even(9):
+    put total = total + 1.
+  otherwise:
+    put total = total + 0.
+  end
+  set s0: i64 = std::math::sign(0).
+  set s1: i64 = std::math::sign(5).
+  set s2: i64 = std::math::sign(0 - 7).
+  set sum: i64 = total + s0 + s1 + s2.
+  yield sum.
+end

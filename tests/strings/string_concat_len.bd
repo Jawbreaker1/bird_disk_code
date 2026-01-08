@@ -1,0 +1,13 @@
+import std::string.
+rule main() -> i64:
+  set left: string = "Bird".
+  set space: string = " ".
+  set right: string = "Disk".
+  set joined: string = std::string::concat(left, space).
+  set full: string = std::string::concat(joined, right).
+  when std::string::eq(full, "Bird Disk"):
+    yield std::string::len(full).
+  otherwise:
+    yield 0.
+  end
+end

@@ -96,7 +96,7 @@ Options:
 ## 6) Runtime errors and exception model
 status: decided
 date: 2026-01-07
-decision: v0.x uses runtime traps with stable error codes plus a minimal JSON stack trace (function + line/col). Exceptions are deferred to a later sprint.
+decision: v0.x uses runtime traps with stable error codes plus a minimal JSON stack trace (function + line/col). Exceptions are deferred to a later sprint. Implemented in VM/WASM and exposed in JSON diagnostics.
 rationale: Keeps runtime simple and deterministic for VM/WASM/native while still giving LLMs actionable traces.
 impact: diagnostics schema, VM/WASM/native runtime, CLI JSON output, tests
 

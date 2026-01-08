@@ -1,0 +1,19 @@
+book Point:
+  field x: i64.
+  field y: i64.
+
+  rule init(self: Point, x: i64, y: i64) -> Point:
+    put self::x = x.
+    put self::y = y.
+    yield self.
+  end
+
+  rule sum(self: Point) -> i64:
+    yield self::x + self::y.
+  end
+end
+
+rule main() -> i64:
+  set p: Point = new Point(3, 4).
+  yield p::sum().
+end

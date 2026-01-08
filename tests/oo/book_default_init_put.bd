@@ -1,0 +1,9 @@
+book Accumulator:
+  field total: i64.
+end
+
+rule main() -> i64:
+  set a: Accumulator = new Accumulator().
+  put a::total = 7.
+  yield a::total.
+end

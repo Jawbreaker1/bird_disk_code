@@ -1,0 +1,8 @@
+book Thing:
+  field x: i64.
+end
+
+rule main() -> i64:
+  set t: Thing = new Thing().
+  yield t::missing().
+end

@@ -81,6 +81,99 @@ rule main() -> i64:
 end
 ```
 
+## 7) Objects (book)
+```birddisk
+book Counter:
+  field value: i64.
+
+  rule init(self: Counter, start: i64) -> Counter:
+    put self::value = start.
+    yield self.
+  end
+
+  rule add(self: Counter, delta: i64) -> i64:
+    put self::value = self::value + delta.
+    yield self::value.
+  end
+end
+
+rule main() -> i64:
+  set c: Counter = new Counter(10).
+  yield c::add(5).
+end
+```
+
+## 8) Math (std::math)
+```birddisk
+import std::math.
+
+rule main() -> i64:
+  set base: i64 = 2.
+  set power: i64 = std::math::pow(base, 5).
+  set reduced: i64 = std::math::div(power, 4).
+  set rem: i64 = std::math::mod(reduced, 7).
+  set g: i64 = std::math::gcd(48, 18).
+  yield std::math::add(rem, g).
+end
+```
+
+## 9) Strings (std::string)
+```birddisk
+import std::string.
+
+rule main() -> i64:
+  set name: string = "Bird".
+  set suffix: string = "Disk".
+  set full: string = std::string::concat(name, suffix).
+  yield std::string::len(full).
+end
+```
+
+## 10) String to i64
+```birddisk
+import std::string.
+
+rule main() -> i64:
+  set value: i64 = std::string::to_i64("42").
+  set text: string = std::string::from_i64(value).
+  yield std::string::len(text).
+end
+```
+
+## 11) Bytes (u8[])
+```birddisk
+import std::string.
+import std::bytes.
+
+rule main() -> i64:
+  set data: u8[] = std::string::bytes("hi").
+  yield std::bytes::len(data).
+end
+```
+
+## 12) Bytes to string
+```birddisk
+import std::string.
+
+rule main() -> i64:
+  set data: u8[] = [66, 105, 114, 100].
+  set text: string = std::string::from_bytes(data).
+  yield std::string::len(text).
+end
+```
+
+## 13) IO (read + print)
+```birddisk
+import std::io.
+import std::string.
+
+rule main() -> i64:
+  set line: string = std::io::read_line().
+  set out: string = std::string::concat(line, "!").
+  yield std::io::print(out).
+end
+```
+
 ---
 
 Notes:

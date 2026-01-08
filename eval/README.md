@@ -30,6 +30,24 @@ Notes:
 - `expect.result` and `expect.codes` are optional.
 - `engine` is optional for `run` and defaults to `vm` in the runner.
 
+Multi-language cases (for comparisons):
+```json
+{
+  "id": "compare_minimal_main_001",
+  "expect": { "ok": true, "result": 0 },
+  "cases": [
+    { "lang": "birddisk", "kind": "run", "input": "rule main() -> i64:\n  yield 0.\nend\n" },
+    { "lang": "python", "kind": "run", "input": "print(0)\n" },
+    { "lang": "javascript", "kind": "run", "input": "console.log(0);\n" }
+  ]
+}
+```
+Notes:
+- `cases` overrides top-level `kind`/`input`.
+- For Python/JS, `expect.result` is parsed from stdout (integer).
+- For Java, set `lang: "java"` and either provide a full class with `class`,
+  or set `wrap: true` to wrap the input in a generated `main` method.
+
 Expected JSON output
 - `birddisk check --json` should follow `docs/DIAGNOSTICS.md`.
 - `birddisk run --json` should return:

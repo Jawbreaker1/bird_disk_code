@@ -1,0 +1,6 @@
+import std::string.
+import std::bytes.
+rule main() -> i64:
+  set data: u8[] = std::string::bytes("Bird").
+  yield std::bytes::len(data).
+end

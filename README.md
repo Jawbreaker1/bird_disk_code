@@ -15,6 +15,7 @@ Longer-term: native backends (arm64 + x86_64) and scalable multi-CPU support via
 
 ## BirdDisk syntax (v0.1)
 BirdDisk code is visually distinct:
+- Imports: `import std::module.`
 - Functions: `rule`
 - Bindings: `set`
 - Assignment: `put`
@@ -51,25 +52,35 @@ cargo build -p birddiskc
 ```sh
 ./target/debug/birddisk run path/to/file.bd --engine vm --json
 ```
-4) Run in WASM (optional).
+4) Run with a JSON report file (optional).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine vm --report report.json
+```
+5) Run with stdin/stdout files (optional).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine vm --json --stdin input.txt --stdout output.txt
+```
+6) Run in WASM (optional).
 ```sh
 ./target/debug/birddisk run path/to/file.bd --engine wasm --json
 ```
-5) Inspect generated WAT (optional).
+7) Inspect generated WAT (optional).
 ```sh
 ./target/debug/birddisk run path/to/file.bd --engine wasm --emit wat
 ```
-6) Write a .wasm artifact (optional).
+8) Write a .wasm artifact (optional).
 ```sh
 ./target/debug/birddisk run path/to/file.bd --engine wasm --emit wasm
 ```
 If the program uses arrays, the emitted WASM module imports `env.bd_trap`
 for runtime error reporting; `birddisk run` provides it automatically.
-7) Run differential tests (optional).
+If the program uses `std::string::from_bytes`, the emitted WASM module
+also imports `env.bd_validate_utf8` and exports `memory`.
+9) Run differential tests (optional).
 ```sh
 ./target/debug/birddisk test --json
 ```
-8) Filter tests by directory, tag, or engine (optional).
+10) Filter tests by directory, tag, or engine (optional).
 ```sh
 ./target/debug/birddisk test --json --dir examples --tag while
 ./target/debug/birddisk test --json --engine vm --dir vm_tests
@@ -77,12 +88,24 @@ for runtime error reporting; `birddisk run` provides it automatically.
 Tags match directory names and file stem tokens (split on non-alphanumeric).
 Default test dirs are `examples/` and `tests/` if present.
 
+Examples
+- `examples/minimal_main.bd` (smallest runnable program)
+- `examples/book_account.bd` (book with methods and constructor)
+- `examples/book_point.bd` (field access + method calls)
+- `examples/terminal_calculator.bd` (terminal IO + operator dispatch)
+
 Typing model (v0.1)
-- Built-in types: i64, bool
+- Built-in types: i64, bool, string, u8
 - Array types: T[]
 - Function params and return types are always explicit
 - set name = expr. may omit the type if expr is inferable
 - No implicit casts
+- stdlib string ops live in `std::string` (import required)
+- byte helpers live in `std::bytes` (import required)
+- `std::string::from_bytes(u8[])` validates UTF-8 and returns a string
+- `std::string::to_i64(string)` parses a decimal integer; `std::string::from_i64(i64)` formats one
+- stdlib modules on disk live under `stdlib/` (e.g. `import std::math.`)
+- book types are declared with `book` and constructed via `new Book(...)`
 
 See docs/SPEC.md.
 
@@ -116,7 +139,7 @@ CLI (current)
 - JSON output is supported for check/run/test; non-JSON paths are stubbed.
 - birddisk fmt <file|dir> (canonical formatter)
 - birddisk check <file|dir> [--json] (JSON implemented)
-- birddisk run <file> [--engine vm|wasm] [--json] (VM + WASM implemented)
+- birddisk run <file> [--engine vm|wasm] [--json] [--stdin <file>] [--stdout <file>] [--report <file>] (VM + WASM implemented)
 - birddisk run <file> --engine wasm --emit wat (print generated WAT)
 - birddisk run <file> --engine wasm --emit wasm [--out <file>] (write .wasm)
 - birddisk test [--json] [--engine vm|wasm] [--dir <path>] [--tag <tag>] (VM vs WASM diff by default)
@@ -137,10 +160,9 @@ See TASKS.md.
 For agent workflow rules, see AGENT.md.
 
 Upcoming (planned):
-- Strings (`string` type + std::string)
-- Basic IO (std::io)
-- OO core (book + :: access)
+- VSCode extension (syntax highlighting)
 - GC runtime (tracing mark/sweep)
+- std::time (clock/timers)
 - Native backend spike
 
 Status
@@ -153,6 +175,11 @@ Status
 - Implemented: differential test harness (`birddisk test --json`)
 - Implemented: formatter (`birddisk fmt`)
 - Implemented: arrays + indexing (VM + WASM)
+- Implemented: strings + std::string (VM + WASM)
+- Implemented: u8 + std::bytes + std::string::bytes (VM + WASM)
+- Implemented: std::io (VM + WASM)
+- Implemented: stdlib module loading + `std::math` (BirdDisk)
+- Implemented: OO core (book + fields + methods, VM + WASM)
 - Stubbed: non-JSON CLI paths
 
 License

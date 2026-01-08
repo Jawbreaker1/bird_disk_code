@@ -38,12 +38,20 @@ pub struct FixIt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TraceFrame {
+    pub function: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Diagnostic {
     pub code: &'static str,
     pub severity: &'static str,
     pub message: String,
     pub file: String,
     pub span: Span,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trace: Vec<TraceFrame>,
     pub notes: Vec<String>,
     pub spec_refs: Vec<String>,
     pub fixits: Vec<FixIt>,
@@ -67,6 +75,7 @@ pub(crate) fn diagnostic(
         message,
         file: file.to_string(),
         span,
+        trace: Vec::new(),
         notes,
         spec_refs,
         fixits,

@@ -62,6 +62,8 @@ Stability requirements
       "ok": true,
       "vm_result": 0,
       "wasm_result": 0,
+      "vm_stdout": "",
+      "wasm_stdout": "",
       "diagnostics": []
     }
   ],
@@ -74,6 +76,7 @@ Notes:
 	•	use `--dir` to scan other folders and `--tag` to filter by path/file tags.
 	•	default scan includes `examples/` and `tests/` if present.
 	•	`--engine vm` or `--engine wasm` runs a single backend; the other result field is null.
+	•	stdout fields are empty strings when IO is unused.
 
 ## Error code table (v0.1)
 These codes are the current stable set. New codes should only be added
@@ -82,10 +85,13 @@ when needed and documented here.
 E0000: Not implemented (compiler stub)
 E0001: Unable to read file
 E0002: Expected at least one function rule
+E0003: Stdlib module resolution failed
 
 E0100: Unexpected character
 E0101: Integer literal out of range
 E0102: Comments are not supported in v0.1
+E0103: Unterminated string literal
+E0104: Invalid escape sequence
 
 E0200: Unexpected token in statement or syntax position
 E0201: Expected 'rule' to start a function
@@ -107,6 +113,7 @@ E0307: Duplicate function
 E0308: Duplicate parameter
 E0309: Missing 'main' entry point
 E0310: Array constructor requires explicit array type
+E0311: u8 literal out of range
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)
@@ -115,6 +122,8 @@ E0403: Array index out of bounds
 
 E0500: VM/WASM mismatch
 E0501: Test harness error
+E0502: Test output mismatch
+E0503: Expected error mismatch
 
 Minimum required fields
 
@@ -130,3 +139,10 @@ Optional but strongly recommended:
 	•	help
 	•	spec_refs
 	•	fixits
+	•	trace (runtime errors only)
+
+Trace format (runtime errors)
+- `trace` is an array of frames, most recent call first.
+- Each frame includes:
+  - `function`: function or method name
+  - `span`: line/col of the function declaration
