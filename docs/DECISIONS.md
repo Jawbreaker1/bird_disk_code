@@ -26,10 +26,11 @@ Questions:
 ---
 
 ## 2) Object model (OO core)
-status: open
-decision: _
-rationale: _
-impact: syntax, parser, typechecker, runtime layout, codegen
+status: decided
+date: 2026-01-08
+decision: Use `book` as the OO container keyword. Member access uses `::` (e.g. `obj::field`, `obj::method()`), keep `.` as the statement terminator. Methods use receiver name `self`. Constructors use `new BookName(...)`. Inheritance is deferred (composition-only).
+rationale: Unique language flavor with minimal ambiguity; `self` is LLM-friendly and conventional. Keeps the terminator unchanged.
+impact: grammar, parser, formatter, spec updates, OO typechecker + codegen, runtime layout
 
 Questions:
 - Syntax for member access and calls (dot is a terminator): `obj::field`, `obj->field`,
@@ -68,39 +69,67 @@ Questions:
 ---
 
 ## 5) Memory model & GC
-status: open
-decision: _
-rationale: _
-impact: VM/WASM/native runtime, ABI, tests
+status: decided
+date: 2026-01-07
+decision: Use tracing GC (mark/sweep) as the primary memory strategy.
+rationale: Handles cycles cleanly, keeps user model simple, and is most LLM-friendly.
+impact: VM/WASM/native runtime, ABI, stack maps/roots, tests, docs
 
 Questions:
 - GC strategy: tracing (mark/sweep) vs ARC vs manual?
 - Object/array header layout and alignment rules?
 - Is memory deterministic and portable across backends?
 
+Options:
+1) Tracing GC (mark/sweep or mark/compact)
+   - Pros: simplest semantics for users, handles cycles, matches OO patterns.
+   - Cons: runtime complexity, needs stack maps or conservative scanning.
+2) ARC/RC (automatic reference counting)
+   - Pros: deterministic frees, simpler runtime in WASM/native.
+   - Cons: cycles leak unless you add cycle collection; more complexity in codegen.
+3) Manual memory
+   - Pros: smallest runtime, explicit control.
+   - Cons: highest user burden, least LLM-friendly, errors are common.
+
 ---
 
 ## 6) Runtime errors and exception model
-status: open
-decision: _
-rationale: _
-impact: diagnostics, runtime, JSON reports
+status: decided
+date: 2026-01-07
+decision: v0.x uses runtime traps with stable error codes plus a minimal JSON stack trace (function + line/col). Exceptions are deferred to a later sprint.
+rationale: Keeps runtime simple and deterministic for VM/WASM/native while still giving LLMs actionable traces.
+impact: diagnostics schema, VM/WASM/native runtime, CLI JSON output, tests
 
 Questions:
 - Do we add exceptions or keep explicit error returns?
 - Standardize runtime error codes for OOM/null deref/etc?
 
+Options:
+1) No exceptions (errors are runtime traps with stable error codes)
+   - Pros: simple semantics, no new control flow.
+   - Cons: users must pre-check; no recovery within the language.
+2) Checked result types (explicit `Result<T, E>`-style)
+   - Pros: explicit, LLM-friendly, no hidden control flow.
+   - Cons: more syntax; type system complexity.
+3) Exceptions (try/catch)
+   - Pros: ergonomic recovery, familiar to OO users.
+   - Cons: complex codegen and stack unwinding; higher ambiguity risk.
+
 ---
 
 ## 7) Module system & standard library
-status: open
-decision: _
-rationale: _
-impact: CLI, parser, package tooling, docs
+status: decided
+date: 2026-01-08
+decision: Use `import std::module.` with `::` path separators. Imports are top-level only. Calls use fully qualified names (e.g. `std::string::len(s)`). Arrays are core; `string` is a core type with ops provided in `std::string`.
+rationale: Unambiguous, consistent with `::` syntax, avoids aliasing complexity.
+impact: parser/typechecker, module resolver, stdlib layout, docs, tests
+
+Scope note:
+- Implement `std::string` first; add `std::io` immediately after strings land.
 
 Questions:
 - `import` syntax and module resolution rules?
-- Stdlib scope for v0.x (strings, io, collections)?
+- Stdlib scope for v0.x (strings, io, collections, math, time)?
 - Packaging format (toml/json) and versioning?
 
 ---
@@ -152,3 +181,40 @@ Questions:
 - VSCode extension scope (syntax only vs LSP)?
 - Formatter configuration roadmap?
 - Debugging support (source maps, stack traces)?
+
+Options:
+1) Minimal stack trace: function names + line/col (VM + WASM)
+2) Full trace + locals (requires debug metadata and runtime support)
+3) JSON trace only vs human-readable + JSON
+
+---
+
+## 12) Strings
+status: decided
+date: 2026-01-07
+decision: Add `string` type with UTF-8 encoding, immutable. Literals use double quotes with `\"`, `\\`, `\n` escapes. Core ops: `len`, `concat`, `eq` (slice later).
+rationale: Standard, simple, LLM-friendly; minimal surface area for v0.x.
+impact: lexer/parser, typechecker, runtime layout/GC, stdlib APIs, formatter, tests
+
+Questions:
+- String literal syntax: double quotes only? escapes? multiline?
+- String type name: `string` or `str`?
+- Encoding: UTF-8 bytes vs ASCII-only (v0.x)?
+- Immutability: immutable strings only or mutable buffers?
+- Core ops: concat, length, slice, equality?
+
+---
+
+## 13) Primitive types beyond i64/bool
+status: decided
+date: 2026-01-07
+decision: Add `i32` and `f64` as the next primitive types. No implicit casts; explicit casts and literal suffixes are deferred.
+rationale: `i32` covers memory/interop needs; `f64` covers core float use cases while keeping surface area small.
+impact: lexer/parser, typechecker, VM/WASM/native codegen, stdlib, tests
+
+Questions:
+- Integer widths: add `i32`, `i16`, `i8` (and/or unsigned `u64`, `u32`)?
+- Floats: `f32`/`f64` in v0.x or defer?
+- Char type: `char` vs `string` only?
+- Implicit casts: still none, or allow explicit casts only?
+- Literal suffixes: `1i32`, `1u64`, `1f64`?

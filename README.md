@@ -136,6 +136,13 @@ Roadmap
 See TASKS.md.
 For agent workflow rules, see AGENT.md.
 
+Upcoming (planned):
+- Strings (`string` type + std::string)
+- Basic IO (std::io)
+- OO core (book + :: access)
+- GC runtime (tracing mark/sweep)
+- Native backend spike
+
 Status
 - Implemented: lexer, parser, AST, typechecker, VM interpreter
 - Implemented: JSON diagnostics (check/run) + fix-its + suggestions
