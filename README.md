@@ -2,6 +2,8 @@
 
 BirdDisk is a proof-of-concept compiled programming language and toolchain designed for an agentic/LLM-driven workflow.
 
+Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.
+
 BirdDisk focuses on:
 - **Unique, LLM-friendly syntax** (low ambiguity, few special cases)
 - **Strong static typing** with **local type inference**
@@ -123,6 +125,7 @@ docs/
   COOKBOOK.md
   STYLES.md
   DECISIONS.md
+  RUNTIME.md
 crates/
   birddiskc/        # CLI compiler driver
   birddisk_core/    # lexer/parser/AST/types/diagnostics/formatter

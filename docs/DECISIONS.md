@@ -75,6 +75,8 @@ decision: Use tracing GC (mark/sweep) as the primary memory strategy.
 rationale: Handles cycles cleanly, keeps user model simple, and is most LLM-friendly.
 impact: VM/WASM/native runtime, ABI, stack maps/roots, tests, docs
 
+See `docs/RUNTIME.md` for the concrete runtime layout and GC workflow.
+
 Questions:
 - GC strategy: tracing (mark/sweep) vs ARC vs manual?
 - Object/array header layout and alignment rules?
@@ -90,6 +92,99 @@ Options:
 3) Manual memory
    - Pros: smallest runtime, explicit control.
    - Cons: highest user burden, least LLM-friendly, errors are common.
+
+---
+
+## 5a) Runtime metadata layout (objects/arrays/strings)
+status: decided
+date: 2026-01-09
+decision: Use a uniform heap header for all heap objects (type tag + size/len + mark bits).
+rationale: Simplifies GC and debugging; consistent layout reduces edge cases and increases reliability.
+impact: runtime allocation, GC scanning, WASM/VM/native backends, tests
+
+Options:
+1) Uniform header for all heap objects (type tag + size/len + mark bits)
+   - Pros: simple GC logic, consistent metadata access, easy debugging.
+   - Cons: larger overhead on small objects, extra memory traffic.
+2) Per-kind header (array: len + elem type; string: len; object: type id + field count)
+   - Pros: smaller headers, less overhead for common cases.
+   - Cons: GC needs per-kind logic; harder to extend.
+3) Side tables (metadata stored out-of-band)
+   - Pros: minimal per-object overhead, compact payloads.
+   - Cons: extra indirection, higher complexity, harder to debug.
+
+Questions:
+- Do we need per-object type ids for stack traces and debugging?
+- Should strings/arrays store element type ids or infer from static typing?
+
+Future improvements:
+- Evaluate per-kind headers or side tables if overhead becomes a bottleneck.
+- Add optional debug metadata (type ids) for richer runtime diagnostics.
+
+Implementation sketch:
+- Heap object header (16 bytes, 8-byte aligned):
+  - `u32 tag` (kind + type id)
+  - `u32 flags` (mark bits + reserved)
+  - `u32 len_or_size` (string bytes / array length / field count)
+  - `u32 aux` (elem width/type id)
+- Payload follows immediately; alignment kept at 8 bytes.
+- Strings: `tag=string`, `len_or_size=byte_len`, `aux=0`.
+- Arrays: `tag=array`, `len_or_size=elem_count`, `aux=elem_type_id/width`.
+- Objects: `tag=object`, `len_or_size=field_count`, `aux=book_id`.
+
+---
+
+## 5b) Root tracking strategy (GC precision)
+status: decided
+date: 2026-01-09
+decision: Use an explicit root stack maintained by codegen/runtime.
+rationale: Precise GC with deterministic behavior; avoids conservative retention and is implementable in VM/WASM.
+impact: codegen, VM/WASM/native runtime, performance
+
+Options:
+1) Conservative scanning (treat stack memory as potential roots)
+   - Pros: simplest implementation, no compiler metadata.
+   - Cons: retains garbage, harder to optimize; problematic for native.
+2) Explicit root stack (push/pop roots in runtime)
+   - Pros: precise, works in VM/WASM, simple to reason about.
+   - Cons: codegen must maintain root stack; overhead per allocation.
+3) Precise stack maps (compiler-emitted root maps)
+   - Pros: precise and efficient, scales to native backends.
+   - Cons: highest implementation complexity.
+
+Future improvements:
+- Move to precise stack maps for native backends once IR/codegen stabilizes.
+
+Implementation sketch:
+- Use a shadow stack of root frames per function.
+- Each frame has N slots for reference-typed locals/temps; slots updated on assignment.
+- Push frame on function entry; pop on return.
+- GC scans root frames + globals; it does not scan non-reference locals.
+
+---
+
+## 5c) GC scheduling
+status: decided
+date: 2026-01-09
+decision: Stop-the-world mark/sweep for v0.x.
+rationale: Simplest correct implementation; predictable behavior for early tooling and testing.
+impact: runtime performance, pause times, tests
+
+Options:
+1) Stop-the-world mark/sweep
+   - Pros: simplest to implement, predictable.
+   - Cons: pause times scale with heap size.
+2) Incremental/stepped GC
+   - Pros: shorter pauses, smoother runtime behavior.
+   - Cons: more complex barriers and state.
+
+Future improvements:
+- Add incremental/stepped GC once the runtime matures and performance targets are clear.
+
+Implementation sketch:
+- Trigger GC on allocation when heap usage exceeds a threshold.
+- Use a grow-only threshold (e.g., 2x live size) to reduce churn.
+- For WASM: reuse existing heap pointer; for native: allocate arena heap.
 
 ---
 

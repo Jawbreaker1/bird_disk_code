@@ -226,6 +226,7 @@ Implement:
 - [x] Establish versioning + compatibility story for stdlib modules
 - [x] Implement first pure-BirdDisk module (e.g. `std::math` or `std::util`)
 - [x] Decide boundary: which stdlib modules remain in Rust (strings/bytes/IO) for now
+- [ ] Add small stdlib utilities (regex, parsing helpers) once string APIs stabilize
 
 Add tests:
 - [x] Cross-module compile tests (stdlib + user module)
@@ -243,7 +244,9 @@ Implement:
 - [ ] OOM + null deref diagnostics
 
 Add tests:
-- [ ] allocation stress tests
+- [ ] allocation stress tests (GC trigger + survival of live objects)
+- [ ] unreachable cycle collection (object <-> object, array cycles)
+- [ ] array/string scanning correctness (nested arrays/strings)
 - [ ] runtime error diagnostics with stack traces
 
 Acceptance:
@@ -264,3 +267,8 @@ Acceptance:
 
 ## Future — Full eval suite
 - [ ] Expand `eval/` with mutations, report generation, and cross-language comparison
+
+## Future — Native-era features
+- [ ] Parallel execution + threading model (VM, WASM, native backends)
+- [ ] Networking standard library (client/server primitives)
+- [ ] Graphics/windowing library (cross-platform surface)
