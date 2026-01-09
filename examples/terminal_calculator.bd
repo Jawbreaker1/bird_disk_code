@@ -2,15 +2,15 @@ import std::io.
 import std::string.
 
 rule main() -> i64:
-  set ignored = std::io::print("Enter first number: ").
-  set left_text: string = std::io::read_line().
-  put ignored = std::io::print("Enter operator (+, -, *, %): ").
+  set dummy = std::io::print("Enter first number: ").
+  set left_number_text: string = std::io::read_line().
+  put dummy = std::io::print("Enter operator (+, -, *, %): ").
   set op: string = std::io::read_line().
-  put ignored = std::io::print("Enter second number: ").
-  set right_text: string = std::io::read_line().
+  put dummy = std::io::print("Enter second number: ").
+  set right_number_text: string = std::io::read_line().
 
-  set left: i64 = std::string::to_i64(left_text).
-  set right: i64 = std::string::to_i64(right_text).
+  set left: i64 = std::string::to_i64(left_number_text).
+  set right: i64 = std::string::to_i64(right_number_text).
   set result: i64 = 0.
 
   when std::string::eq(op, "+"):
