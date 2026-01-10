@@ -9,6 +9,8 @@ path = "src/main.rs"
 
 [dependencies]
 birddisk_core = { path = "../birddisk_core" }
+birddisk_native = { path = "../birddisk_native" }
+birddisk_native_runtime = { path = "../birddisk_native_runtime" }
 birddisk_vm = { path = "../birddisk_vm" }
 birddisk_wasm = { path = "../birddisk_wasm" }
 serde = { version = "1", features = ["derive"] }

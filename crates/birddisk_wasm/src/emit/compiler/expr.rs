@@ -1,8 +1,9 @@
 use super::FuncCompiler;
 use super::super::types::array_elem_size;
 use super::super::{
-    wasm_error, WasmError, ARRAY_HEADER_SIZE, OBJECT_FIELD_SIZE, OBJECT_HEADER_SIZE,
-    STRING_HEADER_SIZE,
+    wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY,
+    HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, OBJECT_FIELD_SIZE,
+    OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_KIND_OBJECT,
 };
 use super::super::types::array_elem_kind;
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Type, UnaryOp};
@@ -57,9 +58,12 @@ impl<'a> FuncCompiler<'a> {
                                     ),
                                 ));
                             }
+                            self.emit_null_check(info.idx);
+                            self.emit_kind_check(info.idx, HEAP_KIND_OBJECT, TRAP_KIND_OBJECT);
+                            let arg_locals = self.emit_call_args(args, &sig.params[1..])?;
                             self.push_line(format!("local.get {}", info.idx));
-                            for (arg, param_ty) in args.iter().zip(sig.params.iter().skip(1)) {
-                                self.emit_expr(arg, Some(param_ty))?;
+                            for local in arg_locals {
+                                self.push_line(format!("local.get {local}"));
                             }
                             self.push_line(format!("call ${full_name}"));
                             return Ok(());
@@ -88,8 +92,9 @@ impl<'a> FuncCompiler<'a> {
                         ),
                     ));
                 }
-                for (arg, param_ty) in args.iter().zip(sig.params.iter()) {
-                    self.emit_expr(arg, Some(param_ty))?;
+                let arg_locals = self.emit_call_args(args, &sig.params)?;
+                for local in arg_locals {
+                    self.push_line(format!("local.get {local}"));
                 }
                 self.push_line(format!("call ${name}"));
             }
@@ -102,13 +107,20 @@ impl<'a> FuncCompiler<'a> {
                     + (layout.fields.len() as i32).saturating_mul(OBJECT_FIELD_SIZE);
                 self.push_line(format!("i32.const {size}"));
                 self.push_line("call $bd_alloc");
-                self.push_line(format!("local.set {ptr_local}"));
+                self.emit_local_set(ptr_local, &Type::Book(book.clone()));
+                let tag = (HEAP_KIND_OBJECT << HEAP_KIND_SHIFT) | layout.id as i32;
                 self.push_line(format!("local.get {ptr_local}"));
-                self.push_line(format!("i32.const {}", layout.id));
+                self.push_line(format!("i32.const {tag}"));
                 self.push_line("i32.store");
                 self.push_line(format!("local.get {ptr_local}"));
+                self.push_line("i32.const 0");
+                self.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+                self.push_line(format!("local.get {ptr_local}"));
                 self.push_line(format!("i32.const {}", layout.fields.len()));
-                self.push_line("i32.store offset=4");
+                self.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+                self.push_line(format!("local.get {ptr_local}"));
+                self.push_line("i32.const 0");
+                self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
                 for (index, field_ty) in layout.fields.iter().enumerate() {
                     self.emit_field_address(ptr_local, index);
                     self.emit_default_value(field_ty)?;
@@ -131,12 +143,13 @@ impl<'a> FuncCompiler<'a> {
                             ),
                         ));
                     }
+                    let arg_locals = self.emit_call_args(args, &sig.params[1..])?;
                     self.push_line(format!("local.get {ptr_local}"));
-                    for (arg, param_ty) in args.iter().zip(sig.params.iter().skip(1)) {
-                        self.emit_expr(arg, Some(param_ty))?;
+                    for local in arg_locals {
+                        self.push_line(format!("local.get {local}"));
                     }
                     self.push_line(format!("call ${book}::init"));
-                    self.push_line(format!("local.set {ptr_local}"));
+                    self.emit_local_set(ptr_local, &Type::Book(book.clone()));
                 } else if !args.is_empty() {
                     return Err(wasm_error(
                         "E0400",
@@ -258,13 +271,19 @@ impl<'a> FuncCompiler<'a> {
 
         self.push_line(format!("i32.const {byte_size}"));
         self.push_line("call $bd_alloc");
-        self.push_line(format!("local.set {ptr_local}"));
+        self.emit_local_set(ptr_local, &Type::Array(Box::new(elem_ty.clone())));
         self.push_line(format!("local.get {ptr_local}"));
-        self.push_line(format!("i32.const {}", elements.len()));
+        self.push_line(format!("i32.const {}", HEAP_KIND_ARRAY << HEAP_KIND_SHIFT));
         self.push_line("i32.store");
         self.push_line(format!("local.get {ptr_local}"));
+        self.push_line("i32.const 0");
+        self.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line(format!("i32.const {}", elements.len()));
+        self.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+        self.push_line(format!("local.get {ptr_local}"));
         self.push_line(format!("i32.const {}", array_elem_kind(&elem_ty)));
-        self.push_line("i32.store offset=4");
+        self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
 
         for (idx, elem) in elements.iter().enumerate() {
             self.emit_array_address_const(ptr_local, idx as i64, elem_size);
@@ -302,15 +321,21 @@ impl<'a> FuncCompiler<'a> {
         self.push_line("i64.add");
         self.push_line("i32.wrap_i64");
         self.push_line("call $bd_alloc");
-        self.push_line(format!("local.set {ptr_local}"));
+        self.emit_local_set(ptr_local, &Type::Array(Box::new(elem_ty.clone())));
 
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line(format!("i32.const {}", HEAP_KIND_ARRAY << HEAP_KIND_SHIFT));
+        self.push_line("i32.store");
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line("i32.const 0");
+        self.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
         self.push_line(format!("local.get {ptr_local}"));
         self.push_line(format!("local.get {len_local}"));
         self.push_line("i32.wrap_i64");
-        self.push_line("i32.store");
+        self.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
         self.push_line(format!("local.get {ptr_local}"));
         self.push_line(format!("i32.const {}", array_elem_kind(&elem_ty)));
-        self.push_line("i32.store offset=4");
+        self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
 
         self.emit_array_init(ptr_local, len_local, &elem_ty, elem_size)?;
         self.push_line(format!("local.get {ptr_local}"));
@@ -328,11 +353,26 @@ impl<'a> FuncCompiler<'a> {
         self.push_line(format!("local.set {idx_local}"));
         let base_local = self.temp_local(Type::Array(Box::new(elem_ty.clone())));
         self.emit_expr(base, None)?;
-        self.push_line(format!("local.set {base_local}"));
+        self.emit_local_set(base_local, &Type::Array(Box::new(elem_ty.clone())));
         self.emit_bounds_check(base_local, idx_local)?;
         self.emit_array_address_index(base_local, idx_local, array_elem_size(&elem_ty)?);
         self.emit_load(&elem_ty);
         Ok(())
+    }
+
+    fn emit_call_args(
+        &mut self,
+        args: &[Expr],
+        param_types: &[Type],
+    ) -> Result<Vec<u32>, WasmError> {
+        let mut locals = Vec::with_capacity(args.len());
+        for (arg, param_ty) in args.iter().zip(param_types.iter()) {
+            let local = self.temp_local(param_ty.clone());
+            self.emit_expr(arg, Some(param_ty))?;
+            self.emit_local_set(local, param_ty);
+            locals.push(local);
+        }
+        Ok(locals)
     }
 
     fn emit_string_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
@@ -344,7 +384,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::len expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::String))?;
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_string_len");
                 Ok(true)
             }
@@ -355,8 +397,10 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::concat expects 2 arguments",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::String))?;
-                self.emit_expr(&args[1], Some(&Type::String))?;
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
                 self.push_line("call $bd_string_concat");
                 Ok(true)
             }
@@ -367,8 +411,10 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::eq expects 2 arguments",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::String))?;
-                self.emit_expr(&args[1], Some(&Type::String))?;
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
                 self.push_line("call $bd_string_eq");
                 Ok(true)
             }
@@ -379,7 +425,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::bytes expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::String))?;
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_string_bytes");
                 Ok(true)
             }
@@ -390,7 +438,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::from_bytes expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::Array(Box::new(Type::U8))))?;
+                let param_types = [Type::Array(Box::new(Type::U8))];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_string_from_bytes");
                 Ok(true)
             }
@@ -401,7 +451,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::to_i64 expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::String))?;
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_string_to_i64");
                 Ok(true)
             }
@@ -412,7 +464,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::string::from_i64 expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::I64))?;
+                let param_types = [Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_string_from_i64");
                 Ok(true)
             }
@@ -429,7 +483,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::bytes::len expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::Array(Box::new(Type::U8))))?;
+                let param_types = [Type::Array(Box::new(Type::U8))];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_bytes_len");
                 Ok(true)
             }
@@ -440,8 +496,10 @@ impl<'a> FuncCompiler<'a> {
                         "std::bytes::eq expects 2 arguments",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::Array(Box::new(Type::U8))))?;
-                self.emit_expr(&args[1], Some(&Type::Array(Box::new(Type::U8))))?;
+                let param_types = [Type::Array(Box::new(Type::U8)), Type::Array(Box::new(Type::U8))];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
                 self.push_line("call $bd_bytes_eq");
                 Ok(true)
             }
@@ -458,7 +516,9 @@ impl<'a> FuncCompiler<'a> {
                         "std::io::print expects 1 argument",
                     ));
                 }
-                self.emit_expr(&args[0], Some(&Type::String))?;
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_io_print");
                 Ok(true)
             }
@@ -486,11 +546,20 @@ impl<'a> FuncCompiler<'a> {
 
         self.push_line(format!("i32.const {byte_size}"));
         self.push_line("call $bd_alloc");
-        self.push_line(format!("local.set {ptr_local}"));
+        self.emit_local_set(ptr_local, &Type::String);
 
         self.push_line(format!("local.get {ptr_local}"));
-        self.push_line(format!("i32.const {len}"));
+        self.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
         self.push_line("i32.store");
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line("i32.const 0");
+        self.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line("i32.const 0");
+        self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line(format!("i32.const {len}"));
+        self.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
 
         for (idx, byte) in bytes.iter().enumerate() {
             let offset = STRING_HEADER_SIZE + idx as i32;

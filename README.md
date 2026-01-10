@@ -13,7 +13,7 @@ BirdDisk focuses on:
 - **WASM as first compilation target** (portable baseline)
 - **Differential testing**: VM output == WASM output
 
-Longer-term: native backends (arm64 + x86_64) and scalable multi-CPU support via continuous automated validation.
+Longer-term: broaden native coverage (arm64 + x86_64) and scalable multi-CPU support via continuous automated validation.
 
 ## BirdDisk syntax (v0.1)
 BirdDisk code is visually distinct:
@@ -78,11 +78,20 @@ If the program uses arrays, the emitted WASM module imports `env.bd_trap`
 for runtime error reporting; `birddisk run` provides it automatically.
 If the program uses `std::string::from_bytes`, the emitted WASM module
 also imports `env.bd_validate_utf8` and exports `memory`.
-9) Run differential tests (optional).
+9) Run on the native backend (optional, JIT on host).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine native --json
+```
+10) Emit a native object or executable (optional, host).
+```sh
+./target/debug/birddisk run path/to/file.bd --engine native --emit obj
+./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./bird_app
+```
+11) Run differential tests (optional).
 ```sh
 ./target/debug/birddisk test --json
 ```
-10) Filter tests by directory, tag, or engine (optional).
+12) Filter tests by directory, tag, or engine (optional).
 ```sh
 ./target/debug/birddisk test --json --dir examples --tag while
 ./target/debug/birddisk test --json --engine vm --dir vm_tests
@@ -114,7 +123,7 @@ See docs/SPEC.md.
 Targets
 - VM/interpreter (implemented)
 - wasm32 (WASM backend, minimal)
-- Later: native aarch64 (arm64) + x86_64 via LLVM or Cranelift
+- Native (host JIT + AOT object/exe) via Cranelift
 
 
 Repo layout
@@ -129,6 +138,7 @@ docs/
 crates/
   birddiskc/        # CLI compiler driver
   birddisk_core/    # lexer/parser/AST/types/diagnostics/formatter
+  birddisk_native_runtime/ # native runtime support (AOT/JIT)
   birddisk_vm/      # interpreter (golden)
   birddisk_wasm/    # wasm codegen
 examples/
@@ -142,10 +152,18 @@ CLI (current)
 - JSON output is supported for check/run/test; non-JSON paths are stubbed.
 - birddisk fmt <file|dir> (canonical formatter)
 - birddisk check <file|dir> [--json] (JSON implemented)
-- birddisk run <file> [--engine vm|wasm] [--json] [--stdin <file>] [--stdout <file>] [--report <file>] (VM + WASM implemented)
+- birddisk run <file> [--engine vm|wasm|native] [--json] [--stdin <file>] [--stdout <file>] [--report <file>] (VM + WASM + native implemented)
 - birddisk run <file> --engine wasm --emit wat (print generated WAT)
 - birddisk run <file> --engine wasm --emit wasm [--out <file>] (write .wasm)
-- birddisk test [--json] [--engine vm|wasm] [--dir <path>] [--tag <tag>] (VM vs WASM diff by default)
+- birddisk run <file> --engine native --emit obj [--out <file>] (write native .o)
+- birddisk run <file> --engine native --emit exe [--out <file>] (write native executable)
+- birddisk test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] (VM vs WASM diff by default)
+
+Native AOT notes
+- `--engine native --emit obj` writes a host object file (`.o`).
+- `--engine native --emit exe` links a standalone host executable using `rustc`.
+- The executable reads stdin, runs `bd_main`, writes stdout, and exits 1 on runtime error.
+- Requires a Rust toolchain and a built workspace so the runtime `.rlib` is available.
 
 Development principles
 	•	Keep the language core small and orthogonal.

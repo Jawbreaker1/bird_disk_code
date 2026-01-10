@@ -120,6 +120,7 @@ Questions:
 Future improvements:
 - Evaluate per-kind headers or side tables if overhead becomes a bottleneck.
 - Add optional debug metadata (type ids) for richer runtime diagnostics.
+- Keep free list address-sorted and coalesce adjacent blocks to limit fragmentation.
 
 Implementation sketch:
 - Heap object header (16 bytes, 8-byte aligned):
@@ -254,15 +255,18 @@ Questions:
 ---
 
 ## 10) Native backends (arm64/x86_64)
-status: open
-decision: _
-rationale: _
+status: decided (v0.x spike)
+date: 2026-01-12
+decision: Use Cranelift JIT for the native backend spike and target the host platform first.
+rationale: Cranelift integrates cleanly with Rust, supports fast iteration, and is already in the dependency tree; a JIT spike reduces build/ABI friction.
 impact: runtime ABI, build system, CI
 
 Questions:
-- Cranelift vs LLVM?
 - ABI and runtime support (GC, stack maps)?
-- Target order: arm64 first or x86_64?
+- Target order beyond host-first?
+
+Future improvements:
+- Evaluate LLVM for full AOT builds once native runtime and stack maps stabilize.
 
 ---
 

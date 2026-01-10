@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::collections::HashSet;
 use std::env;
+use std::path::{Path, PathBuf};
 use std::process;
 
 const HELP: &str = "\
@@ -12,8 +13,8 @@ Usage:
 Commands:
   fmt <file|dir>
   check <file|dir> [--json]
-  run <file> [--engine vm|wasm] [--json] [--emit wat|wasm] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
-  test [--json] [--engine vm|wasm] [--dir <path>] [--tag <tag>]
+  run <file> [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
+  test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
 
 Options:
   -h, --help     Show this help message
@@ -39,12 +40,12 @@ Options:
 
 const RUN_HELP: &str = "\
 Usage:
-  birddisk run <file> [--engine vm|wasm] [--json] [--emit wat|wasm] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
+  birddisk run <file> [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
 
 Options:
-  --engine       Execution engine (vm or wasm)
+  --engine       Execution engine (vm, wasm, or native)
   --json         Emit JSON output
-  --emit         Emit compiled output (wat or wasm)
+  --emit         Emit compiled output (wat, wasm, obj, or exe)
   --out          Output file for --emit
   --stdin        Read stdin from file
   --stdout       Write stdout to file (JSON still printed to stdout)
@@ -54,11 +55,11 @@ Options:
 
 const TEST_HELP: &str = "\
 Usage:
-  birddisk test [--json] [--engine vm|wasm] [--dir <path>] [--tag <tag>]
+  birddisk test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
 
 Options:
   --json         Emit JSON output
-  --engine       Execution engine (vm or wasm)
+  --engine       Execution engine (vm, wasm, or native)
   --dir          Directory to scan for .bd files (repeatable)
   --tag          Filter tests by tag (repeatable)
   -h, --help     Show this help message
@@ -90,6 +91,8 @@ enum Command {
 enum EmitFormat {
     Wat,
     Wasm,
+    Obj,
+    Exe,
 }
 
 #[derive(Serialize)]
@@ -98,8 +101,10 @@ struct TestCase {
     ok: bool,
     vm_result: Option<i64>,
     wasm_result: Option<i64>,
+    native_result: Option<i64>,
     vm_stdout: Option<String>,
     wasm_stdout: Option<String>,
+    native_stdout: Option<String>,
     diagnostics: Vec<birddisk_core::Diagnostic>,
 }
 
@@ -438,8 +443,9 @@ fn parse_engine(value: &str) -> Result<birddisk_core::Engine, String> {
     match value {
         "vm" => Ok(birddisk_core::Engine::Vm),
         "wasm" => Ok(birddisk_core::Engine::Wasm),
+        "native" => Ok(birddisk_core::Engine::Native),
         _ => Err(format!(
-            "invalid engine '{value}' (expected 'vm' or 'wasm')"
+            "invalid engine '{value}' (expected 'vm', 'wasm', or 'native')"
         )),
     }
 }
@@ -448,8 +454,10 @@ fn parse_emit(value: &str) -> Result<EmitFormat, String> {
     match value {
         "wat" => Ok(EmitFormat::Wat),
         "wasm" => Ok(EmitFormat::Wasm),
+        "obj" => Ok(EmitFormat::Obj),
+        "exe" => Ok(EmitFormat::Exe),
         _ => Err(format!(
-            "invalid emit format '{value}' (expected 'wat' or 'wasm')"
+            "invalid emit format '{value}' (expected 'wat', 'wasm', 'obj', or 'exe')"
         )),
     }
 }
@@ -576,6 +584,30 @@ fn run_report(
                         err.code,
                         runtime_spec_refs(err.code),
                         err.trace,
+                    )],
+                },
+            },
+            birddisk_core::Engine::Native => match birddisk_native::run_with_io(&program, input) {
+                Ok((result, stdout)) => birddisk_core::RunReport {
+                    tool: birddisk_core::TOOL_NAME,
+                    version: birddisk_core::VERSION,
+                    ok: true,
+                    result: Some(result),
+                    stdout: Some(stdout),
+                    diagnostics: Vec::new(),
+                },
+                Err(err) => birddisk_core::RunReport {
+                    tool: birddisk_core::TOOL_NAME,
+                    version: birddisk_core::VERSION,
+                    ok: false,
+                    result: None,
+                    stdout: None,
+                    diagnostics: vec![runtime_diagnostic(
+                        path,
+                        err.message,
+                        err.code.unwrap_or("E0400"),
+                        runtime_spec_refs(err.code.unwrap_or("E0400")),
+                        Vec::new(),
                     )],
                 },
             },
@@ -782,8 +814,10 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
         ok: true,
         vm_result: None,
         wasm_result: None,
+        native_result: None,
         vm_stdout: None,
         wasm_stdout: None,
+        native_stdout: None,
         diagnostics: Vec::new(),
     };
 
@@ -853,6 +887,12 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                     return case;
                 }
             }
+            Some(birddisk_core::Engine::Native) => {
+                let native = birddisk_native::run_with_io(&program, &input);
+                if !check_expected_native_error(native, expected, &mut case) {
+                    return case;
+                }
+            }
             None => {
                 let vm = birddisk_vm::eval_with_io(&program, &input);
                 let wasm = birddisk_wasm::run_with_io(&program, &input);
@@ -901,6 +941,25 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         err.code,
                         runtime_spec_refs(err.code),
                         err.trace,
+                    ));
+                }
+            }
+        }
+        Some(birddisk_core::Engine::Native) => {
+            let native = birddisk_native::run_with_io(&program, &input);
+            match native {
+                Ok((result, stdout)) => {
+                    case.native_result = Some(result);
+                    case.native_stdout = Some(stdout);
+                }
+                Err(err) => {
+                    case.ok = false;
+                    case.diagnostics.push(runtime_diagnostic(
+                        path,
+                        err.message,
+                        err.code.unwrap_or("E0400"),
+                        runtime_spec_refs(err.code.unwrap_or("E0400")),
+                        Vec::new(),
                     ));
                 }
             }
@@ -982,6 +1041,17 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         "wasm",
                         expected,
                         wasm_stdout,
+                    ));
+                }
+            }
+            if let Some(native_stdout) = case.native_stdout.as_ref() {
+                if native_stdout != expected {
+                    case.ok = false;
+                    case.diagnostics.push(output_expected_diagnostic(
+                        path,
+                        "native",
+                        expected,
+                        native_stdout,
                     ));
                 }
             }
@@ -1076,41 +1146,100 @@ fn check_expected_wasm_error(
     }
 }
 
+fn check_expected_native_error(
+    result: Result<(i64, String), birddisk_native::NativeError>,
+    expected: &[String],
+    case: &mut TestCase,
+) -> bool {
+    match result {
+        Ok((result, stdout)) => {
+            case.ok = false;
+            case.native_result = Some(result);
+            case.native_stdout = Some(stdout);
+            case.diagnostics.push(expected_error_diagnostic(
+                &case.path,
+                format!(
+                    "Expected error code(s) {}, but native succeeded.",
+                    expected.join(", ")
+                ),
+            ));
+            false
+        }
+        Err(err) => {
+            let code = err.code.unwrap_or("E0400");
+            if expected.iter().any(|expected_code| expected_code == code) {
+                true
+            } else {
+                case.ok = false;
+                case.diagnostics.push(expected_error_diagnostic(
+                    &case.path,
+                    format!(
+                        "Expected error code(s) {}, got {} from native.",
+                        expected.join(", "),
+                        code
+                    ),
+                ));
+                false
+            }
+        }
+    }
+}
+
 fn emit_compiled(
     path: &str,
     engine: birddisk_core::Engine,
     format: EmitFormat,
     out: Option<String>,
 ) -> Result<(), String> {
-    if engine != birddisk_core::Engine::Wasm {
-        return Err("emit is only supported for --engine wasm".to_string());
-    }
     let program = birddisk_core::parse_and_typecheck(path)
         .map_err(|_| "emit failed; run `birddisk check --json` for diagnostics".to_string())?;
-    let out_path = out.or_else(|| match format {
-        EmitFormat::Wat => None,
-        EmitFormat::Wasm => Some(default_emit_path(path, "wasm")),
-    });
-    match format {
-        EmitFormat::Wat => {
-            let wat = birddisk_wasm::emit_wat(&program).map_err(|err| err.message)?;
-            match out_path {
-                Some(path) => {
-                    std::fs::write(&path, wat).map_err(|err| err.to_string())?;
+    match engine {
+        birddisk_core::Engine::Wasm => {
+            let out_path = out.or_else(|| match format {
+                EmitFormat::Wat => None,
+                EmitFormat::Wasm => Some(default_emit_path(path, "wasm")),
+                _ => None,
+            });
+            match format {
+                EmitFormat::Wat => {
+                    let wat = birddisk_wasm::emit_wat(&program).map_err(|err| err.message)?;
+                    match out_path {
+                        Some(path) => {
+                            std::fs::write(&path, wat).map_err(|err| err.to_string())?;
+                            Ok(())
+                        }
+                        None => {
+                            println!("{wat}");
+                            Ok(())
+                        }
+                    }
+                }
+                EmitFormat::Wasm => {
+                    let bytes = birddisk_wasm::emit_wasm(&program).map_err(|err| err.message)?;
+                    let path = out_path.ok_or_else(|| "--out is required for wasm".to_string())?;
+                    std::fs::write(&path, bytes).map_err(|err| err.to_string())?;
                     Ok(())
                 }
-                None => {
-                    println!("{wat}");
-                    Ok(())
-                }
+                _ => Err("emit format not supported for --engine wasm".to_string()),
             }
         }
-        EmitFormat::Wasm => {
-            let bytes = birddisk_wasm::emit_wasm(&program).map_err(|err| err.message)?;
-            let path = out_path.ok_or_else(|| "--out is required for wasm".to_string())?;
-            std::fs::write(&path, bytes).map_err(|err| err.to_string())?;
-            Ok(())
-        }
+        birddisk_core::Engine::Native => match format {
+            EmitFormat::Obj => {
+                let out_path = out.unwrap_or_else(|| default_emit_path(path, "o"));
+                let bytes = birddisk_native::emit_object(&program)
+                    .map_err(|err| err.message)?;
+                std::fs::write(&out_path, bytes).map_err(|err| err.to_string())?;
+                Ok(())
+            }
+            EmitFormat::Exe => {
+                let out_path = out.unwrap_or_else(|| default_exe_path(path));
+                let bytes = birddisk_native::emit_object(&program)
+                    .map_err(|err| err.message)?;
+                build_native_executable(&bytes, path, &out_path)
+            }
+            _ => Err("emit format not supported for --engine native".to_string()),
+        },
+        _ => Err("emit is only supported for --engine wasm or native".to_string()),
     }
 }
 
@@ -1118,6 +1247,107 @@ fn default_emit_path(path: &str, extension: &str) -> String {
     let mut output = std::path::PathBuf::from(path);
     output.set_extension(extension);
     output.to_string_lossy().to_string()
+}
+
+fn default_exe_path(path: &str) -> String {
+    let path = Path::new(path);
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("birddisk_out");
+    let mut output = path.to_path_buf();
+    output.set_file_name(stem);
+    output.to_string_lossy().to_string()
+}
+
+fn build_native_executable(obj_bytes: &[u8], source_path: &str, out_path: &str) -> Result<(), String> {
+    let work_dir = native_work_dir()?;
+    std::fs::create_dir_all(&work_dir).map_err(|err| err.to_string())?;
+    let stem = Path::new(source_path)
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("birddisk");
+    let obj_path = work_dir.join(format!("{stem}.o"));
+    std::fs::write(&obj_path, obj_bytes).map_err(|err| err.to_string())?;
+
+    let wrapper_path = work_dir.join(format!("{stem}_wrapper.rs"));
+    std::fs::write(&wrapper_path, native_wrapper_source()).map_err(|err| err.to_string())?;
+
+    let target_dir = target_profile_dir()?;
+    let deps_dir = target_dir.join("deps");
+    let runtime_rlib = find_runtime_rlib(&deps_dir)?;
+    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+
+    if let Some(parent) = Path::new(out_path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+    }
+
+    let status = process::Command::new(rustc)
+        .arg("--edition=2021")
+        .arg(&wrapper_path)
+        .arg("-o")
+        .arg(out_path)
+        .arg("--extern")
+        .arg(format!("birddisk_native_runtime={}", runtime_rlib.display()))
+        .arg("-L")
+        .arg(&deps_dir)
+        .arg("-C")
+        .arg(format!("link-arg={}", obj_path.display()))
+        .status()
+        .map_err(|err| err.to_string())?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err("native link failed".to_string())
+    }
+}
+
+fn native_wrapper_source() -> String {
+    let entry = birddisk_native::NATIVE_MAIN_SYMBOL;
+    format!(
+        "use std::io::Read;\n\nextern \"C\" {{\n    fn {entry}(rt: *mut birddisk_native_runtime::Runtime) -> i64;\n}}\n\nfn main() {{\n    let mut input = String::new();\n    let _ = std::io::stdin().read_to_string(&mut input);\n    let mut runtime = birddisk_native_runtime::Runtime::new();\n    runtime.set_input(&input);\n    let _result = unsafe {{ {entry}(&mut runtime) }};\n    if let Some(err) = runtime.take_error() {{\n        eprintln!(\"runtime error {{}}: {{}}\", err.code, err.message);\n        std::process::exit(1);\n    }}\n    let output = runtime.take_output();\n    print!(\"{{}}\", output);\n}}\n"
+    )
+}
+
+fn native_work_dir() -> Result<PathBuf, String> {
+    let target_dir = target_profile_dir()?;
+    Ok(target_dir.join("native"))
+}
+
+fn target_profile_dir() -> Result<PathBuf, String> {
+    let root = workspace_root()?;
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
+    Ok(root.join("target").join(profile))
+}
+
+fn workspace_root() -> Result<PathBuf, String> {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = manifest
+        .parent()
+        .and_then(|path| path.parent())
+        .ok_or_else(|| "unable to resolve workspace root".to_string())?;
+    Ok(root.to_path_buf())
+}
+
+fn find_runtime_rlib(deps_dir: &Path) -> Result<PathBuf, String> {
+    let entries = std::fs::read_dir(deps_dir).map_err(|err| err.to_string())?;
+    for entry in entries {
+        let entry = entry.map_err(|err| err.to_string())?;
+        let path = entry.path();
+        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+            if name.starts_with("libbirddisk_native_runtime-") && name.ends_with(".rlib") {
+                return Ok(path);
+            }
+        }
+    }
+    Err("unable to locate birddisk_native_runtime rlib".to_string())
 }
 
 fn mismatch_diagnostic(path: &str, vm_result: i64, wasm_result: i64) -> birddisk_core::Diagnostic {

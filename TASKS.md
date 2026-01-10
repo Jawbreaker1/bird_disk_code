@@ -226,7 +226,7 @@ Implement:
 - [x] Establish versioning + compatibility story for stdlib modules
 - [x] Implement first pure-BirdDisk module (e.g. `std::math` or `std::util`)
 - [x] Decide boundary: which stdlib modules remain in Rust (strings/bytes/IO) for now
-- [ ] Add small stdlib utilities (regex, parsing helpers) once string APIs stabilize
+- [x] Add small stdlib utilities (array helpers; parsing helpers pending until u8 ops)
 
 Add tests:
 - [x] Cross-module compile tests (stdlib + user module)
@@ -239,15 +239,21 @@ Acceptance:
 
 ## Sprint 10 — Memory runtime (2–4 weeks)
 Implement:
-- [ ] Chosen GC/RC strategy
-- [ ] runtime metadata for objects/arrays/strings
-- [ ] OOM + null deref diagnostics
+- [x] Chosen GC/RC strategy
+- [x] runtime metadata for objects/arrays/strings
+- [x] OOM + null deref diagnostics
+- [x] root stack tracking in VM + WASM
+- [x] WASM mark/sweep + free list reuse (GC)
+- [x] WASM free-list coalescing
+- [x] GC runtime sanity checks (header validation in tests)
+- [x] GC metrics exports for WASM tests
 
 Add tests:
-- [ ] allocation stress tests (GC trigger + survival of live objects)
-- [ ] unreachable cycle collection (object <-> object, array cycles)
-- [ ] array/string scanning correctness (nested arrays/strings)
-- [ ] runtime error diagnostics with stack traces
+- [x] allocation stress tests (GC trigger + survival of live objects)
+- [x] unreachable cycle collection (object <-> object, array cycles)
+- [x] array/string scanning correctness (nested arrays/strings)
+- [x] runtime error diagnostics with stack traces
+- [x] GC parity tests for VM + WASM (rooting, ref arrays, nested arrays)
 
 Acceptance:
 - Memory strategy works across VM + WASM
@@ -256,12 +262,17 @@ Acceptance:
 
 ## Sprint 11 — Native backend spike (2–6 weeks)
 Implement:
-- [ ] Choose backend (Cranelift or LLVM)
-- [ ] minimal native codegen for arithmetic + control flow
-- [ ] runtime ABI alignment with VM/WASM
+- [x] Choose backend (Cranelift or LLVM)
+- [x] minimal native codegen for arithmetic + control flow
+- [x] runtime ABI alignment with VM/WASM
+- [x] native runtime scaffolding (GC, root stack)
+- [x] native JIT prototype (i64 arithmetic + locals)
+- [x] native object emission (Cranelift ObjectModule)
+- [x] native CLI emit obj/exe (AOT workflow)
 
 Acceptance:
 - `rule main() -> i64:` executes on one native target
+- native artifacts build as `.o` and standalone executables
 
 ---
 
@@ -272,3 +283,6 @@ Acceptance:
 - [ ] Parallel execution + threading model (VM, WASM, native backends)
 - [ ] Networking standard library (client/server primitives)
 - [ ] Graphics/windowing library (cross-platform surface)
+
+## Future — Maintainability
+- [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)

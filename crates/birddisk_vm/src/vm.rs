@@ -1207,6 +1207,16 @@ mod tests {
         (result, gc_runs)
     }
 
+    fn run_with_gc_stats(source: &str, threshold: usize) -> (i64, crate::heap::HeapStats) {
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let mut vm = Vm::new(&program, "");
+        vm.gc_threshold = threshold;
+        let result = vm.eval_main().unwrap();
+        let stats = vm.heap.stats();
+        (result, stats)
+    }
+
     #[test]
     fn gc_preserves_object_cycles() {
         let source = "book Node:\n  field link: Node[].\n  field value: i64.\n\n  rule init(self: Node, value: i64) -> Node:\n    put self::value = value.\n    yield self.\n  end\nend\n\nrule main() -> i64:\n  set a: Node = new Node(1).\n  set once: i64 = 0.\n  repeat while once < 1:\n    set b: Node = new Node(2).\n    set al: Node[] = [b].\n    set bl: Node[] = [a].\n    put a::link = al.\n    put b::link = bl.\n    put once = once + 1.\n  end\n\n  set i: i64 = 0.\n  repeat while i < 6:\n    set junk: i64[] = array(2048).\n    put junk[0] = i.\n    put i = i + 1.\n  end\n\n  set nexts: Node[] = a::link.\n  set first: Node = nexts[0].\n  yield first::value.\nend\n";
@@ -1221,5 +1231,49 @@ mod tests {
         let (result, gc_runs) = run_with_gc(source, 1024);
         assert_eq!(result, 3);
         assert!(gc_runs > 0);
+    }
+
+    #[test]
+    fn gc_collects_unreachable_cycles_in_vm() {
+        let source = "book Node:\n  field link: Node[].\n  field value: i64.\n\n  rule init(self: Node, value: i64) -> Node:\n    put self::value = value.\n    yield self.\n  end\nend\n\nrule main() -> i64:\n  set once: i64 = 0.\n  repeat while once < 1:\n    set a: Node = new Node(1).\n    set b: Node = new Node(2).\n    set al: Node[] = [b].\n    set bl: Node[] = [a].\n    put a::link = al.\n    put b::link = bl.\n    put once = once + 1.\n  end\n\n  set junk: i64[] = array(2048).\n  set tiny: i64[] = array(1).\n  yield 0.\nend\n";
+        let (result, stats) = run_with_gc_stats(source, 1024);
+        assert_eq!(result, 0);
+        assert!(stats.gc_runs > 0);
+        assert!(stats.last_freed >= 4);
+    }
+
+    #[test]
+    fn gc_roots_call_args_under_pressure() {
+        let source = "book Node:\n  field value: i64.\n\n  rule init(self: Node, value: i64) -> Node:\n    put self::value = value.\n    yield self.\n  end\nend\n\nrule make_junk() -> i64:\n  set xs: i64[] = array(2048).\n  put xs[0] = 1.\n  yield xs[0].\nend\n\nrule consume(n: Node, junk: i64) -> i64:\n  set ys: i64[] = array(2048).\n  put ys[0] = junk.\n  yield n::value.\nend\n\nrule main() -> i64:\n  yield consume(new Node(7), make_junk()).\nend\n";
+        let (result, gc_runs) = run_with_gc(source, 1024);
+        assert_eq!(result, 7);
+        assert!(gc_runs > 0);
+    }
+
+    #[test]
+    fn gc_marks_ref_arrays_in_vm() {
+        let source = "import std::string.\nrule main() -> i64:\n  set a: string = \"alpha\".\n  set b: string = \"beta\".\n  set items: string[] = [a, b].\n  set i: i64 = 0.\n  repeat while i < 4:\n    set junk: i64[] = array(2048).\n    put junk[0] = i.\n    put i = i + 1.\n  end\n  set first: string = items[0].\n  yield std::string::len(first).\nend\n";
+        let (result, gc_runs) = run_with_gc(source, 1024);
+        assert_eq!(result, 5);
+        assert!(gc_runs > 0);
+    }
+
+    #[test]
+    fn gc_marks_nested_ref_arrays_in_vm() {
+        let source = "rule main() -> i64:\n  set inner: i64[] = [11].\n  set outer: i64[][] = [inner].\n  set i: i64 = 0.\n  repeat while i < 4:\n    set junk: i64[] = array(2048).\n    put junk[0] = i.\n    put i = i + 1.\n  end\n  yield outer[0][0].\nend\n";
+        let (result, gc_runs) = run_with_gc(source, 1024);
+        assert_eq!(result, 11);
+        assert!(gc_runs > 0);
+    }
+
+    #[test]
+    fn gc_stats_report_freed_and_peak_in_vm() {
+        let source = "rule main() -> i64:\n  set i: i64 = 0.\n  repeat while i < 4:\n    set junk: i64[] = array(2048).\n    put junk[0] = i.\n    put i = i + 1.\n  end\n  yield 0.\nend\n";
+        let (result, stats) = run_with_gc_stats(source, 1024);
+        assert_eq!(result, 0);
+        assert!(stats.gc_runs > 0);
+        assert!(stats.last_freed > 0);
+        assert!(stats.peak_bytes_in_use >= stats.bytes_in_use);
+        assert!(stats.peak_bytes_in_use > 0);
     }
 }

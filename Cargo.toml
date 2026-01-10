@@ -1,6 +1,8 @@
 [workspace]
 members = [
   "crates/birddisk_core",
+  "crates/birddisk_native",
+  "crates/birddisk_native_runtime",
   "crates/birddiskc",
   "crates/birddisk_vm",
   "crates/birddisk_wasm",

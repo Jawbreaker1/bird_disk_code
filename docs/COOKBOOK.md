@@ -174,6 +174,18 @@ rule main() -> i64:
 end
 ```
 
+## 14) Native AOT (emit exe)
+```birddisk
+rule main() -> i64:
+  yield 0.
+end
+```
+Build a native executable on the host:
+```sh
+./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./bird_app
+./bird_app
+```
+
 ---
 
 Notes:

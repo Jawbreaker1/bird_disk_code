@@ -1,0 +1,26 @@
+import std::array.
+rule main() -> i64:
+  set xs: i64[] = [3, 1, 4, 1, 5].
+  set len: i64 = 5.
+  set sum: i64 = std::array::sum_i64(xs, len).
+  set min: i64 = std::array::min_i64(xs, len).
+  set max: i64 = std::array::max_i64(xs, len).
+  set idx: i64 = std::array::index_of_i64(xs, len, 4).
+  when sum == 14:
+    when min == 1:
+      when max == 5:
+        when idx == 2:
+          yield 1.
+        otherwise:
+          yield 0.
+        end
+      otherwise:
+        yield 0.
+      end
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

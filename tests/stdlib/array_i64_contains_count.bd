@@ -1,0 +1,16 @@
+import std::array.
+rule main() -> i64:
+  set xs: i64[] = [2, 2, 3].
+  set len: i64 = 3.
+  set count: i64 = std::array::count_i64(xs, len, 2).
+  set has: bool = std::array::contains_i64(xs, len, 5).
+  when count == 2:
+    when has:
+      yield 0.
+    otherwise:
+      yield 1.
+    end
+  otherwise:
+    yield 0.
+  end
+end

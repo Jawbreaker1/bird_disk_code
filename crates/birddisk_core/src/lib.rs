@@ -5,6 +5,7 @@ mod diagnostics;
 mod fmt;
 pub mod lexer;
 pub mod parser;
+pub mod runtime;
 mod typecheck;
 
 use diagnostics::diagnostic;
@@ -21,6 +22,7 @@ pub const VERSION: &str = "0.1";
 pub enum Engine {
     Vm,
     Wasm,
+    Native,
 }
 
 #[derive(Serialize)]

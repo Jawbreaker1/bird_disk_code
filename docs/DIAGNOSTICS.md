@@ -120,6 +120,11 @@ E0401: WASM backend error (reserved)
 E0402: Division or modulo by zero
 E0403: Array index out of bounds
 
+Runtime error messages (E0400) include:
+- Null dereference
+- Out of memory during allocation
+- Invalid heap header
+
 E0500: VM/WASM mismatch
 E0501: Test harness error
 E0502: Test output mismatch

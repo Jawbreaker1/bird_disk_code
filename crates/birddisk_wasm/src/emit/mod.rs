@@ -8,6 +8,7 @@ use crate::analysis::{
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
+use birddisk_core::runtime as abi;
 use std::collections::HashMap;
 
 pub(crate) use compiler::WatEmitter;
@@ -27,26 +28,44 @@ pub(crate) fn wasm_error(code: &'static str, message: impl Into<String>) -> Wasm
     }
 }
 
-pub(crate) const ARRAY_HEADER_SIZE: i32 = 8;
-pub(crate) const STRING_HEADER_SIZE: i32 = 4;
-pub(crate) const OBJECT_HEADER_SIZE: i32 = 8;
-pub(crate) const OBJECT_FIELD_SIZE: i32 = 8;
-pub(crate) const ARRAY_KIND_I64: i32 = 1;
-pub(crate) const ARRAY_KIND_BOOL: i32 = 2;
-pub(crate) const ARRAY_KIND_U8: i32 = 3;
-pub(crate) const ARRAY_KIND_REF: i32 = 4;
+pub(crate) const HEAP_KIND_STRING: i32 = abi::HEAP_KIND_STRING as i32;
+pub(crate) const HEAP_KIND_ARRAY: i32 = abi::HEAP_KIND_ARRAY as i32;
+pub(crate) const HEAP_KIND_OBJECT: i32 = abi::HEAP_KIND_OBJECT as i32;
+pub(crate) const HEAP_KIND_FREE: i32 = abi::HEAP_KIND_FREE as i32;
+pub(crate) const HEAP_KIND_SHIFT: i32 = abi::HEAP_KIND_SHIFT as i32;
+pub(crate) const HEAP_TYPE_ID_MASK: i32 = abi::HEAP_TYPE_ID_MASK as i32;
+pub(crate) const HEAP_FLAGS_OFFSET: i32 = abi::HEAP_FLAGS_OFFSET as i32;
+pub(crate) const HEAP_LEN_OFFSET: i32 = abi::HEAP_LEN_OFFSET as i32;
+pub(crate) const HEAP_AUX_OFFSET: i32 = abi::HEAP_AUX_OFFSET as i32;
+pub(crate) const ARRAY_HEADER_SIZE: i32 = abi::ARRAY_HEADER_SIZE as i32;
+pub(crate) const STRING_HEADER_SIZE: i32 = abi::STRING_HEADER_SIZE as i32;
+pub(crate) const OBJECT_HEADER_SIZE: i32 = abi::OBJECT_HEADER_SIZE as i32;
+pub(crate) const OBJECT_FIELD_SIZE: i32 = abi::OBJECT_FIELD_SIZE as i32;
+pub(crate) const ARRAY_KIND_I64: i32 = abi::ARRAY_KIND_I64 as i32;
+pub(crate) const ARRAY_KIND_BOOL: i32 = abi::ARRAY_KIND_BOOL as i32;
+pub(crate) const ARRAY_KIND_U8: i32 = abi::ARRAY_KIND_U8 as i32;
+pub(crate) const ARRAY_KIND_REF: i32 = abi::ARRAY_KIND_REF as i32;
 pub(crate) const TRAP_ARRAY_OOB: i32 = 403;
 pub(crate) const TRAP_ARRAY_LEN_NEG: i32 = 400;
 pub(crate) const TRAP_ARRAY_OOM: i32 = 405;
 pub(crate) const TRAP_UTF8_INVALID: i32 = 406;
 pub(crate) const TRAP_TRACE_OOM: i32 = 407;
 pub(crate) const TRAP_STRING_PARSE: i32 = 408;
+pub(crate) const TRAP_NULL_DEREF: i32 = 409;
+pub(crate) const TRAP_KIND_STRING: i32 = 410;
+pub(crate) const TRAP_KIND_ARRAY: i32 = 411;
+pub(crate) const TRAP_KIND_OBJECT: i32 = 412;
+pub(crate) const TRAP_KIND_BYTES: i32 = 413;
+pub(crate) const TRAP_HEAP_HEADER: i32 = 414;
 
 pub(crate) const TRACE_STACK_PTR_OFFSET: i32 = 0;
 pub(crate) const TRACE_STACK_DATA_OFFSET: i32 = 4;
 pub(crate) const TRACE_STACK_SLOTS: i32 = 256;
 pub(crate) const TRACE_STACK_BYTES: i32 = TRACE_STACK_DATA_OFFSET + TRACE_STACK_SLOTS * 4;
 pub(crate) const HEAP_START: i32 = (TRACE_STACK_BYTES + 7) & !7;
+pub(crate) const ROOT_STACK_SLOTS: i32 = 1024;
+pub(crate) const GC_MARK_STACK_SLOTS: i32 = 2048;
+pub(crate) const GC_SEEN_SLOTS: i32 = 2048;
 
 #[derive(Clone)]
 pub(crate) struct FunctionSig {
@@ -120,7 +139,17 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
 
     let layout = build_layout_data(&ref_fields);
     let layout_base = HEAP_START;
-    let heap_start = align_up(layout_base + layout.len() as i32, 8);
+    let layout_len = layout.len() as i32;
+    let root_ptr_offset = align_up(layout_base + layout_len, 8);
+    let root_data_offset = root_ptr_offset + 4;
+    let root_end = root_data_offset + ROOT_STACK_SLOTS * 4;
+    let mark_ptr_offset = align_up(root_end, 8);
+    let mark_data_offset = mark_ptr_offset + 4;
+    let mark_end = mark_data_offset + GC_MARK_STACK_SLOTS * 4;
+    let seen_ptr_offset = align_up(mark_end, 8);
+    let seen_data_offset = seen_ptr_offset + 4;
+    let seen_end = seen_data_offset + GC_SEEN_SLOTS * 4;
+    let heap_start = align_up(seen_end, 8);
 
     let mut emitter = WatEmitter::new();
     emitter.push_line("(module");
@@ -151,6 +180,16 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
             layout_offsets_base(layout_base, ref_fields.len()),
             layout_counts_base(layout_base, ref_fields.len()),
             layout_fields_base(layout_base, ref_fields.len()),
+            heap_start,
+            root_ptr_offset,
+            root_data_offset,
+            ROOT_STACK_SLOTS,
+            mark_ptr_offset,
+            mark_data_offset,
+            GC_MARK_STACK_SLOTS,
+            seen_ptr_offset,
+            seen_data_offset,
+            GC_SEEN_SLOTS,
         );
     }
 
@@ -273,11 +312,37 @@ pub fn emit_wasm(program: &Program) -> Result<Vec<u8>, WasmError> {
 mod tests {
     use crate::{emit_wasm, run, run_with_io, WasmError};
     use birddisk_core::{lexer, parser};
+    use wasmtime::{Caller, Engine, Linker, Module, Store};
+
+    #[derive(Default)]
+    struct TrapState {
+        last_trap: Option<i32>,
+    }
 
     fn compile_and_run(source: &str) -> Result<i64, WasmError> {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
         run(&program)
+    }
+
+    fn gc_layout_sanity(source: &str) -> i32 {
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let func = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_layout_sanity")
+            .unwrap();
+        func.call(&mut store, ()).unwrap()
     }
 
     #[test]
@@ -316,6 +381,16 @@ mod tests {
     fn wasm_reports_div_by_zero() {
         let err = compile_and_run("rule main() -> i64:\n  yield 1 / 0.\nend\n").unwrap_err();
         assert_eq!(err.code, "E0402");
+    }
+
+    #[test]
+    fn wasm_reports_null_deref() {
+        let err = compile_and_run(
+            "book Node:\n  field next: Node.\nend\n\nrule main() -> i64:\n  set node: Node = new Node().\n  set next: Node = node::next.\n  set again: Node = next::next.\n  yield 0.\nend\n",
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "E0400");
+        assert_eq!(err.message, "Null dereference.");
     }
 
     #[test]
@@ -430,5 +505,257 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn wasm_call_arg_rooting_survives_gc() {
+        let result = compile_and_run(
+            "book Node:\n  field value: i64.\n\n  rule init(self: Node, value: i64) -> Node:\n    put self::value = value.\n    yield self.\n  end\nend\n\nrule make_junk() -> i64:\n  set xs: i64[] = array(1).\n  put xs[0] = 1.\n  yield xs[0].\nend\n\nrule consume(n: Node, junk: i64) -> i64:\n  set xs: i64[] = array(1).\n  put xs[0] = 99.\n  yield n::value.\nend\n\nrule main() -> i64:\n  yield consume(new Node(7), make_junk()).\nend\n",
+        )
+        .unwrap();
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn wasm_gc_marks_ref_arrays() {
+        let result = compile_and_run(
+            "import std::string.\nrule main() -> i64:\n  set a: string = \"alpha\".\n  set b: string = \"beta\".\n  set items: string[] = [a, b].\n  set i: i64 = 0.\n  repeat while i < 4:\n    set junk: i64[] = array(2048).\n    put junk[0] = i.\n    put i = i + 1.\n  end\n  set first: string = items[0].\n  yield std::string::len(first).\nend\n",
+        )
+        .unwrap();
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn wasm_gc_marks_nested_ref_arrays() {
+        let result = compile_and_run(
+            "rule main() -> i64:\n  set inner: i64[] = [11].\n  set outer: i64[][] = [inner].\n  set i: i64 = 0.\n  repeat while i < 4:\n    set junk: i64[] = array(2048).\n    put junk[0] = i.\n    put i = i + 1.\n  end\n  yield outer[0][0].\nend\n",
+        )
+        .unwrap();
+        assert_eq!(result, 11);
+    }
+
+    #[test]
+    fn wasm_gc_layout_sanity_counts_refs() {
+        let source = "book A:\n  field x: i64.\n  field name: string.\n  field nums: i64[].\nend\n\nbook B:\n  field child: A.\n  field ok: bool.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n";
+        let count = gc_layout_sanity(source);
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn wasm_gc_mark_test_traverses_cycle() {
+        let source = "book Node:\n  field next: Node.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let func = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_mark_test")
+            .unwrap();
+        let count = func.call(&mut store, ()).unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn wasm_gc_sweep_reuses_free_list() {
+        let source = "book Node:\n  field next: Node.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let func = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_sweep_test")
+            .unwrap();
+        let ok = func.call(&mut store, ()).unwrap();
+        assert_eq!(ok, 1);
+    }
+
+    #[test]
+    fn wasm_gc_split_reuses_block() {
+        let source = "book Node:\n  field next: Node.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let func = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_split_test")
+            .unwrap();
+        let ok = func.call(&mut store, ()).unwrap();
+        assert_eq!(ok, 1);
+    }
+
+    #[test]
+    fn wasm_gc_stats_exports() {
+        let source = "book Node:\n  field next: Node.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let sweep = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_sweep_test")
+            .unwrap();
+        let last_freed = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_last_freed")
+            .unwrap();
+        let heap_high = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_heap_high_water")
+            .unwrap();
+        sweep.call(&mut store, ()).unwrap();
+        let freed = last_freed.call(&mut store, ()).unwrap();
+        assert_eq!(freed, 1);
+        let high_water = heap_high.call(&mut store, ()).unwrap();
+        assert!(high_water >= super::HEAP_START);
+    }
+
+    #[test]
+    fn wasm_gc_heap_high_water_increases() {
+        let source = "book Node:\n  field next: Node.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let heap_high = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_heap_high_water")
+            .unwrap();
+        let sweep = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_sweep_test")
+            .unwrap();
+        let before = heap_high.call(&mut store, ()).unwrap();
+        sweep.call(&mut store, ()).unwrap();
+        let after = heap_high.call(&mut store, ()).unwrap();
+        assert!(after > before);
+    }
+
+    #[test]
+    fn wasm_header_sanity_traps_invalid_kind() {
+        let source = "rule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, TrapState::default());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap(
+                "env",
+                "bd_trap",
+                |mut caller: Caller<'_, TrapState>, code: i32| -> anyhow::Result<()> {
+                    caller.data_mut().last_trap = Some(code);
+                    Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+                },
+            )
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let func = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_header_kind_test")
+            .unwrap();
+        let _ = func.call(&mut store, ()).unwrap_err();
+        assert_eq!(store.data().last_trap, Some(super::TRAP_HEAP_HEADER));
+    }
+
+    #[test]
+    fn wasm_header_sanity_traps_invalid_array_aux() {
+        let source = "rule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, TrapState::default());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap(
+                "env",
+                "bd_trap",
+                |mut caller: Caller<'_, TrapState>, code: i32| -> anyhow::Result<()> {
+                    caller.data_mut().last_trap = Some(code);
+                    Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+                },
+            )
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let func = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_header_array_aux_test")
+            .unwrap();
+        let _ = func.call(&mut store, ()).unwrap_err();
+        assert_eq!(store.data().last_trap, Some(super::TRAP_HEAP_HEADER));
+    }
+
+    #[test]
+    fn wasm_free_list_adjacent_blocks_harness() {
+        let source = "rule main() -> i64:\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let wat = super::emit_wat(&program).unwrap();
+        let engine = Engine::default();
+        let module = Module::new(&engine, wat).unwrap();
+        let mut store = Store::new(&engine, ());
+        let mut linker = Linker::new(&engine);
+        linker
+            .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
+                Err(anyhow::anyhow!(format!("bd_trap:{code}")))
+            })
+            .unwrap();
+        let instance = linker.instantiate(&mut store, &module).unwrap();
+        let run = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_gc_adjacent_free_test")
+            .unwrap();
+        let free_len = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_free_list_len")
+            .unwrap();
+        let free_bytes = instance
+            .get_typed_func::<(), i32>(&mut store, "__bd_free_list_bytes")
+            .unwrap();
+        let count = run.call(&mut store, ()).unwrap();
+        let total = free_bytes.call(&mut store, ()).unwrap();
+        let expected = (super::OBJECT_HEADER_SIZE + 8) * 2;
+        assert_eq!(count, 1);
+        assert_eq!(total, expected);
+        assert_eq!(free_len.call(&mut store, ()).unwrap(), count);
     }
 }

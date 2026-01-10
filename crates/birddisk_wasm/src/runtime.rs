@@ -4,8 +4,9 @@ use crate::analysis::{
 };
 use crate::emit::{
     emit_wat, wasm_error, WasmError, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET,
-    TRACE_STACK_SLOTS, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_STRING_PARSE,
-    TRAP_TRACE_OOM, TRAP_UTF8_INVALID,
+    TRACE_STACK_SLOTS, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_KIND_ARRAY,
+    TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_STRING_PARSE,
+    TRAP_TRACE_OOM, TRAP_UTF8_INVALID, TRAP_HEAP_HEADER,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -212,6 +213,12 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
             TRAP_UTF8_INVALID => wasm_error("E0400", "Invalid UTF-8 in std::string::from_bytes."),
             TRAP_TRACE_OOM => wasm_error("E0400", "Trace stack overflow."),
             TRAP_STRING_PARSE => wasm_error("E0400", "Invalid integer in std::string::to_i64."),
+            TRAP_NULL_DEREF => wasm_error("E0400", "Null dereference."),
+            TRAP_KIND_STRING => wasm_error("E0400", "Expected string handle."),
+            TRAP_KIND_ARRAY => wasm_error("E0400", "Expected array handle."),
+            TRAP_KIND_OBJECT => wasm_error("E0400", "Expected book handle."),
+            TRAP_KIND_BYTES => wasm_error("E0400", "std::bytes expects u8 array."),
+            TRAP_HEAP_HEADER => wasm_error("E0400", "Invalid heap header."),
             _ => wasm_error("E0400", format!("{default_message}: {err}")),
         }
     } else if let Some(trap) = err.downcast_ref::<wasmtime::Trap>() {
@@ -288,5 +295,47 @@ fn trap_code_from_message(message: &str) -> Option<i32> {
         None
     } else {
         code.parse().ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::map_trap;
+    use crate::emit::{
+        TRAP_HEAP_HEADER, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING,
+    };
+
+    #[test]
+    fn maps_kind_traps() {
+        let err = map_trap(
+            anyhow::anyhow!("bd_trap:{}", TRAP_KIND_STRING),
+            "default",
+            Vec::new(),
+        );
+        assert_eq!(err.message, "Expected string handle.");
+        let err = map_trap(
+            anyhow::anyhow!("bd_trap:{}", TRAP_KIND_ARRAY),
+            "default",
+            Vec::new(),
+        );
+        assert_eq!(err.message, "Expected array handle.");
+        let err = map_trap(
+            anyhow::anyhow!("bd_trap:{}", TRAP_KIND_OBJECT),
+            "default",
+            Vec::new(),
+        );
+        assert_eq!(err.message, "Expected book handle.");
+        let err = map_trap(
+            anyhow::anyhow!("bd_trap:{}", TRAP_KIND_BYTES),
+            "default",
+            Vec::new(),
+        );
+        assert_eq!(err.message, "std::bytes expects u8 array.");
+        let err = map_trap(
+            anyhow::anyhow!("bd_trap:{}", TRAP_HEAP_HEADER),
+            "default",
+            Vec::new(),
+        );
+        assert_eq!(err.message, "Invalid heap header.");
     }
 }

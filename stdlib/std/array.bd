@@ -1,0 +1,77 @@
+rule sum_i64(xs: i64[], len: i64) -> i64:
+  set sum: i64 = 0.
+  set i: i64 = 0.
+  repeat while i < len:
+    put sum = sum + xs[i].
+    put i = i + 1.
+  end
+  yield sum.
+end
+
+rule min_i64(xs: i64[], len: i64) -> i64:
+  when len <= 0:
+    yield 0.
+  otherwise:
+    set best: i64 = xs[0].
+    set i: i64 = 1.
+    repeat while i < len:
+      set value: i64 = xs[i].
+      when value < best:
+        put best = value.
+      end
+      put i = i + 1.
+    end
+    yield best.
+  end
+end
+
+rule max_i64(xs: i64[], len: i64) -> i64:
+  when len <= 0:
+    yield 0.
+  otherwise:
+    set best: i64 = xs[0].
+    set i: i64 = 1.
+    repeat while i < len:
+      set value: i64 = xs[i].
+      when value > best:
+        put best = value.
+      end
+      put i = i + 1.
+    end
+    yield best.
+  end
+end
+
+rule contains_i64(xs: i64[], len: i64, value: i64) -> bool:
+  set i: i64 = 0.
+  repeat while i < len:
+    when xs[i] == value:
+      yield true.
+    end
+    put i = i + 1.
+  end
+  yield false.
+end
+
+rule index_of_i64(xs: i64[], len: i64, value: i64) -> i64:
+  set i: i64 = 0.
+  repeat while i < len:
+    when xs[i] == value:
+      yield i.
+    end
+    put i = i + 1.
+  end
+  yield 0 - 1.
+end
+
+rule count_i64(xs: i64[], len: i64, value: i64) -> i64:
+  set count: i64 = 0.
+  set i: i64 = 0.
+  repeat while i < len:
+    when xs[i] == value:
+      put count = count + 1.
+    end
+    put i = i + 1.
+  end
+  yield count.
+end

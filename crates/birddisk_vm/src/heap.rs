@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use birddisk_core::runtime as abi;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct HeapHandle(u32);
 
@@ -13,20 +15,22 @@ impl HeapHandle {
     }
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HeapKind {
-    String = 1,
-    Array = 2,
-    Object = 3,
-    Free = 255,
+    String = abi::HEAP_KIND_STRING as u8,
+    Array = abi::HEAP_KIND_ARRAY as u8,
+    Object = abi::HEAP_KIND_OBJECT as u8,
+    Free = abi::HEAP_KIND_FREE as u8,
 }
 
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ElemKind {
-    I64 = 1,
-    Bool = 2,
-    U8 = 3,
-    Ref = 4,
+    I64 = abi::ARRAY_KIND_I64 as u8,
+    Bool = abi::ARRAY_KIND_BOOL as u8,
+    U8 = abi::ARRAY_KIND_U8 as u8,
+    Ref = abi::ARRAY_KIND_REF as u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,10 +55,10 @@ impl HeapHeader {
     pub(crate) fn kind(self) -> HeapKind {
         let kind = (self.tag >> 24) as u8;
         match kind {
-            1 => HeapKind::String,
-            2 => HeapKind::Array,
-            3 => HeapKind::Object,
-            255 => HeapKind::Free,
+            value if value == abi::HEAP_KIND_STRING as u8 => HeapKind::String,
+            value if value == abi::HEAP_KIND_ARRAY as u8 => HeapKind::Array,
+            value if value == abi::HEAP_KIND_OBJECT as u8 => HeapKind::Object,
+            value if value == abi::HEAP_KIND_FREE as u8 => HeapKind::Free,
             _ => HeapKind::Free,
         }
     }
@@ -372,8 +376,8 @@ fn free_object(obj: &mut HeapObject) -> usize {
 
 fn pack_tag(kind: HeapKind, type_id: u32) -> u32 {
     let kind = kind as u32;
-    let type_id = type_id & 0x00FF_FFFF;
-    (kind << 24) | type_id
+    let type_id = type_id & abi::HEAP_TYPE_ID_MASK;
+    (kind << abi::HEAP_KIND_SHIFT) | type_id
 }
 
 fn align_up(value: usize, align: usize) -> usize {
@@ -393,6 +397,37 @@ fn read_handle(payload: &[u8], offset: usize) -> Option<HeapHandle> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn header_sanity(header: HeapHeader) -> Result<(), &'static str> {
+        let kind = (header.tag >> 24) as u8;
+        match kind {
+            value if value == abi::HEAP_KIND_STRING as u8 => {
+                if header.aux == 0 {
+                    Ok(())
+                } else {
+                    Err("string aux must be 0")
+                }
+            }
+            value if value == abi::HEAP_KIND_ARRAY as u8 => match header.aux {
+                value
+                    if value == abi::ARRAY_KIND_I64
+                        || value == abi::ARRAY_KIND_BOOL
+                        || value == abi::ARRAY_KIND_U8
+                        || value == abi::ARRAY_KIND_REF =>
+                {
+                    Ok(())
+                }
+                _ => Err("array aux must be a valid ElemKind"),
+            },
+            value
+                if value == abi::HEAP_KIND_OBJECT as u8
+                    || value == abi::HEAP_KIND_FREE as u8 =>
+            {
+                Ok(())
+            }
+            _ => Err("invalid heap kind"),
+        }
+    }
 
     #[test]
     fn heap_header_encodes_kind_and_type() {
@@ -418,6 +453,28 @@ mod tests {
         assert_eq!(header.kind(), HeapKind::Array);
         assert_eq!(header.len_or_size, 4);
         assert_eq!(header.aux, ElemKind::I64 as u32);
+    }
+
+    #[test]
+    fn heap_header_sanity_rejects_invalid_kind() {
+        let header = HeapHeader {
+            tag: 99u32 << 24,
+            flags: 0,
+            len_or_size: 0,
+            aux: 0,
+        };
+        assert!(header_sanity(header).is_err());
+    }
+
+    #[test]
+    fn heap_header_sanity_rejects_invalid_array_aux() {
+        let header = HeapHeader {
+            tag: (HeapKind::Array as u32) << 24,
+            flags: 0,
+            len_or_size: 0,
+            aux: 99,
+        };
+        assert!(header_sanity(header).is_err());
     }
 
     #[test]
@@ -550,5 +607,74 @@ mod tests {
         let report = heap.gc_with_layout(&roots, &layout);
         assert_eq!(report.freed, 0);
         assert_eq!(heap.header(child).kind(), HeapKind::String);
+    }
+
+    #[test]
+    fn gc_collects_object_cycles_when_unrooted() {
+        struct Layout {
+            fields: Vec<Vec<usize>>,
+        }
+
+        impl HeapLayout for Layout {
+            fn object_ref_fields(&self, type_id: u32) -> &[usize] {
+                self.fields
+                    .get(type_id as usize)
+                    .map(|fields| fields.as_slice())
+                    .unwrap_or(&[])
+            }
+        }
+
+        let mut heap = Heap::new();
+        let obj_a = heap.alloc_object(0, 1);
+        let obj_b = heap.alloc_object(0, 1);
+        let payload_a = heap.payload_mut(obj_a);
+        payload_a[..8].copy_from_slice(&(obj_b.as_u32() as u64).to_le_bytes());
+        let payload_b = heap.payload_mut(obj_b);
+        payload_b[..8].copy_from_slice(&(obj_a.as_u32() as u64).to_le_bytes());
+
+        let layout = Layout {
+            fields: vec![vec![0]],
+        };
+
+        let mut roots = RootStack::new();
+        let base = roots.push_frame(1);
+        roots.set_slot(base, RootValue::Ptr(obj_a));
+
+        let report_live = heap.gc_with_layout(&roots, &layout);
+        assert_eq!(report_live.freed, 0);
+        assert_eq!(heap.header(obj_a).kind(), HeapKind::Object);
+        assert_eq!(heap.header(obj_b).kind(), HeapKind::Object);
+
+        roots.pop_frame(1);
+        let report_dead = heap.gc_with_layout(&roots, &layout);
+        assert_eq!(report_dead.freed, 2);
+        assert_eq!(heap.header(obj_a).kind(), HeapKind::Free);
+        assert_eq!(heap.header(obj_b).kind(), HeapKind::Free);
+    }
+
+    #[test]
+    fn gc_collects_array_cycles_when_unrooted() {
+        let mut heap = Heap::new();
+        let arr_a = heap.alloc_array(ElemKind::Ref, 1, 8);
+        let arr_b = heap.alloc_array(ElemKind::Ref, 1, 8);
+        let payload_a = heap.payload_mut(arr_a);
+        payload_a[..8].copy_from_slice(&(arr_b.as_u32() as u64).to_le_bytes());
+        let payload_b = heap.payload_mut(arr_b);
+        payload_b[..8].copy_from_slice(&(arr_a.as_u32() as u64).to_le_bytes());
+
+        let mut roots = RootStack::new();
+        let base = roots.push_frame(1);
+        roots.set_slot(base, RootValue::Ptr(arr_a));
+
+        let report_live = heap.gc(&roots);
+        assert_eq!(report_live.freed, 0);
+        assert_eq!(heap.header(arr_a).kind(), HeapKind::Array);
+        assert_eq!(heap.header(arr_b).kind(), HeapKind::Array);
+
+        roots.pop_frame(1);
+        let report_dead = heap.gc(&roots);
+        assert_eq!(report_dead.freed, 2);
+        assert_eq!(heap.header(arr_a).kind(), HeapKind::Free);
+        assert_eq!(heap.header(arr_b).kind(), HeapKind::Free);
     }
 }

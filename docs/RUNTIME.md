@@ -38,8 +38,8 @@ Payload layout:
 - Objects: fixed-width fields (8 bytes per field) for v0.x consistency.
 
 Notes:
-- Current runtime uses per-kind headers; the GC sprint will migrate to the uniform
-  header as part of the memory runtime work.
+- VM and WASM now use the uniform header for all heap objects.
+- Canonical numeric constants live in `crates/birddisk_core/src/runtime.rs`.
 
 ## Root tracking (explicit root stack)
 Root stack is maintained by codegen/runtime (no conservative scan).
@@ -87,6 +87,10 @@ Allocator:
 - Try free list first, then bump pointer.
 - If allocation fails, GC then retry; if still fails, trap OOM.
 - Free blocks use `kind=255` and store `size` + `next` in header fields.
+- Free list is kept address-sorted and coalesced to reduce fragmentation.
+
+Debug checks (tests only):
+- Optional header sanity checks validate kind/aux and trap with "Invalid heap header."
 
 ## GC metrics (v0.x)
 Expose simple counters for trust + performance tracking:
@@ -94,6 +98,7 @@ Expose simple counters for trust + performance tracking:
 - `bytes_in_use`, `peak_bytes_in_use` (live memory tracking).
 - `gc_runs`, `last_freed`, `last_live` (object counts).
 - `last_freed_bytes`, `last_live_bytes` (per-GC memory stats).
+- WASM tests expose `__bd_gc_last_freed` and `__bd_heap_high_water`.
 
 ## Book layout table (object scanning)
 Compiler emits a table of reference-field offsets per book id.
@@ -104,3 +109,8 @@ GC uses this table to traverse only reference fields in objects.
 - Cycles are collected (object <-> object, array cycles).
 - Arrays/strings scanned correctly (nested arrays, mixed element kinds).
 - OOM and null deref produce stable error codes + stack traces.
+
+## Current GC sprint status
+- VM: root stack, mark/sweep, and GC metrics in place with parity tests. VM does not yet reuse or coalesce freed blocks (known perf gap).
+- WASM: root stack, mark/sweep, free list reuse + coalescing, and test-only stats exports.
+- Header sanity checks available in tests (invalid kind/aux traps).
