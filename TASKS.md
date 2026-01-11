@@ -4,10 +4,23 @@ Keep scope tight. If it expands language surface area, it's likely out-of-scope 
 
 ---
 
-## Sprint 0 — VSCode extension (minimal) (0.5–1 day)
-- [ ] Create a VSCode extension for BirdDisk with syntax highlighting
-- [ ] Add basic language configuration (comments reserved, brackets, auto-closing)
-- [ ] Publish guidance for installing the extension locally
+## Sprint 0 — VSCode extension (phased)
+### Sprint 0A — Syntax + config (0.5–1 day)
+- [x] Create a VSCode extension for BirdDisk with syntax highlighting (TextMate)
+- [x] Add basic language configuration (comments reserved, brackets, auto-closing, indentation)
+- [x] Add snippets for core constructs (`rule`, `when`, `repeat`, `book`)
+- [x] Publish guidance for installing the extension locally
+
+### Sprint 0B — Basic completions + diagnostics (1–3 days)
+- [x] Add keyword + stdlib module completions (no type info)
+- [x] Add file-based module completions for `import`
+- [x] Wire `birddisk check --json` as diagnostics on save
+- [x] Optional: hook `birddisk fmt` as a document formatter
+
+### Sprint 0C — LSP/semantic features (future)
+- [x] Define LSP scope (hover, go-to, rename, type-aware completions)
+- [x] Implement a minimal language server wrapper around the compiler
+- [x] Add semantic tokens + inlay hints (stretch)
 
 Acceptance:
 - `.bd` files highlight correctly in VSCode
@@ -165,7 +178,7 @@ Record decisions in `docs/DECISIONS.md` for each item before implementation.
 - [x] String type + literal syntax + encoding
 - [x] Primitive types beyond `i64`/`bool`
 - [x] Stdlib scope and module/import system
-- [ ] Native backend approach (Cranelift vs LLVM) + target order
+- [x] Native backend approach (Cranelift vs LLVM) + target order
 
 Acceptance:
 - Each item above has a decided entry in `docs/DECISIONS.md`
@@ -286,3 +299,11 @@ Acceptance:
 
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)
+
+## Future — Native AOT follow-ups
+- [x] AOT wrapper: embed or pass GC layout so native GC can scan references correctly
+- [x] AOT wrapper: improve runtime lookup/linking error messaging (missing runtime rlib/staticlib)
+- [x] AOT wrapper: add JSON/trace-friendly runtime error output and optional return value reporting
+
+## Native runtime parity gaps (review)
+- [x] Native runtime: capture call stacks so runtime errors include trace frames (match VM/WASM JSON diagnostics)

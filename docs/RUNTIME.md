@@ -111,6 +111,6 @@ GC uses this table to traverse only reference fields in objects.
 - OOM and null deref produce stable error codes + stack traces.
 
 ## Current GC sprint status
-- VM: root stack, mark/sweep, and GC metrics in place with parity tests. VM does not yet reuse or coalesce freed blocks (known perf gap).
+- VM: root stack, mark/sweep, GC metrics, and free-list reuse in place with parity tests. VM does not coalesce beyond per-object slots.
 - WASM: root stack, mark/sweep, free list reuse + coalescing, and test-only stats exports.
 - Header sanity checks available in tests (invalid kind/aux traps).

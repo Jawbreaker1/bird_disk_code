@@ -1,0 +1,114 @@
+{
+  "scopeName": "source.birddisk",
+  "name": "BirdDisk",
+  "patterns": [
+    {"include": "#comments"},
+    {"include": "#strings"},
+    {"include": "#numbers"},
+    {"include": "#ruleDecl"},
+    {"include": "#bookDecl"},
+    {"include": "#fieldDecl"},
+    {"include": "#keywords"},
+    {"include": "#types"},
+    {"include": "#constants"},
+    {"include": "#operators"}
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.birddisk",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.birddisk",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.birddisk",
+              "match": "\\\\(\\\\|\"|n|r|t)"
+            }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.decimal.birddisk",
+          "match": "\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "ruleDecl": {
+      "patterns": [
+        {
+          "match": "\\b(rule)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {"name": "keyword.control.birddisk"},
+            "2": {"name": "entity.name.function.birddisk"}
+          }
+        }
+      ]
+    },
+    "bookDecl": {
+      "patterns": [
+        {
+          "match": "\\b(book)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {"name": "keyword.control.birddisk"},
+            "2": {"name": "entity.name.type.birddisk"}
+          }
+        }
+      ]
+    },
+    "fieldDecl": {
+      "patterns": [
+        {
+          "match": "\\b(field)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {"name": "keyword.control.birddisk"},
+            "2": {"name": "variable.other.member.birddisk"}
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.birddisk",
+          "match": "\\b(rule|set|put|yield|when|otherwise|repeat|while|end|import|book|field|new)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.birddisk",
+          "match": "\\b(i64|bool|string|u8)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.birddisk",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.birddisk",
+          "match": "(::|->|==|!=|<=|>=|&&|\\|\\||=|<|>|\\+|\\-|\\*|/|%)"
+        }
+      ]
+    }
+  }
+}

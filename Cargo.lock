@@ -94,6 +94,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "birddisk_lsp"
+version = "0.1.0"
+dependencies = [
+ "birddisk_core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "birddisk_native"
 version = "0.1.0"
 dependencies = [

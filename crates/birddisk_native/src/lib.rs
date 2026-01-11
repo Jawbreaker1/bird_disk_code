@@ -1,4 +1,5 @@
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Program, Stmt, Type, UnaryOp};
+use birddisk_core::TraceFrame;
 use birddisk_core::runtime as abi;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{types, AbiParam, InstBuilder, Value};
@@ -17,6 +18,7 @@ pub use birddisk_native_runtime as runtime;
 pub struct NativeError {
     pub code: Option<&'static str>,
     pub message: String,
+    pub trace: Vec<TraceFrame>,
 }
 
 pub const NATIVE_MAIN_SYMBOL: &str = "bd_main";
@@ -25,13 +27,19 @@ fn native_error(message: impl Into<String>) -> NativeError {
     NativeError {
         code: None,
         message: message.into(),
+        trace: Vec::new(),
     }
 }
 
-fn native_error_with_code(code: &'static str, message: impl Into<String>) -> NativeError {
+fn native_error_with_code_and_trace(
+    code: &'static str,
+    message: impl Into<String>,
+    trace: Vec<TraceFrame>,
+) -> NativeError {
     NativeError {
         code: Some(code),
         message: message.into(),
+        trace,
     }
 }
 
@@ -40,6 +48,8 @@ struct RuntimeFuncs {
     root_push: FuncId,
     root_pop: FuncId,
     root_set: FuncId,
+    trace_push: FuncId,
+    trace_pop: FuncId,
     has_error: FuncId,
     alloc_string: FuncId,
     alloc_array: FuncId,
@@ -89,6 +99,9 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64],
             &[],
         )?;
+        let trace_push =
+            declare_runtime_func(module, "bd_trace_push", &[types::I64, types::I64], &[])?;
+        let trace_pop = declare_runtime_func(module, "bd_trace_pop", &[types::I64], &[])?;
         let has_error =
             declare_runtime_func(module, "bd_has_error", &[types::I64], &[types::I64])?;
         let alloc_string = declare_runtime_func(
@@ -271,6 +284,8 @@ impl RuntimeFuncs {
             root_push,
             root_pop,
             root_set,
+            trace_push,
+            trace_pop,
             has_error,
             alloc_string,
             alloc_array,
@@ -380,6 +395,8 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
     builder.symbol("bd_root_push", runtime::bd_root_push as *const u8);
     builder.symbol("bd_root_pop", runtime::bd_root_pop as *const u8);
     builder.symbol("bd_root_set", runtime::bd_root_set as *const u8);
+    builder.symbol("bd_trace_push", runtime::bd_trace_push as *const u8);
+    builder.symbol("bd_trace_pop", runtime::bd_trace_pop as *const u8);
     builder.symbol("bd_has_error", runtime::bd_has_error as *const u8);
     builder.symbol("bd_alloc_string", runtime::bd_alloc_string as *const u8);
     builder.symbol("bd_alloc_array", runtime::bd_alloc_array as *const u8);
@@ -414,6 +431,7 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
     let mut module = JITModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, layout) = build_book_layouts(program)?;
+    let trace_table = build_trace_table(program);
     let function_sigs = collect_function_sigs(program)?;
     let function_ids =
         declare_functions(&mut module, program, &function_sigs, |name| name.to_string())?;
@@ -449,6 +467,12 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
             &mut string_data,
             &mut string_counter,
         );
+        let trace_id = trace_table
+            .ids
+            .get(&full_name)
+            .copied()
+            .ok_or_else(|| native_error(format!("missing trace frame for '{}'.", full_name)))?;
+        compiler.emit_trace_push(trace_id);
         compiler.emit_root_push();
         compiler.bind_params(function, entry)?;
 
@@ -462,6 +486,7 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
         if !returned {
             let zero = compiler.builder.ins().iconst(types::I64, 0);
             compiler.emit_root_pop();
+            compiler.emit_trace_pop();
             compiler.builder.ins().return_(&[zero]);
         }
         compiler.emit_error_block();
@@ -485,19 +510,28 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
     let code = module.get_finalized_function(main_id);
     let mut runtime = runtime::Runtime::new();
     runtime.set_layout(layout);
+    runtime.set_trace(trace_table.frames.clone());
     runtime.set_input(input);
     let func = unsafe { std::mem::transmute::<_, fn(*mut runtime::Runtime) -> i64>(code) };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| func(&mut runtime)));
     match result {
         Ok(value) => {
             if let Some(trap) = runtime.take_error() {
-                return Err(native_error_with_code(trap.code, trap.message));
+                return Err(native_error_with_code_and_trace(
+                    trap.code,
+                    trap.message,
+                    trap.trace,
+                ));
             }
             Ok((value, runtime.take_output()))
         }
         Err(payload) => {
             if let Some(trap) = payload.downcast_ref::<runtime::NativeTrap>() {
-                Err(native_error_with_code(trap.code, trap.message))
+                Err(native_error_with_code_and_trace(
+                    trap.code,
+                    trap.message,
+                    trap.trace.clone(),
+                ))
             } else if let Some(message) = payload.downcast_ref::<&str>() {
                 Err(native_error(format!("native runtime panic: {message}")))
             } else if let Some(message) = payload.downcast_ref::<String>() {
@@ -527,7 +561,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
 
     let mut flag_builder = settings::builder();
     flag_builder
-        .set("is_pic", "false")
+        .set("is_pic", "true")
         .map_err(|err| native_error(format!("native isa flag error: {err}")))?;
     flag_builder
         .set("use_colocated_libcalls", "true")
@@ -542,6 +576,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
     let mut module = ObjectModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, _) = build_book_layouts(program)?;
+    let trace_table = build_trace_table(program);
     let function_sigs = collect_function_sigs(program)?;
     let function_ids =
         declare_functions(&mut module, program, &function_sigs, mangle_symbol)?;
@@ -577,6 +612,12 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
             &mut string_data,
             &mut string_counter,
         );
+        let trace_id = trace_table
+            .ids
+            .get(&full_name)
+            .copied()
+            .ok_or_else(|| native_error(format!("missing trace frame for '{}'.", full_name)))?;
+        compiler.emit_trace_push(trace_id);
         compiler.emit_root_push();
         compiler.bind_params(function, entry)?;
 
@@ -590,6 +631,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
         if !returned {
             let zero = compiler.builder.ins().iconst(types::I64, 0);
             compiler.emit_root_pop();
+            compiler.emit_trace_pop();
             compiler.builder.ins().return_(&[zero]);
         }
         compiler.emit_error_block();
@@ -607,6 +649,15 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
     product
         .emit()
         .map_err(|err| native_error(format!("native object emit failed: {err}")))
+}
+
+pub fn layout_for_program(program: &Program) -> Result<Vec<Vec<usize>>, NativeError> {
+    let (_, layout) = build_book_layouts(program)?;
+    Ok(layout)
+}
+
+pub fn trace_for_program(program: &Program) -> Result<Vec<TraceFrame>, NativeError> {
+    Ok(build_trace_table(program).frames)
 }
 
 struct NativeCompiler<'a, 'b, M: Module> {
@@ -671,6 +722,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         self.root_base = Some(base);
     }
 
+    fn emit_trace_push(&mut self, trace_id: i64) {
+        let id = self.builder.ins().iconst(types::I64, trace_id);
+        self.call_runtime_void(self.runtime.trace_push, &[self.rt_ptr, id]);
+    }
+
     fn emit_root_pop(&mut self) {
         let slot_count = self.root_slots.len() as i64;
         if slot_count == 0 {
@@ -678,6 +734,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         }
         let slots = self.builder.ins().iconst(types::I64, slot_count);
         self.call_runtime_void(self.runtime.root_pop, &[self.rt_ptr, slots]);
+    }
+
+    fn emit_trace_pop(&mut self) {
+        self.call_runtime_void(self.runtime.trace_pop, &[self.rt_ptr]);
     }
 
     fn bind_params(&mut self, function: &birddisk_core::ast::Function, entry: cranelift_codegen::ir::Block) -> Result<(), NativeError> {
@@ -791,6 +851,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             Stmt::Yield { expr, .. } => {
                 let value = self.emit_expr(expr, Some(&Type::I64))?;
                 self.emit_root_pop();
+                self.emit_trace_pop();
                 self.builder.ins().return_(&[value]);
                 Ok(true)
             }
@@ -2067,6 +2128,31 @@ fn collect_functions(program: &Program) -> Vec<(&birddisk_core::ast::Function, S
     out
 }
 
+struct TraceTable {
+    frames: Vec<TraceFrame>,
+    ids: HashMap<String, i64>,
+}
+
+fn build_trace_table(program: &Program) -> TraceTable {
+    let mut frames = Vec::new();
+    let mut ids = HashMap::new();
+    let mut insert = |name: String, span| {
+        let id = frames.len() as i64;
+        frames.push(TraceFrame { function: name.clone(), span });
+        ids.insert(name, id);
+    };
+    for func in &program.functions {
+        insert(func.name.clone(), func.span);
+    }
+    for book in &program.books {
+        for method in &book.methods {
+            let name = format!("{}::{}", book.name, method.name);
+            insert(name, method.span);
+        }
+    }
+    TraceTable { frames, ids }
+}
+
 fn build_book_layouts(
     program: &Program,
 ) -> Result<(HashMap<String, BookLayout>, Vec<Vec<usize>>), NativeError> {
@@ -2253,6 +2339,16 @@ mod tests {
         );
         assert_eq!(err.code, Some("E0403"));
         assert_eq!(err.message, "Array index out of bounds.");
+    }
+
+    #[test]
+    fn native_runtime_error_includes_trace() {
+        let err = run_source_error(
+            "rule boom() -> i64:\n  set xs: i64[] = [1].\n  yield xs[2].\nend\n\nrule main() -> i64:\n  yield boom().\nend\n",
+        );
+        assert!(err.trace.len() >= 2);
+        assert_eq!(err.trace[0].function, "boom");
+        assert_eq!(err.trace[1].function, "main");
     }
 
     #[test]

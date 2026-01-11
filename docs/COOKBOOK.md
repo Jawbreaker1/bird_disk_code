@@ -185,6 +185,29 @@ Build a native executable on the host:
 ./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./bird_app
 ./bird_app
 ```
+Optional reporting:
+- `BIRDDISK_JSON=1 ./bird_app` prints a JSON run report (includes `result` + `stdout`).
+- `BIRDDISK_RESULT=1 ./bird_app` prints the return value to stderr.
+
+Example runtime error JSON with trace:
+```birddisk
+rule boom() -> i64:
+  set xs: i64[] = [1].
+  yield xs[2].
+end
+
+rule main() -> i64:
+  yield boom().
+end
+```
+```sh
+./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./trace_app
+BIRDDISK_JSON=1 ./trace_app
+```
+Test note (optional):
+```sh
+BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddisk native_aot_json_trace_smoke
+```
 
 ---
 

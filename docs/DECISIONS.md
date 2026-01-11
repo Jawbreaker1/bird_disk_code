@@ -257,13 +257,13 @@ Questions:
 ## 10) Native backends (arm64/x86_64)
 status: decided (v0.x spike)
 date: 2026-01-12
-decision: Use Cranelift JIT for the native backend spike and target the host platform first.
-rationale: Cranelift integrates cleanly with Rust, supports fast iteration, and is already in the dependency tree; a JIT spike reduces build/ABI friction.
-impact: runtime ABI, build system, CI
+decision: Use Cranelift for native v0.x (JIT for dev + ObjectModule for AOT). Target order is host-first, then macOS arm64 + Linux x86_64, then Windows x86_64.
+rationale: Cranelift integrates cleanly with Rust, supports fast iteration, and is already in the dependency tree; host-first keeps bring-up fast while AOT relies on a stable ABI. The target order matches current dev + CI feasibility.
+impact: runtime ABI, build system, CI, docs/CLI AOT workflow
 
 Questions:
 - ABI and runtime support (GC, stack maps)?
-- Target order beyond host-first?
+- Stack maps vs explicit roots for native?
 
 Future improvements:
 - Evaluate LLVM for full AOT builds once native runtime and stack maps stabilize.

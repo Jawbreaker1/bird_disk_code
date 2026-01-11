@@ -179,6 +179,13 @@ Roadmap
 
 See TASKS.md.
 For agent workflow rules, see AGENT.md.
+For local VSCode install instructions, see docs/VSCODE.md.
+
+VSCode extension (local install)
+- In VSCode: Extensions → “Install Extension from Location…”
+- Select `editors/vscode` from this repo
+- Open a `.bd` file to activate syntax highlighting, snippets, completions, diagnostics, and formatting
+- Optional: build and enable the LSP server for hover/go-to/rename, semantic tokens, and inlay hints (`docs/VSCODE.md`).
 
 Upcoming (planned):
 - VSCode extension (syntax highlighting)

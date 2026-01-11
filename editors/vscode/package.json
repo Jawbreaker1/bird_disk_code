@@ -1,0 +1,70 @@
+{
+  "name": "birddisk",
+  "displayName": "BirdDisk",
+  "description": "BirdDisk language support (syntax highlighting).",
+  "version": "0.1.0",
+  "publisher": "birddisk",
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:birddisk"
+  ],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "BirdDisk",
+      "properties": {
+        "birddisk.compilerPath": {
+          "type": "string",
+          "default": "birddisk",
+          "description": "Path to the BirdDisk compiler (birddisk)."
+        },
+        "birddisk.enableDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run birddisk check --json on save."
+        },
+        "birddisk.enableLsp": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable the built-in BirdDisk LSP client for hover/definition/rename."
+        },
+        "birddisk.lspPath": {
+          "type": "string",
+          "default": "birddisk-lsp",
+          "description": "Path to the BirdDisk LSP server binary."
+        }
+      }
+    },
+    "languages": [
+      {
+        "id": "birddisk",
+        "aliases": [
+          "BirdDisk",
+          "birddisk"
+        ],
+        "extensions": [
+          ".bd"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "birddisk",
+        "scopeName": "source.birddisk",
+        "path": "./syntaxes/birddisk.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "birddisk",
+        "path": "./snippets/birddisk.json"
+      }
+    ]
+  }
+}

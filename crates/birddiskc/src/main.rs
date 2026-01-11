@@ -607,7 +607,7 @@ fn run_report(
                         err.message,
                         err.code.unwrap_or("E0400"),
                         runtime_spec_refs(err.code.unwrap_or("E0400")),
-                        Vec::new(),
+                        err.trace,
                     )],
                 },
             },
@@ -959,7 +959,7 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                         err.message,
                         err.code.unwrap_or("E0400"),
                         runtime_spec_refs(err.code.unwrap_or("E0400")),
-                        Vec::new(),
+                        err.trace,
                     ));
                 }
             }
@@ -1235,7 +1235,11 @@ fn emit_compiled(
                 let out_path = out.unwrap_or_else(|| default_exe_path(path));
                 let bytes = birddisk_native::emit_object(&program)
                     .map_err(|err| err.message)?;
-                build_native_executable(&bytes, path, &out_path)
+                let layout = birddisk_native::layout_for_program(&program)
+                    .map_err(|err| err.message)?;
+                let trace = birddisk_native::trace_for_program(&program)
+                    .map_err(|err| err.message)?;
+                build_native_executable(&bytes, path, &out_path, &layout, &trace)
             }
             _ => Err("emit format not supported for --engine native".to_string()),
         },
@@ -1260,7 +1264,13 @@ fn default_exe_path(path: &str) -> String {
     output.to_string_lossy().to_string()
 }
 
-fn build_native_executable(obj_bytes: &[u8], source_path: &str, out_path: &str) -> Result<(), String> {
+fn build_native_executable(
+    obj_bytes: &[u8],
+    source_path: &str,
+    out_path: &str,
+    layout: &[Vec<usize>],
+    trace: &[birddisk_core::TraceFrame],
+) -> Result<(), String> {
     let work_dir = native_work_dir()?;
     std::fs::create_dir_all(&work_dir).map_err(|err| err.to_string())?;
     let stem = Path::new(source_path)
@@ -1271,7 +1281,8 @@ fn build_native_executable(obj_bytes: &[u8], source_path: &str, out_path: &str) 
     std::fs::write(&obj_path, obj_bytes).map_err(|err| err.to_string())?;
 
     let wrapper_path = work_dir.join(format!("{stem}_wrapper.rs"));
-    std::fs::write(&wrapper_path, native_wrapper_source()).map_err(|err| err.to_string())?;
+    let wrapper = native_wrapper_source(layout, trace);
+    std::fs::write(&wrapper_path, wrapper).map_err(|err| err.to_string())?;
 
     let target_dir = target_profile_dir()?;
     let deps_dir = target_dir.join("deps");
@@ -1284,7 +1295,7 @@ fn build_native_executable(obj_bytes: &[u8], source_path: &str, out_path: &str) 
         }
     }
 
-    let status = process::Command::new(rustc)
+    let output = process::Command::new(&rustc)
         .arg("--edition=2021")
         .arg(&wrapper_path)
         .arg("-o")
@@ -1295,21 +1306,203 @@ fn build_native_executable(obj_bytes: &[u8], source_path: &str, out_path: &str) 
         .arg(&deps_dir)
         .arg("-C")
         .arg(format!("link-arg={}", obj_path.display()))
-        .status()
-        .map_err(|err| err.to_string())?;
+        .output()
+        .map_err(|err| format!("failed to invoke rustc ({rustc}): {err}"))?;
 
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
-        Err("native link failed".to_string())
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let hint = "run `cargo build -p birddisk_native_runtime` to build the runtime crate";
+        Err(format!("native link failed (rustc exit {}). {hint}\n{stderr}", output.status))
     }
 }
 
-fn native_wrapper_source() -> String {
+fn native_wrapper_source(layout: &[Vec<usize>], trace: &[birddisk_core::TraceFrame]) -> String {
     let entry = birddisk_native::NATIVE_MAIN_SYMBOL;
-    format!(
-        "use std::io::Read;\n\nextern \"C\" {{\n    fn {entry}(rt: *mut birddisk_native_runtime::Runtime) -> i64;\n}}\n\nfn main() {{\n    let mut input = String::new();\n    let _ = std::io::stdin().read_to_string(&mut input);\n    let mut runtime = birddisk_native_runtime::Runtime::new();\n    runtime.set_input(&input);\n    let _result = unsafe {{ {entry}(&mut runtime) }};\n    if let Some(err) = runtime.take_error() {{\n        eprintln!(\"runtime error {{}}: {{}}\", err.code, err.message);\n        std::process::exit(1);\n    }}\n    let output = runtime.take_output();\n    print!(\"{{}}\", output);\n}}\n"
-    )
+    let layout_literal = format_layout_literal(layout);
+    let trace_literal = format_trace_literal(trace);
+    let tool = birddisk_core::TOOL_NAME;
+    let version = birddisk_core::VERSION;
+    let template = r#"use std::fmt::Write;
+use std::io::Read;
+
+const TOOL: &str = "__TOOL__";
+const VERSION: &str = "__VERSION__";
+
+extern "C" {
+    fn __ENTRY__(rt: *mut birddisk_native_runtime::Runtime) -> i64;
+}
+
+fn json_enabled() -> bool {
+    match std::env::var("BIRDDISK_JSON") {
+        Ok(value) => value != "0",
+        Err(_) => false,
+    }
+}
+
+fn result_enabled() -> bool {
+    match std::env::var("BIRDDISK_RESULT") {
+        Ok(value) => value != "0",
+        Err(_) => false,
+    }
+}
+
+fn json_escape(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{08}' => out.push_str("\\b"),
+            '\u{0c}' => out.push_str("\\f"),
+            ch if ch < '\u{20}' => {
+                let _ = write!(out, "\\u{:04x}", ch as u32);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+fn emit_json_success(result: i64, stdout: &str) {
+    let mut out = String::new();
+    out.push_str("{\"tool\":\"");
+    out.push_str(TOOL);
+    out.push_str("\",\"version\":\"");
+    out.push_str(VERSION);
+    out.push_str("\",\"ok\":true,\"result\":");
+    out.push_str(&result.to_string());
+    out.push_str(",\"stdout\":\"");
+    out.push_str(&json_escape(stdout));
+    out.push_str("\",\"diagnostics\":[]}");
+    println!("{out}");
+}
+
+fn push_trace_json(out: &mut String, trace: &[birddisk_native_runtime::TraceFrame]) {
+    out.push_str("\"trace\":[");
+    for (idx, frame) in trace.iter().enumerate() {
+        if idx > 0 {
+            out.push_str(",");
+        }
+        out.push_str("{\"function\":\"");
+        out.push_str(&json_escape(&frame.function));
+        out.push_str("\",\"span\":{\"start\":{\"line\":");
+        out.push_str(&frame.span.start.line.to_string());
+        out.push_str(",\"col\":");
+        out.push_str(&frame.span.start.col.to_string());
+        out.push_str("},\"end\":{\"line\":");
+        out.push_str(&frame.span.end.line.to_string());
+        out.push_str(",\"col\":");
+        out.push_str(&frame.span.end.col.to_string());
+        out.push_str("}}}");
+    }
+    out.push_str("]");
+}
+
+fn emit_json_error(code: &str, message: &str, trace: &[birddisk_native_runtime::TraceFrame]) -> ! {
+    let mut out = String::new();
+    out.push_str("{\"tool\":\"");
+    out.push_str(TOOL);
+    out.push_str("\",\"version\":\"");
+    out.push_str(VERSION);
+    out.push_str("\",\"ok\":false,\"result\":null,\"stdout\":null,\"diagnostics\":[");
+    out.push_str("{\"code\":\"");
+    out.push_str(code);
+    out.push_str("\",\"severity\":\"error\",\"message\":\"");
+    out.push_str(&json_escape(message));
+    out.push_str("\",\"file\":\"\",\"span\":{\"start\":{\"line\":1,\"col\":1},\"end\":{\"line\":1,\"col\":1}},");
+    push_trace_json(&mut out, trace);
+    out.push_str(",\"notes\":[],\"spec_refs\":[],\"fixits\":[],\"help\":null}");
+    out.push_str("]}");
+    println!("{out}");
+    std::process::exit(1);
+}
+
+fn maybe_report_result(result: i64) {
+    if result_enabled() {
+        eprintln!("birddisk result: {result}");
+    }
+}
+
+fn main() {
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+    let mut runtime = birddisk_native_runtime::Runtime::new();
+    let layout: Vec<Vec<usize>> = __LAYOUT__;
+    runtime.set_layout(layout);
+    let trace: Vec<birddisk_native_runtime::TraceFrame> = __TRACE__;
+    runtime.set_trace(trace);
+    runtime.set_input(&input);
+    let result = unsafe { __ENTRY__(&mut runtime) };
+    if let Some(err) = runtime.take_error() {
+        if json_enabled() {
+            emit_json_error(err.code, err.message, &err.trace);
+        }
+        eprintln!("runtime error {}: {}", err.code, err.message);
+        std::process::exit(1);
+    }
+    let output = runtime.take_output();
+    if json_enabled() {
+        emit_json_success(result, &output);
+        return;
+    }
+    print!("{output}");
+    maybe_report_result(result);
+}
+"#;
+    template
+        .replace("__ENTRY__", entry)
+        .replace("__LAYOUT__", &layout_literal)
+        .replace("__TRACE__", &trace_literal)
+        .replace("__TOOL__", tool)
+        .replace("__VERSION__", version)
+}
+
+fn format_layout_literal(layout: &[Vec<usize>]) -> String {
+    let mut output = String::from("vec![");
+    for (outer_idx, fields) in layout.iter().enumerate() {
+        if outer_idx > 0 {
+            output.push_str(", ");
+        }
+        output.push_str("vec![");
+        for (idx, field) in fields.iter().enumerate() {
+            if idx > 0 {
+                output.push_str(", ");
+            }
+            output.push_str(&field.to_string());
+        }
+        output.push(']');
+    }
+    output.push(']');
+    output
+}
+
+fn format_trace_literal(frames: &[birddisk_core::TraceFrame]) -> String {
+    let mut output = String::from("vec![");
+    for (idx, frame) in frames.iter().enumerate() {
+        if idx > 0 {
+            output.push_str(", ");
+        }
+        let function = format!("{:?}", frame.function);
+        output.push_str("birddisk_native_runtime::TraceFrame { function: ");
+        output.push_str(&function);
+        output.push_str(".to_string()");
+        output.push_str(", span: birddisk_native_runtime::Span { start: birddisk_native_runtime::Position { line: ");
+        output.push_str(&frame.span.start.line.to_string());
+        output.push_str(", col: ");
+        output.push_str(&frame.span.start.col.to_string());
+        output.push_str(" }, end: birddisk_native_runtime::Position { line: ");
+        output.push_str(&frame.span.end.line.to_string());
+        output.push_str(", col: ");
+        output.push_str(&frame.span.end.col.to_string());
+        output.push_str(" } } }");
+    }
+    output.push(']');
+    output
 }
 
 fn native_work_dir() -> Result<PathBuf, String> {
@@ -1337,17 +1530,40 @@ fn workspace_root() -> Result<PathBuf, String> {
 }
 
 fn find_runtime_rlib(deps_dir: &Path) -> Result<PathBuf, String> {
-    let entries = std::fs::read_dir(deps_dir).map_err(|err| err.to_string())?;
+    let entries = std::fs::read_dir(deps_dir).map_err(|err| {
+        format!(
+            "unable to read runtime deps dir '{}': {err}. Run `cargo build -p birddisk_native_runtime` first.",
+            deps_dir.display()
+        )
+    })?;
+    let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
     for entry in entries {
         let entry = entry.map_err(|err| err.to_string())?;
         let path = entry.path();
-        if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
-            if name.starts_with("libbirddisk_native_runtime-") && name.ends_with(".rlib") {
-                return Ok(path);
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !name.starts_with("libbirddisk_native_runtime-") || !name.ends_with(".rlib") {
+            continue;
+        }
+        let modified = path
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .unwrap_or(std::time::UNIX_EPOCH);
+        match &best {
+            Some((current, _)) if *current >= modified => {}
+            _ => {
+                best = Some((modified, path));
             }
         }
     }
-    Err("unable to locate birddisk_native_runtime rlib".to_string())
+    if let Some((_, path)) = best {
+        return Ok(path);
+    }
+    Err(format!(
+        "unable to locate birddisk_native_runtime rlib in '{}'. Run `cargo build -p birddisk_native_runtime` first.",
+        deps_dir.display()
+    ))
 }
 
 fn mismatch_diagnostic(path: &str, vm_result: i64, wasm_result: i64) -> birddisk_core::Diagnostic {
@@ -1499,6 +1715,7 @@ fn runtime_spec_refs(code: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{env, fs, process};
 
     fn cmd(args: &[&str]) -> Result<Command, String> {
         let args = args.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -1693,5 +1910,52 @@ mod tests {
                 tags: Vec::new(),
             }
         );
+    }
+
+    #[test]
+    fn native_wrapper_exposes_json_and_result_toggles() {
+        let wrapper = native_wrapper_source(&[], &[]);
+        assert!(wrapper.contains("BIRDDISK_JSON"));
+        assert!(wrapper.contains("BIRDDISK_RESULT"));
+        assert!(wrapper.contains("diagnostics"));
+        assert!(wrapper.contains("result"));
+    }
+
+    #[test]
+    fn native_aot_json_trace_smoke() {
+        if env::var("BIRDDISK_RUN_NATIVE_AOT_TEST").is_err() {
+            return;
+        }
+        let source = "rule boom() -> i64:\n  set xs: i64[] = [1].\n  yield xs[2].\nend\n\nrule main() -> i64:\n  yield boom().\nend\n";
+        let mut path = env::temp_dir();
+        path.push(format!("birddisk_native_trace_{}.bd", std::process::id()));
+        fs::write(&path, source).expect("write temp source");
+        let path_str = path.to_string_lossy().to_string();
+
+        let program = birddisk_core::parse_and_typecheck(&path_str).expect("parse program");
+        let obj = birddisk_native::emit_object(&program).expect("emit object");
+        let layout = birddisk_native::layout_for_program(&program).expect("layout");
+        let trace = birddisk_native::trace_for_program(&program).expect("trace");
+
+        let mut exe_path = env::temp_dir();
+        exe_path.push(format!("birddisk_native_trace_{}.exe", std::process::id()));
+        let exe_str = exe_path.to_string_lossy().to_string();
+        build_native_executable(&obj, &path_str, &exe_str, &layout, &trace)
+            .expect("build native exe");
+
+        let output = process::Command::new(&exe_path)
+            .env("BIRDDISK_JSON", "1")
+            .output()
+            .expect("run native exe");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed: serde_json::Value =
+            serde_json::from_str(stdout.trim()).expect("parse json");
+        assert_eq!(parsed["ok"], false);
+        assert_eq!(parsed["diagnostics"][0]["code"], "E0403");
+        assert_eq!(parsed["diagnostics"][0]["trace"][0]["function"], "boom");
+        assert_eq!(parsed["diagnostics"][0]["trace"][1]["function"], "main");
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&exe_path);
     }
 }

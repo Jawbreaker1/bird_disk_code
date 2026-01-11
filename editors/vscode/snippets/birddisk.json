@@ -1,0 +1,44 @@
+{
+  "Rule": {
+    "prefix": "rule",
+    "body": [
+      "rule ${1:name}(${2}) -> ${3:i64}:",
+      "  ${0}",
+      "end"
+    ],
+    "description": "Define a function"
+  },
+  "When": {
+    "prefix": "when",
+    "body": [
+      "when ${1:cond}:",
+      "  ${0}",
+      "otherwise:",
+      "  ",
+      "end"
+    ],
+    "description": "Conditional block"
+  },
+  "Repeat": {
+    "prefix": "repeat",
+    "body": [
+      "repeat while ${1:cond}:",
+      "  ${0}",
+      "end"
+    ],
+    "description": "Repeat loop"
+  },
+  "Book": {
+    "prefix": "book",
+    "body": [
+      "book ${1:Name}:",
+      "  field ${2:field}: ${3:i64}.",
+      "",
+      "  rule init(self: ${1:Name}) -> ${1:Name}:",
+      "    yield self.",
+      "  end",
+      "end"
+    ],
+    "description": "Define a book"
+  }
+}

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use birddisk_core::runtime as abi;
+pub use birddisk_core::{Position, Span, TraceFrame};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
@@ -39,12 +40,17 @@ pub(crate) enum ElemKind {
 pub struct NativeTrap {
     pub code: &'static str,
     pub message: &'static str,
+    pub trace: Vec<TraceFrame>,
 }
 
 fn set_error(rt: &Runtime, code: &'static str, message: &'static str) {
     let mut error = rt.error.borrow_mut();
     if error.is_none() {
-        *error = Some(NativeTrap { code, message });
+        *error = Some(NativeTrap {
+            code,
+            message,
+            trace: rt.trace_snapshot(),
+        });
     }
 }
 
@@ -162,6 +168,43 @@ impl RootStack {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+pub(crate) struct TraceStack {
+    frames: Vec<usize>,
+}
+
+impl TraceStack {
+    pub(crate) fn new() -> Self {
+        Self { frames: Vec::new() }
+    }
+
+    pub(crate) fn push(&mut self, id: usize) -> bool {
+        if self.frames.try_reserve_exact(1).is_err() {
+            return false;
+        }
+        self.frames.push(id);
+        true
+    }
+
+    pub(crate) fn pop(&mut self) {
+        self.frames.pop();
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.frames.clear();
+    }
+
+    pub(crate) fn snapshot(&self, table: &[TraceFrame]) -> Vec<TraceFrame> {
+        let mut trace = Vec::new();
+        for id in self.frames.iter().rev() {
+            if let Some(frame) = table.get(*id) {
+                trace.push(frame.clone());
+            }
+        }
+        trace
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct HeapStats {
     pub(crate) alloc_count: usize,
@@ -191,9 +234,11 @@ pub(crate) struct Heap {
 pub struct Runtime {
     heap: Heap,
     roots: RootStack,
+    trace: TraceStack,
     input: VecDeque<String>,
     output: String,
     layout: Vec<Vec<usize>>,
+    trace_frames: Vec<TraceFrame>,
     gc_threshold: usize,
     error: RefCell<Option<NativeTrap>>,
 }
@@ -203,9 +248,11 @@ impl Runtime {
         Self {
             heap: Heap::new(),
             roots: RootStack::new(),
+            trace: TraceStack::new(),
             input: VecDeque::new(),
             output: String::new(),
             layout: Vec::new(),
+            trace_frames: Vec::new(),
             gc_threshold: usize::MAX,
             error: RefCell::new(None),
         }
@@ -223,6 +270,11 @@ impl Runtime {
         self.layout = layout;
     }
 
+    pub fn set_trace(&mut self, frames: Vec<TraceFrame>) {
+        self.trace_frames = frames;
+        self.trace.clear();
+    }
+
     pub fn set_input(&mut self, input: &str) {
         self.input = split_lines(input);
     }
@@ -237,6 +289,10 @@ impl Runtime {
 
     pub fn take_error(&self) -> Option<NativeTrap> {
         self.error.borrow_mut().take()
+    }
+
+    fn trace_snapshot(&self) -> Vec<TraceFrame> {
+        self.trace.snapshot(&self.trace_frames)
     }
 
     fn push_output(&mut self, value: &str) {
@@ -735,6 +791,37 @@ pub extern "C-unwind" fn bd_root_set(rt: *mut Runtime, slot: u64, handle: u64) {
         }
     };
     rt.roots.set_slot(slot, RootValue::Ptr(handle));
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_trace_push(rt: *mut Runtime, id: u64) {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return;
+    }
+    let id = match usize::try_from(id) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid trace frame.");
+            return;
+        }
+    };
+    if id >= rt.trace_frames.len() {
+        runtime_error(rt, "Invalid trace frame.");
+        return;
+    }
+    if !rt.trace.push(id) {
+        oom_error(rt);
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_trace_pop(rt: *mut Runtime) {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return;
+    }
+    rt.trace.pop();
 }
 
 #[no_mangle]

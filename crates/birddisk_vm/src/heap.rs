@@ -102,13 +102,21 @@ pub(crate) struct HeapStats {
 #[derive(Debug, Default)]
 pub(crate) struct Heap {
     objects: Vec<HeapObject>,
+    free_list: Vec<FreeBlock>,
     stats: HeapStats,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FreeBlock {
+    handle: HeapHandle,
+    size: usize,
 }
 
 impl Heap {
     pub(crate) fn new() -> Self {
         Self {
             objects: Vec::new(),
+            free_list: Vec::new(),
             stats: HeapStats::default(),
         }
     }
@@ -174,7 +182,7 @@ impl Heap {
         let mut freed = 0;
         let mut live = 0;
         let mut freed_bytes = 0;
-        for obj in &mut self.objects {
+        for (index, obj) in self.objects.iter_mut().enumerate() {
             if obj.header.kind() == HeapKind::Free {
                 continue;
             }
@@ -183,6 +191,10 @@ impl Heap {
                 live += 1;
             } else {
                 let reclaimed = free_object(obj);
+                self.free_list.push(FreeBlock {
+                    handle: HeapHandle(index as u32),
+                    size: reclaimed,
+                });
                 freed_bytes += reclaimed;
                 self.stats.bytes_in_use = self.stats.bytes_in_use.saturating_sub(reclaimed);
                 freed += 1;
@@ -205,6 +217,21 @@ impl Heap {
 
     fn alloc(&mut self, header: HeapHeader, payload_len: usize) -> HeapHandle {
         let payload_len = align_up(payload_len, 8);
+        if let Some(handle) = self.take_free_block(payload_len) {
+            let obj = &mut self.objects[handle.0 as usize];
+            obj.header = header;
+            if obj.payload.len() != payload_len {
+                obj.payload.resize(payload_len, 0);
+            }
+            obj.payload.fill(0);
+            self.stats.alloc_count += 1;
+            self.stats.bytes_allocated += payload_len;
+            self.stats.bytes_in_use += payload_len;
+            if self.stats.bytes_in_use > self.stats.peak_bytes_in_use {
+                self.stats.peak_bytes_in_use = self.stats.bytes_in_use;
+            }
+            return handle;
+        }
         let payload = vec![0; payload_len];
         let id = self.objects.len() as u32;
         self.objects.push(HeapObject { header, payload });
@@ -215,6 +242,18 @@ impl Heap {
             self.stats.peak_bytes_in_use = self.stats.bytes_in_use;
         }
         HeapHandle(id)
+    }
+
+    fn take_free_block(&mut self, size: usize) -> Option<HeapHandle> {
+        let mut best_idx = None;
+        let mut best_size = usize::MAX;
+        for (idx, block) in self.free_list.iter().enumerate() {
+            if block.size >= size && block.size < best_size {
+                best_idx = Some(idx);
+                best_size = block.size;
+            }
+        }
+        best_idx.map(|idx| self.free_list.swap_remove(idx).handle)
     }
 
     fn mark_from_roots<L: HeapLayout>(&mut self, roots: &[RootValue], layout: &L) -> usize {
@@ -369,8 +408,7 @@ pub(crate) struct GcReport {
 
 fn free_object(obj: &mut HeapObject) -> usize {
     let freed = obj.payload.len();
-    obj.header = HeapHeader::new(HeapKind::Free, 0, 0, 0);
-    obj.payload.clear();
+    obj.header = HeapHeader::new(HeapKind::Free, 0, freed as u32, 0);
     freed
 }
 
@@ -505,6 +543,18 @@ mod tests {
         assert_eq!(heap.header(keep).kind(), HeapKind::String);
         assert_eq!(heap.header(drop1).kind(), HeapKind::Free);
         assert_eq!(heap.header(drop2).kind(), HeapKind::Free);
+    }
+
+    #[test]
+    fn heap_reuses_freed_blocks() {
+        let mut heap = Heap::new();
+        let _first = heap.alloc_string(8);
+        let _second = heap.alloc_object(1, 2);
+        let roots = RootStack::new();
+        let _ = heap.gc(&roots);
+        let count_before = heap.objects.len();
+        let _reuse = heap.alloc_string(8);
+        assert_eq!(heap.objects.len(), count_before);
     }
 
     #[test]
