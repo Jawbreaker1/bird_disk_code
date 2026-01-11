@@ -14,6 +14,7 @@ Notes:
 - Comments are reserved in the language today; the editor config uses `//` for convenience.
 - By default, diagnostics are provided by `birddiskc check --json`.
 - Configure the compiler path via the `birddisk.compilerPath` setting if needed.
+- Use `birddisk.entryFile` to suppress missing-main diagnostics in module files.
 - Formatting uses `birddiskc fmt` on the current document.
 
 ## LSP (optional)

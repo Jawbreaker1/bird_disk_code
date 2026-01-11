@@ -51,7 +51,9 @@ function activate(context) {
   const config = vscode.workspace.getConfiguration('birddisk');
   const enableLsp = config.get('enableLsp', false);
   const lspPath = config.get('lspPath', 'birddisk-lsp');
-  const lspClient = enableLsp ? new LspClient(output, diagnostics) : null;
+  const lspClient = enableLsp
+    ? new LspClient(output, diagnostics, (uri) => resolveEntryFilePathForUri(uri))
+    : null;
   const lspRunning = lspClient ? lspClient.start(lspPath, workspaceRootUri()) : false;
 
   const formatProvider = vscode.languages.registerDocumentFormattingEditProvider(
@@ -329,7 +331,10 @@ function runDiagnostics(document, diagnostics, output) {
       return;
     }
     const list = Array.isArray(report.diagnostics) ? report.diagnostics : [];
-    const items = list.map((diag) => mapDiagnostic(diag, document));
+    const entryFile = resolveEntryFilePath(document);
+    const isEntry = entryFile ? pathsEqual(entryFile, document.uri.fsPath) : true;
+    const filtered = isEntry ? list : list.filter((diag) => diag.code !== 'E0309');
+    const items = filtered.map((diag) => mapDiagnostic(diag, document));
     diagnostics.set(document.uri, items);
   });
 }
@@ -395,6 +400,43 @@ function workspaceRootUri() {
     return null;
   }
   return folders[0].uri.toString();
+}
+
+function resolveEntryFilePath(document) {
+  const config = vscode.workspace.getConfiguration('birddisk', document.uri);
+  const entry = (config.get('entryFile', '') || '').trim();
+  if (!entry) {
+    return null;
+  }
+  if (path.isAbsolute(entry)) {
+    return path.normalize(entry);
+  }
+  const root = workspaceFolderFor(document.uri);
+  if (root) {
+    return path.normalize(path.join(root, entry));
+  }
+  return path.normalize(path.join(path.dirname(document.uri.fsPath), entry));
+}
+
+function resolveEntryFilePathForUri(uriString) {
+  const uri = vscode.Uri.parse(uriString);
+  const config = vscode.workspace.getConfiguration('birddisk', uri);
+  const entry = (config.get('entryFile', '') || '').trim();
+  if (!entry) {
+    return null;
+  }
+  if (path.isAbsolute(entry)) {
+    return path.normalize(entry);
+  }
+  const root = workspaceFolderFor(uri);
+  if (root) {
+    return path.normalize(path.join(root, entry));
+  }
+  return path.normalize(path.join(path.dirname(uri.fsPath), entry));
+}
+
+function pathsEqual(a, b) {
+  return path.normalize(a) === path.normalize(b);
 }
 
 function formatDocument(document, output) {

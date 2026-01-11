@@ -33,6 +33,11 @@
           "default": false,
           "description": "Enable the built-in BirdDisk LSP client for hover/definition/rename."
         },
+        "birddisk.entryFile": {
+          "type": "string",
+          "default": "",
+          "description": "Entry file path for diagnostics (relative to workspace root or absolute)."
+        },
         "birddisk.lspPath": {
           "type": "string",
           "default": "birddisk-lsp",

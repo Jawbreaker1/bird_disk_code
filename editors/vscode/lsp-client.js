@@ -1,10 +1,12 @@
 const cp = require('child_process');
+const path = require('path');
 const vscode = require('vscode');
 
 class LspClient {
-  constructor(output, diagnostics) {
+  constructor(output, diagnostics, entryFileProvider) {
     this.output = output;
     this.diagnostics = diagnostics;
+    this.entryFileProvider = entryFileProvider;
     this.proc = null;
     this.buffer = Buffer.alloc(0);
     this.nextId = 1;
@@ -153,7 +155,12 @@ class LspClient {
       return;
     }
     const uri = vscode.Uri.parse(params.uri);
-    const diagnostics = params.diagnostics.map((diag) => lspDiagnosticToVs(diag));
+    const entryFile = this.entryFileProvider ? this.entryFileProvider(params.uri) : null;
+    const isEntry = entryFile ? pathsEqual(entryFile, uri.fsPath) : true;
+    const filtered = isEntry
+      ? params.diagnostics
+      : params.diagnostics.filter((diag) => diag.code !== 'E0309');
+    const diagnostics = filtered.map((diag) => lspDiagnosticToVs(diag));
     this.diagnostics.set(uri, diagnostics);
   }
 
@@ -311,6 +318,10 @@ function extractHoverText(contents) {
     return contents.value;
   }
   return null;
+}
+
+function pathsEqual(a, b) {
+  return path.normalize(a) === path.normalize(b);
 }
 
 module.exports = {

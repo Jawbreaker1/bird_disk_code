@@ -381,6 +381,7 @@ Implement:
 - [ ] Optimization passes (const fold, dead code, inlining)
 - [ ] GC tuning + performance metrics
 - [ ] Concurrency model decision + minimal primitives
+- [ ] LSP: Go-to-definition across imported modules (multi-file symbol index)
 
 Add tests:
 - [ ] Cross-platform build checks
