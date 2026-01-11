@@ -37,7 +37,7 @@ Questions:
   `obj.field` with alternate terminator, or keyword-based access?
 - Class/struct keywords: `class`, `struct`, or unify?
 - Methods: `self` vs `this`, explicit receiver?
-- Constructors: `new Type(...)` vs `Type(...)` vs `init` method?
+- Constructor method name: `init` inside the book, called by `new BookName(...)` if present.
 - Field mutability: `mut` keyword or `set/put` semantics?
 
 ---

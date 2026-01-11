@@ -1,6 +1,6 @@
 import app::stats.
 
 rule main() -> i64:
-  set stats: Stats = app::stats::new_stats().
+  set stats: Stats = new Stats().
   yield stats::compute().
 end

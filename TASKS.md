@@ -176,6 +176,7 @@ Record decisions in `docs/DECISIONS.md` for each item before implementation.
 
 - [x] Member access syntax (confirmed: `::`) and method call shape
 - [x] Object model scope: class/struct keywords, methods, constructors
+- [x] Constructor naming/format for book instantiation (e.g. `new`, `init`, factories)
 - [x] Memory model/GC strategy
 - [x] Runtime error model + stack trace format
 - [x] String type + literal syntax + encoding

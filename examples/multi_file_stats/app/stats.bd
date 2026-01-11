@@ -1,6 +1,10 @@
 import app::math.
 
 book Stats:
+  rule init(self: Stats) -> Stats:
+    yield self.
+  end
+
   rule compute(self: Stats) -> i64:
     set base: i64 = 21.
     set math: Math = app::math::new_math().
