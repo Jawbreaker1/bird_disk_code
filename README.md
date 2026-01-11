@@ -40,69 +40,44 @@ end
 ```
 
 Quick start
-1) Create a `.bd` file (BirdDisk source).
-```birddisk
-rule main() -> i64:
-  yield 42.
-end
-```
-2) Build the CLI.
+1) Build the CLI.
 ```sh
 cargo build -p birddiskc
 ```
-3) Run in the VM.
-```sh
-./target/debug/birddisk run path/to/file.bd --engine vm --json
+2) Create `hello.bd`.
+```birddisk
+import std::io.
+
+rule main() -> i64:
+  yield std::io::print("Hello, BirdDisk!\n").
+end
 ```
-4) Run with a JSON report file (optional).
+3) Run in the VM (reference interpreter).
 ```sh
-./target/debug/birddisk run path/to/file.bd --engine vm --report report.json
+./target/debug/birddisk run hello.bd --engine vm --json
 ```
-5) Run with stdin/stdout files (optional).
+4) Run in WASM (portable backend).
 ```sh
-./target/debug/birddisk run path/to/file.bd --engine vm --json --stdin input.txt --stdout output.txt
+./target/debug/birddisk run hello.bd --engine wasm --json
 ```
-6) Run in WASM (optional).
+5) Build a native executable (host).
 ```sh
-./target/debug/birddisk run path/to/file.bd --engine wasm --json
+./target/debug/birddisk run hello.bd --engine native --emit exe --out ./bird_hello
+./bird_hello
 ```
-7) Inspect generated WAT (optional).
-```sh
-./target/debug/birddisk run path/to/file.bd --engine wasm --emit wat
-```
-8) Write a .wasm artifact (optional).
-```sh
-./target/debug/birddisk run path/to/file.bd --engine wasm --emit wasm
-```
-If the program uses arrays, the emitted WASM module imports `env.bd_trap`
-for runtime error reporting; `birddisk run` provides it automatically.
-If the program uses `std::string::from_bytes`, the emitted WASM module
-also imports `env.bd_validate_utf8` and exports `memory`.
-9) Run on the native backend (optional, JIT on host).
-```sh
-./target/debug/birddisk run path/to/file.bd --engine native --json
-```
-10) Emit a native object or executable (optional, host).
-```sh
-./target/debug/birddisk run path/to/file.bd --engine native --emit obj
-./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./bird_app
-```
-11) Build and run the terminal calculator as a native executable.
-```sh
-./target/debug/birddisk run examples/terminal_calculator.bd --engine native --emit exe --out ./term_calculator
-printf "12\n+\n30\n" | ./term_calculator
-```
-11) Run differential tests (optional).
-```sh
-./target/debug/birddisk test --json
-```
-12) Filter tests by directory, tag, or engine (optional).
-```sh
-./target/debug/birddisk test --json --dir examples --tag while
-./target/debug/birddisk test --json --engine vm --dir vm_tests
-```
-Tags match directory names and file stem tokens (split on non-alphanumeric).
-Default test dirs are `examples/` and `tests/` if present.
+6) Optional: install the VSCode extension (syntax + LSP).
+See docs/VSCODE.md.
+
+The VM is the golden reference for correctness; WASM and native backends
+are compared against it during development.
+
+WASM notes (advanced):
+- If a program uses arrays, the emitted WASM module imports `env.bd_trap`
+  for runtime error reporting; `birddisk run` provides it automatically.
+- If a program uses `std::string::from_bytes`, the emitted WASM module
+  also imports `env.bd_validate_utf8` and exports `memory`.
+
+More commands and flags are listed in the CLI section below.
 
 Examples
 - `examples/minimal_main.bd` (smallest runnable program)
@@ -193,7 +168,7 @@ VSCode extension (local install)
 - Optional: build and enable the LSP server for hover/go-to/rename, semantic tokens, and inlay hints (`docs/VSCODE.md`).
 
 Upcoming (planned):
-- VSCode extension (syntax highlighting)
+- VSCode extension maintenance (syntax/LSP updates)
 - GC runtime (tracing mark/sweep)
 - std::time (clock/timers)
 - Native backend spike
