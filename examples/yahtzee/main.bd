@@ -1,0 +1,35 @@
+import std::io.
+import std::string.
+import std::time.
+import app::ui.
+import app::input.
+import app::game.
+import app::player.
+import app::rng.
+
+rule main() -> i64:
+  set ignored: i64 = 0.
+  put ignored = app::ui::banner().
+  put ignored = app::ui::println("Hot-seat multiplayer Yahtzee. Numbers only.").
+  set count: i64 = app::input::read_i64("Number of players (2-4): ").
+  set players: Player[] = array(count).
+  set i: i64 = 0.
+  repeat while i < count:
+    set label: string = std::string::from_i64(i + 1).
+    set prompt: string = std::string::concat("Player ", label).
+    put prompt = std::string::concat(prompt, " name: ").
+    set name: string = app::input::prompt(prompt).
+    set player: Player = new Player(name).
+    put players[i] = player.
+    put i = i + 1.
+  end
+  set seed_line: string = app::input::prompt("Seed (enter for time): ").
+  set seed: i64 = 0.
+  when std::string::len(seed_line) == 0:
+    put seed = std::time::now_ms().
+  otherwise:
+    put seed = std::string::to_i64(seed_line).
+  end
+  set rng: Rng = new Rng(seed).
+  yield app::game::play(players, count, rng).
+end

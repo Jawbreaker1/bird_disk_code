@@ -1,0 +1,66 @@
+book Player:
+  field name: string.
+  field scores: i64[].
+
+  rule init(self: Player, name: string) -> Player:
+    set scores: i64[] = array(13).
+    set i: i64 = 0.
+    repeat while i < 13:
+      put scores[i] = -1.
+      put i = i + 1.
+    end
+    put self::name = name.
+    put self::scores = scores.
+    yield self.
+  end
+
+  rule score_at(self: Player, index: i64) -> i64:
+    set scores: i64[] = self::scores.
+    yield scores[index].
+  end
+
+  rule set_score(self: Player, index: i64, value: i64) -> Player:
+    set scores: i64[] = self::scores.
+    put scores[index] = value.
+    put self::scores = scores.
+    yield self.
+  end
+
+  rule upper_total(self: Player) -> i64:
+    set scores: i64[] = self::scores.
+    set sum: i64 = 0.
+    set i: i64 = 0.
+    repeat while i < 6:
+      set v: i64 = scores[i].
+      when v >= 0:
+        put sum = sum + v.
+      otherwise:
+        put sum = sum + 0.
+      end
+      put i = i + 1.
+    end
+    yield sum.
+  end
+
+  rule total(self: Player) -> i64:
+    set scores: i64[] = self::scores.
+    set sum: i64 = 0.
+    set i: i64 = 0.
+    repeat while i < 13:
+      set v: i64 = scores[i].
+      when v >= 0:
+        put sum = sum + v.
+      otherwise:
+        put sum = sum + 0.
+      end
+      put i = i + 1.
+    end
+    set upper: i64 = self::upper_total().
+    when upper >= 63:
+      put sum = sum + 35.
+    otherwise:
+      put sum = sum + 0.
+    end
+    yield sum.
+  end
+end

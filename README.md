@@ -84,6 +84,15 @@ Examples
 - `examples/book_account.bd` (book with methods and constructor)
 - `examples/book_point.bd` (field access + method calls)
 - `examples/terminal_calculator.bd` (terminal IO + operator dispatch)
+- `examples/yahtzee/` (multi-file ASCII Yahtzee demo; VM/WASM/native)
+
+Yahtzee demo (scripted run):
+```sh
+cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.input
+cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine wasm --json --stdin examples/yahtzee/demo.input
+cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine native --json --stdin examples/yahtzee/demo.input
+```
+Omit `--stdin` to play interactively.
 
 Typing model (v0.1)
 - Built-in types: i64, bool, string, u8

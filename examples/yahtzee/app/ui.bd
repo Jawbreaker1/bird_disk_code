@@ -1,0 +1,137 @@
+import std::io.
+import std::string.
+
+rule print(text: string) -> i64:
+  yield std::io::print(text).
+end
+
+rule println(text: string) -> i64:
+  set line: string = std::string::concat(text, "\n").
+  yield std::io::print(line).
+end
+
+rule banner() -> i64:
+  set ignored: i64 = 0.
+  put ignored = println("+--------------------------------------+").
+  put ignored = println("|        BIRD DISK YAHTZEE 1.0         |").
+  put ignored = println("+--------------------------------------+").
+  yield ignored.
+end
+
+rule divider() -> i64:
+  yield println("----------------------------------------").
+end
+
+rule player_header(name: string) -> i64:
+  set left: string = std::string::concat("-- Player: ", name).
+  yield println(left).
+end
+
+rule die_pips(value: i64, row: i64) -> string:
+  when row == 0:
+    when value == 1:
+      yield "   ".
+    otherwise:
+      when value == 2:
+        yield "*  ".
+      otherwise:
+        when value == 3:
+          yield "*  ".
+        otherwise:
+          when value == 4:
+            yield "* *".
+          otherwise:
+            when value == 5:
+              yield "* *".
+            otherwise:
+              yield "* *".
+            end
+          end
+        end
+      end
+    end
+  otherwise:
+    when row == 1:
+      when value == 1:
+        yield " * ".
+      otherwise:
+        when value == 2:
+          yield "   ".
+        otherwise:
+          when value == 3:
+            yield " * ".
+          otherwise:
+            when value == 4:
+              yield "   ".
+            otherwise:
+              when value == 5:
+                yield " * ".
+              otherwise:
+                yield "* *".
+              end
+            end
+          end
+        end
+      end
+    otherwise:
+      when value == 1:
+        yield "   ".
+      otherwise:
+        when value == 2:
+          yield "  *".
+        otherwise:
+          when value == 3:
+            yield "  *".
+          otherwise:
+            when value == 4:
+              yield "* *".
+            otherwise:
+              when value == 5:
+                yield "* *".
+              otherwise:
+                yield "* *".
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+rule die_line(value: i64, row: i64) -> string:
+  when row == 0:
+    yield "+---+".
+  otherwise:
+    when row == 4:
+      yield "+---+".
+    otherwise:
+      set inside: string = die_pips(value, row - 1).
+      set left: string = std::string::concat("|", inside).
+      set line: string = std::string::concat(left, "|").
+      yield line.
+    end
+  end
+end
+
+rule dice_row(dice: i64[], row: i64) -> string:
+  set line: string = die_line(dice[0], row).
+  set i: i64 = 1.
+  repeat while i < 5:
+    set gap: string = std::string::concat(line, " ").
+    set next: string = die_line(dice[i], row).
+    put line = std::string::concat(gap, next).
+    put i = i + 1.
+  end
+  yield line.
+end
+
+rule print_dice(dice: i64[]) -> i64:
+  set row: i64 = 0.
+  repeat while row < 5:
+    set line: string = dice_row(dice, row).
+    set ignored: i64 = println(line).
+    put row = row + 1.
+  end
+  yield 0.
+end

@@ -1,0 +1,155 @@
+import std::string.
+import app::input.
+import app::score.
+import app::ui.
+import app::player.
+import app::rng.
+
+rule roll_dice(rng: Rng) -> i64[]:
+  set dice: i64[] = array(5).
+  set i: i64 = 0.
+  repeat while i < 5:
+    put dice[i] = rng::roll_die().
+    put i = i + 1.
+  end
+  yield dice.
+end
+
+rule apply_keep(dice: i64[], flags: i64[], rng: Rng) -> i64[]:
+  set i: i64 = 0.
+  repeat while i < 5:
+    when flags[i] == 1:
+      put dice[i] = dice[i].
+    otherwise:
+      put dice[i] = rng::roll_die().
+    end
+    put i = i + 1.
+  end
+  yield dice.
+end
+
+rule show_options(player: Player, dice: i64[], counts: i64[]) -> i64:
+  set ignored: i64 = 0.
+  set i: i64 = 0.
+  repeat while i < 13:
+    set name: string = app::score::category_name(i).
+    set used: i64 = player::score_at(i).
+    set value: i64 = app::score::score_for_category(dice, counts, i).
+    when used >= 0:
+      put value = used.
+    otherwise:
+      put value = value.
+    end
+    set value_text: string = std::string::from_i64(value).
+    set line: string = std::string::concat(name, ": ").
+    put line = std::string::concat(line, value_text).
+    when used >= 0:
+      set suffix: string = std::string::concat(line, " (used)").
+      put ignored = app::ui::println(suffix).
+    otherwise:
+      put ignored = app::ui::println(line).
+    end
+    put i = i + 1.
+  end
+  yield 0.
+end
+
+rule choose_category(player: Player) -> i64:
+  set index: i64 = -1.
+  set taken: i64 = 0.
+  repeat while index < 0 || index > 12 || taken >= 0:
+    set choice: i64 = app::input::read_i64("Pick category (1-13): ").
+    put index = choice - 1.
+    when index < 0 || index > 12:
+      put taken = 0.
+    otherwise:
+      put taken = player::score_at(index).
+    end
+  end
+  yield index.
+end
+
+rule play_turn(player: Player, rng: Rng, round: i64) -> Player:
+  set ignored: i64 = 0.
+  put ignored = app::ui::divider().
+  put ignored = app::ui::player_header(player::name).
+  set dice: i64[] = roll_dice(rng).
+  set rerolls: i64 = 0.
+  repeat while rerolls < 2:
+    put ignored = app::ui::print_dice(dice).
+    set mask: i64 = app::input::read_keep_mask().
+    when mask == -1:
+      put rerolls = 2.
+    otherwise:
+      set flags: i64[] = app::input::keep_flags(mask).
+      put dice = apply_keep(dice, flags, rng).
+      put rerolls = rerolls + 1.
+    end
+  end
+  put ignored = app::ui::print_dice(dice).
+  set counts: i64[] = app::score::counts(dice).
+  put ignored = app::ui::println("Choose a category:").
+  put ignored = show_options(player, dice, counts).
+  set choice: i64 = choose_category(player).
+  set score: i64 = app::score::score_for_category(dice, counts, choice).
+  set updated: Player = player::set_score(choice, score).
+  set name: string = app::score::category_name(choice).
+  set score_text: string = std::string::from_i64(score).
+  set line: string = std::string::concat("Scored ", score_text).
+  put line = std::string::concat(line, " in ").
+  put line = std::string::concat(line, name).
+  put ignored = app::ui::println(line).
+  yield updated.
+end
+
+rule print_scores(players: Player[], player_count: i64) -> i64:
+  set ignored: i64 = 0.
+  put ignored = app::ui::divider().
+  put ignored = app::ui::println("Final Scores:").
+  set i: i64 = 0.
+  set best_score: i64 = -1.
+  set best_index: i64 = 0.
+  repeat while i < player_count:
+    set player: Player = players[i].
+    set total: i64 = player::total().
+    set total_text: string = std::string::from_i64(total).
+    set line: string = std::string::concat(player::name, ": ").
+    put line = std::string::concat(line, total_text).
+    put ignored = app::ui::println(line).
+    when total > best_score:
+      put best_score = total.
+      put best_index = i.
+    otherwise:
+      put best_score = best_score.
+    end
+    put i = i + 1.
+  end
+  set winner: Player = players[best_index].
+  set win_score: string = std::string::from_i64(best_score).
+  set win_line: string = std::string::concat("Winner: ", winner::name).
+  put win_line = std::string::concat(win_line, " with ").
+  put win_line = std::string::concat(win_line, win_score).
+  put ignored = app::ui::println(win_line).
+  yield 0.
+end
+
+rule play(players: Player[], player_count: i64, rng: Rng) -> i64:
+  set ignored: i64 = 0.
+  set round: i64 = 0.
+  repeat while round < 13:
+    set title: string = std::string::from_i64(round + 1).
+    set line: string = std::string::concat("Round ", title).
+    put ignored = app::ui::divider().
+    put ignored = app::ui::println(line).
+    set i: i64 = 0.
+    repeat while i < player_count:
+      set player: Player = players[i].
+      set updated: Player = play_turn(player, rng, round).
+      put players[i] = updated.
+      put i = i + 1.
+    end
+    put round = round + 1.
+  end
+  put ignored = print_scores(players, player_count).
+  yield 0.
+end

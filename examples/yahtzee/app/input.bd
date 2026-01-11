@@ -1,0 +1,37 @@
+import std::io.
+import std::string.
+
+rule prompt(text: string) -> string:
+  set ignored: i64 = std::io::print(text).
+  set line: string = std::io::read_line().
+  yield line.
+end
+
+rule read_i64(text: string) -> i64:
+  set line: string = prompt(text).
+  yield std::string::to_i64(line).
+end
+
+rule keep_flags(mask: i64) -> i64[]:
+  set flags: i64[] = array(5).
+  set i: i64 = 0.
+  repeat while i < 5:
+    put flags[i] = 0.
+    put i = i + 1.
+  end
+  set n: i64 = mask.
+  repeat while n > 0:
+    set digit: i64 = n % 10.
+    when digit >= 1 && digit <= 5:
+      put flags[digit - 1] = 1.
+    otherwise:
+      put flags[0] = flags[0].
+    end
+    put n = n / 10.
+  end
+  yield flags.
+end
+
+rule read_keep_mask() -> i64:
+  yield read_i64("Keep dice (e.g. 135 keeps 1,3,5; 0 reroll all; -1 stop): ").
+end

@@ -1,0 +1,207 @@
+rule dice_sum(dice: i64[]) -> i64:
+  set sum: i64 = 0.
+  set i: i64 = 0.
+  repeat while i < 5:
+    put sum = sum + dice[i].
+    put i = i + 1.
+  end
+  yield sum.
+end
+
+rule counts(dice: i64[]) -> i64[]:
+  set counts: i64[] = array(7).
+  set i: i64 = 0.
+  repeat while i < 7:
+    put counts[i] = 0.
+    put i = i + 1.
+  end
+  set d: i64 = 0.
+  repeat while d < 5:
+    set value: i64 = dice[d].
+    put counts[value] = counts[value] + 1.
+    put d = d + 1.
+  end
+  yield counts.
+end
+
+rule has_exact(counts: i64[], value: i64) -> bool:
+  set i: i64 = 1.
+  set found: bool = false.
+  repeat while i < 7 && !found:
+    when counts[i] == value:
+      put found = true.
+    otherwise:
+      put found = found.
+    end
+    put i = i + 1.
+  end
+  yield found.
+end
+
+rule has_at_least(counts: i64[], value: i64) -> bool:
+  set i: i64 = 1.
+  set found: bool = false.
+  repeat while i < 7 && !found:
+    when counts[i] >= value:
+      put found = true.
+    otherwise:
+      put found = found.
+    end
+    put i = i + 1.
+  end
+  yield found.
+end
+
+rule small_straight(counts: i64[]) -> bool:
+  set a: bool = counts[1] > 0.
+  set b: bool = counts[2] > 0.
+  set c: bool = counts[3] > 0.
+  set d: bool = counts[4] > 0.
+  set e: bool = counts[5] > 0.
+  set f: bool = counts[6] > 0.
+  set ok1: bool = a && b && c && d.
+  set ok2: bool = b && c && d && e.
+  set ok3: bool = c && d && e && f.
+  yield ok1 || ok2 || ok3.
+end
+
+rule large_straight(counts: i64[]) -> bool:
+  set a: bool = counts[1] > 0.
+  set b: bool = counts[2] > 0.
+  set c: bool = counts[3] > 0.
+  set d: bool = counts[4] > 0.
+  set e: bool = counts[5] > 0.
+  set f: bool = counts[6] > 0.
+  set ok1: bool = a && b && c && d && e.
+  set ok2: bool = b && c && d && e && f.
+  yield ok1 || ok2.
+end
+
+rule category_name(cat: i64) -> string:
+  when cat == 0:
+    yield "1) Ones".
+  otherwise:
+    when cat == 1:
+      yield "2) Twos".
+    otherwise:
+      when cat == 2:
+        yield "3) Threes".
+      otherwise:
+        when cat == 3:
+          yield "4) Fours".
+        otherwise:
+          when cat == 4:
+            yield "5) Fives".
+          otherwise:
+            when cat == 5:
+              yield "6) Sixes".
+            otherwise:
+              when cat == 6:
+                yield "7) Three of a kind".
+              otherwise:
+                when cat == 7:
+                  yield "8) Four of a kind".
+                otherwise:
+                  when cat == 8:
+                    yield "9) Full house".
+                  otherwise:
+                    when cat == 9:
+                      yield "10) Small straight".
+                    otherwise:
+                      when cat == 10:
+                        yield "11) Large straight".
+                      otherwise:
+                        when cat == 11:
+                          yield "12) Yahtzee".
+                        otherwise:
+                          yield "13) Chance".
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+rule score_for_category(dice: i64[], counts: i64[], cat: i64) -> i64:
+  set sum: i64 = dice_sum(dice).
+  when cat == 0:
+    yield counts[1] * 1.
+  otherwise:
+    when cat == 1:
+      yield counts[2] * 2.
+    otherwise:
+      when cat == 2:
+        yield counts[3] * 3.
+      otherwise:
+        when cat == 3:
+          yield counts[4] * 4.
+        otherwise:
+          when cat == 4:
+            yield counts[5] * 5.
+          otherwise:
+            when cat == 5:
+              yield counts[6] * 6.
+            otherwise:
+            when cat == 6:
+                when has_at_least(counts, 3):
+                  yield sum.
+                otherwise:
+                  yield 0.
+                end
+              otherwise:
+                when cat == 7:
+                  when has_at_least(counts, 4):
+                    yield sum.
+                  otherwise:
+                    yield 0.
+                  end
+                otherwise:
+                  when cat == 8:
+                    when has_exact(counts, 3) && has_exact(counts, 2):
+                      yield 25.
+                    otherwise:
+                      yield 0.
+                    end
+                  otherwise:
+                    when cat == 9:
+                      when small_straight(counts):
+                        yield 30.
+                      otherwise:
+                        yield 0.
+                      end
+                    otherwise:
+                      when cat == 10:
+                        when large_straight(counts):
+                          yield 40.
+                        otherwise:
+                          yield 0.
+                        end
+                      otherwise:
+                        when cat == 11:
+                          when has_exact(counts, 5):
+                            yield 50.
+                          otherwise:
+                            yield 0.
+                          end
+                        otherwise:
+                          yield sum.
+                        end
+                      end
+                    end
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end

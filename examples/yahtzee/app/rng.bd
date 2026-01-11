@@ -1,0 +1,20 @@
+book Rng:
+  field state: i64.
+
+  rule init(self: Rng, seed: i64) -> Rng:
+    put self::state = seed.
+    yield self.
+  end
+
+  rule next(self: Rng) -> i64:
+    set cur: i64 = self::state.
+    set next: i64 = (cur * 1103515245 + 12345) % 2147483647.
+    put self::state = next.
+    yield next.
+  end
+
+  rule roll_die(self: Rng) -> i64:
+    set value: i64 = self::next().
+    yield (value % 6) + 1.
+  end
+end

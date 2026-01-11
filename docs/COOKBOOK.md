@@ -276,6 +276,12 @@ Test note (optional):
 BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddiskc native_aot_json_trace_smoke
 ```
 
+## 19) Large example (Yahtzee)
+See `examples/yahtzee/` for a multi-file terminal demo.
+```sh
+cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.input
+```
+
 ---
 
 Notes:
