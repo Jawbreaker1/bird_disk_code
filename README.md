@@ -4,8 +4,6 @@ BirdDisk is a proof-of-concept compiled programming language and toolchain desig
 
 **Why this exists:** modern teams increasingly rely on LLMs to generate and modify code, but general-purpose languages and tooling are noisy for machines, leading to ambiguous parses, fragile edits, and slow fix loops. BirdDisk explores a language + compiler stack that is intentionally easier for LLMs to read, write, and correct while staying clear to humans, delivering faster iteration, fewer broken builds, and portable execution (VM/WASM/native) with deterministic formatting and machine-readable diagnostics.
 
-Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.
-
 BirdDisk focuses on:
 - **Unique, LLM-friendly syntax** (low ambiguity, few special cases)
 - **Strong static typing** with **local type inference**
@@ -195,6 +193,9 @@ Status
 - Implemented: stdlib module loading + `std::math` (BirdDisk)
 - Implemented: OO core (book + fields + methods, VM + WASM)
 - Stubbed: non-JSON CLI paths
+
+
+Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.
 
 License
 
