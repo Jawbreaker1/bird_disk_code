@@ -87,6 +87,11 @@ also imports `env.bd_validate_utf8` and exports `memory`.
 ./target/debug/birddisk run path/to/file.bd --engine native --emit obj
 ./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./bird_app
 ```
+11) Build and run the terminal calculator as a native executable.
+```sh
+./target/debug/birddisk run examples/terminal_calculator.bd --engine native --emit exe --out ./term_calculator
+printf "12\n+\n30\n" | ./term_calculator
+```
 11) Run differential tests (optional).
 ```sh
 ./target/debug/birddisk test --json

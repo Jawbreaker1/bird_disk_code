@@ -155,16 +155,19 @@ Acceptance:
 Goal: keep core modules readable as the language grows.
 
 Implement:
-- [ ] Establish a refactor checkpoint rule (split modules once they exceed ~800–1000 LOC)
-- [ ] Split `crates/birddisk_vm/src/lib.rs` into focused modules (vm, builtins, values, errors)
-- [ ] Split `crates/birddisk_wasm/src/lib.rs` into emitter + runtime helpers
-- [ ] Split `crates/birddisk_core/src/typecheck.rs` into submodules (stdlib, oo, core)
+- [x] Establish a refactor checkpoint rule (split modules once they exceed ~800–1000 LOC)
+- [x] Split `crates/birddisk_vm/src/lib.rs` into focused modules (vm, builtins, values, errors)
+- [x] Split `crates/birddisk_wasm/src/lib.rs` into emitter + runtime helpers
+- [x] Split `crates/birddisk_core/src/typecheck.rs` into submodules (stdlib, oo, core)
 
 Add tests:
 - [ ] Ensure existing tests still pass after module moves
 
 Acceptance:
 - Core modules are under the checkpoint threshold or clearly partitioned
+
+Refactor checkpoint rule (active):
+- Split modules once they exceed ~800–1000 LOC, unless there is a strong, documented reason not to.
 
 ---
 
@@ -289,8 +292,105 @@ Acceptance:
 
 ---
 
+## Sprint 12 — Stdlib essentials (2–4 weeks)
+Implement (v0.x essentials, keep scope tight):
+- [ ] `std::fs` (read/write file contents)
+- [ ] `std::path` (join, normalize, basename/dirname)
+- [ ] `std::time` (clock/timers)
+- [ ] `std::env` (args, env vars)
+- [ ] `std::json` (encode/decode basic values)
+
+Add tests:
+- [ ] VM + WASM parity tests for each module
+- [ ] IO harness tests for file and env operations
+
+Acceptance:
+- Minimal CLI programs can read/write files and parse JSON on VM + WASM
+
+---
+
+## Sprint 13 — Error handling + stack traces (2–4 weeks)
+Implement:
+- [ ] Decide error model (exceptions vs result types)
+- [ ] Runtime error propagation (`try`/`catch` or `Result` helpers)
+- [ ] Stack trace frames enriched with source spans + code snippets
+- [ ] Standard error output format in JSON (match `docs/DIAGNOSTICS.md`)
+
+Add tests:
+- [ ] VM + WASM parity tests for error propagation
+- [ ] Diagnostics tests for stack trace format stability
+
+Acceptance:
+- Runtime errors provide actionable traces and can be handled in user code
+
+---
+
+## Sprint 14 — Package & module workflow (1–3 weeks)
+Implement:
+- [ ] Module resolution rules beyond stdlib (local + project packages)
+- [ ] Simple manifest format (project name, version, deps)
+- [ ] CLI workflow: `birddisk build`, `birddisk run` with manifest
+
+Add tests:
+- [ ] Multi-module compilation tests
+- [ ] Versioned dependency resolution tests (minimal)
+
+Acceptance:
+- Projects can declare and build dependencies deterministically
+
+---
+
+## Sprint 15 — Language ergonomics v0.x (2–6 weeks)
+Implement (small slices, one per PR):
+- [ ] Enums/variants (no generics yet)
+- [ ] Pattern matching for enums
+- [ ] Floats (f64) with explicit conversions
+- [ ] Improved string/bytes APIs (slice, search, replace)
+
+Add tests:
+- [ ] Typecheck + runtime tests for each feature
+- [ ] VM + WASM parity per feature
+
+Acceptance:
+- Core data modeling is practical for small apps
+
+---
+
+## Sprint 16 — Tooling & quality (ongoing)
+Implement:
+- [ ] Linter with opinionated rules for LLM-friendly code
+- [ ] Doc generator (`birddisk doc` from source)
+- [ ] Profiler hooks (GC stats, runtime timers)
+- [ ] Enhanced test runner (parallel, filters, snapshots)
+
+Add tests:
+- [ ] Golden tests for linter output
+- [ ] Doc generation snapshots
+
+Acceptance:
+- Tooling supports larger projects and debugging
+
+---
+
+## Sprint 17 — Performance & portability (ongoing)
+Implement:
+- [ ] Native backend coverage for arm64/x86_64 (macOS/Linux/Windows)
+- [ ] Optimization passes (const fold, dead code, inlining)
+- [ ] GC tuning + performance metrics
+- [ ] Concurrency model decision + minimal primitives
+
+Add tests:
+- [ ] Cross-platform build checks
+- [ ] Performance regression harness
+
+Acceptance:
+- Native builds work across major platforms with stable performance
+
+---
+
 ## Future — Full eval suite
 - [ ] Expand `eval/` with mutations, report generation, and cross-language comparison
+- [ ] Produce a comparison report template (LLM-friendliness + runtime performance)
 
 ## Future — Native-era features
 - [ ] Parallel execution + threading model (VM, WASM, native backends)
@@ -299,6 +399,7 @@ Acceptance:
 
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)
+- [ ] Keep the VSCode extension (syntax/LSP) updated as the language surface grows
 
 ## Future — Native AOT follow-ups
 - [x] AOT wrapper: embed or pass GC layout so native GC can scan references correctly
