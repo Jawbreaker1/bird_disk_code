@@ -416,13 +416,22 @@ impl<'a> Vm<'a> {
                             call_values.extend(values.iter().cloned());
                             self.eval_function(function, &call_values)
                         } else {
-                            Err(runtime_error("E0400", "Method call on non-book."))
+                            let function = *self.functions.get(name).ok_or_else(|| {
+                                runtime_error(
+                                    "E0400",
+                                    format!("Unknown function '{name}' at runtime."),
+                                )
+                            })?;
+                            self.eval_function(function, &values)
                         }
                     } else {
-                        Err(runtime_error(
-                            "E0400",
-                            format!("Unknown name '{base}' at runtime."),
-                        ))
+                        let function = *self.functions.get(name).ok_or_else(|| {
+                            runtime_error(
+                                "E0400",
+                                format!("Unknown function '{name}' at runtime."),
+                            )
+                        })?;
+                        self.eval_function(function, &values)
                     }
                 } else {
                     let function = *self.functions.get(name).ok_or_else(|| {

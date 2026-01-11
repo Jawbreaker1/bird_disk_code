@@ -1,0 +1,5 @@
+import testlib::util.
+
+rule main() -> i64:
+  yield testlib::util::double(3).
+end

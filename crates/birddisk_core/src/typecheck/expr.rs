@@ -418,73 +418,74 @@ impl<'a> Checker<'a> {
         if let Some((base, method)) = name.split_once("::") {
             if base != "std" {
                 if let Some(Ty::Book(book_name)) = self.lookup(base) {
-                    let full_name = format!("{book_name}::{method}");
-                    let Some(sig) = self.functions.get(&full_name).cloned() else {
-                        self.diagnostics.push(diagnostic(
-                            "E0303",
-                            "error",
-                            format!("Unknown method '{full_name}'."),
-                            self.file,
-                            span,
-                            vec!["Define the method on the book.".to_string()],
-                            vec!["SPEC.md#15-objects".to_string()],
-                            Vec::new(),
-                            None,
-                        ));
-                        return Ty::Unknown;
-                    };
-                    if sig.params.is_empty() {
-                        self.diagnostics.push(diagnostic(
-                            "E0300",
-                            "error",
-                            format!("Method '{full_name}' must take self."),
-                            self.file,
-                            span,
-                            vec!["Add a self parameter to the method.".to_string()],
-                            vec!["SPEC.md#15-objects".to_string()],
-                            Vec::new(),
-                            None,
-                        ));
-                    }
-                    let expected_args = sig.params.len().saturating_sub(1);
-                    if expected_args != args.len() {
-                        self.diagnostics.push(diagnostic(
-                            "E0302",
-                            "error",
-                            format!(
-                                "Wrong number of arguments: expected {}, got {}.",
-                                expected_args,
-                                args.len()
-                            ),
-                            self.file,
-                            span,
-                            vec!["Argument count must match the method signature.".to_string()],
-                            vec!["SPEC.md#15-objects".to_string()],
-                            Vec::new(),
-                            None,
-                        ));
-                        return sig.return_type;
-                    }
-                    for (arg, expected) in args.iter().zip(sig.params.iter().skip(1)) {
-                        let actual = match (&arg.kind, expected) {
-                            (ExprKind::Int(value), Ty::U8) => {
-                                self.check_int_literal_expected(*value, arg.span, expected)
-                            }
-                            (ExprKind::ArrayLit(elements), Ty::Array(_)) => {
-                                self.check_array_literal_expected(elements, arg.span, expected)
-                            }
-                            _ => self.check_expr(arg),
-                        };
-                        if actual != Ty::Unknown && expected != &actual {
-                            self.diagnostics.push(type_mismatch(
+                        let full_name = format!("{book_name}::{method}");
+                        let Some(sig) = self.functions.get(&full_name).cloned() else {
+                            self.diagnostics.push(diagnostic(
+                                "E0303",
+                                "error",
+                                format!("Unknown method '{full_name}'."),
                                 self.file,
-                                arg.span,
-                                expected.clone(),
-                                actual,
+                                span,
+                                vec!["Define the method on the book.".to_string()],
+                                vec!["SPEC.md#15-objects".to_string()],
+                                Vec::new(),
+                                None,
+                            ));
+                            return Ty::Unknown;
+                        };
+                        if sig.params.is_empty() {
+                            self.diagnostics.push(diagnostic(
+                                "E0300",
+                                "error",
+                                format!("Method '{full_name}' must take self."),
+                                self.file,
+                                span,
+                                vec!["Add a self parameter to the method.".to_string()],
+                                vec!["SPEC.md#15-objects".to_string()],
+                                Vec::new(),
+                                None,
                             ));
                         }
-                    }
-                    return sig.return_type;
+                        let expected_args = sig.params.len().saturating_sub(1);
+                        if expected_args != args.len() {
+                            self.diagnostics.push(diagnostic(
+                                "E0302",
+                                "error",
+                                format!(
+                                    "Wrong number of arguments: expected {}, got {}.",
+                                    expected_args,
+                                    args.len()
+                                ),
+                                self.file,
+                                span,
+                                vec!["Argument count must match the method signature."
+                                    .to_string()],
+                                vec!["SPEC.md#15-objects".to_string()],
+                                Vec::new(),
+                                None,
+                            ));
+                            return sig.return_type;
+                        }
+                        for (arg, expected) in args.iter().zip(sig.params.iter().skip(1)) {
+                            let actual = match (&arg.kind, expected) {
+                                (ExprKind::Int(value), Ty::U8) => {
+                                    self.check_int_literal_expected(*value, arg.span, expected)
+                                }
+                                (ExprKind::ArrayLit(elements), Ty::Array(_)) => {
+                                    self.check_array_literal_expected(elements, arg.span, expected)
+                                }
+                                _ => self.check_expr(arg),
+                            };
+                            if actual != Ty::Unknown && expected != &actual {
+                                self.diagnostics.push(type_mismatch(
+                                    self.file,
+                                    arg.span,
+                                    expected.clone(),
+                                    actual,
+                                ));
+                            }
+                        }
+                        return sig.return_type;
                 }
             }
         }

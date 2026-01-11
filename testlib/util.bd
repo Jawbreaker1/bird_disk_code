@@ -1,0 +1,5 @@
+import testlib::math.
+
+rule double(value: i64) -> i64:
+  yield testlib::math::add(value, value).
+end

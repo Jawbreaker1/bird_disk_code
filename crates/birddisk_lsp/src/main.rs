@@ -1692,7 +1692,7 @@ fn find_stdlib_root(path: &Path) -> Option<PathBuf> {
     let mut current = path.parent();
     while let Some(dir) = current {
         let candidate = dir.join("stdlib");
-        if candidate.is_dir() {
+        if candidate.is_dir() && candidate.join("std").is_dir() {
             return Some(candidate);
         }
         current = dir.parent();

@@ -198,21 +198,12 @@ fn stdlib_root(entry_path: &Path) -> Option<PathBuf> {
     let mut current = entry_path.parent();
     while let Some(dir) = current {
         let candidate = dir.join("stdlib");
-        if candidate.is_dir() {
+        if candidate.is_dir() && candidate.join("std").is_dir() {
             return Some(candidate);
         }
         current = dir.parent();
     }
     None
-}
-
-fn stdlib_module_path(root: &Path, module_path: &[String]) -> PathBuf {
-    let mut path = root.to_path_buf();
-    for part in module_path {
-        path.push(part);
-    }
-    path.set_extension("bd");
-    path
 }
 
 fn stdlib_import_diagnostic(file: &str, span: Span, message: impl Into<String>) -> Diagnostic {
@@ -229,79 +220,177 @@ fn stdlib_import_diagnostic(file: &str, span: Span, message: impl Into<String>) 
     )
 }
 
-fn load_stdlib_modules(
-    imports: &[ast::Import],
-    entry_file: &str,
-    entry_path: &Path,
-) -> Result<Vec<ast::Function>, Vec<Diagnostic>> {
-    let mut diagnostics = Vec::new();
-    let mut functions = Vec::new();
-    let mut loaded = HashSet::new();
-    let root = stdlib_root(entry_path);
+fn module_import_diagnostic(file: &str, span: Span, message: impl Into<String>) -> Diagnostic {
+    diagnostic(
+        "E0004",
+        "error",
+        message.into(),
+        file,
+        span,
+        vec!["Module resolution failed.".to_string()],
+        vec!["SPEC.md#1-1-imports".to_string()],
+        Vec::new(),
+        None,
+    )
+}
 
-    for import in imports {
-        if !is_std_import(&import.path) || is_builtin_std_module(&import.path) {
-            continue;
+fn module_path_from_base(base: &Path, module_path: &[String]) -> PathBuf {
+    let mut path = base.to_path_buf();
+    for part in module_path {
+        path.push(part);
+    }
+    path.set_extension("bd");
+    path
+}
+
+fn project_root(entry_path: &Path) -> Option<PathBuf> {
+    stdlib_root(entry_path).and_then(|root| root.parent().map(|dir| dir.to_path_buf()))
+}
+
+fn user_module_candidates(entry_path: &Path, module_path: &[String]) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(entry_dir) = entry_path.parent() {
+        candidates.push(module_path_from_base(entry_dir, module_path));
+    }
+    if let Some(root) = project_root(entry_path) {
+        let candidate = module_path_from_base(&root, module_path);
+        if !candidates.iter().any(|existing| *existing == candidate) {
+            candidates.push(candidate);
         }
-        let key = import.path.join("::");
-        if !loaded.insert(key.clone()) {
-            continue;
+    }
+    candidates
+}
+
+fn resolve_user_module_path(entry_path: &Path, module_path: &[String]) -> Option<PathBuf> {
+    for candidate in user_module_candidates(entry_path, module_path) {
+        if candidate.exists() {
+            return Some(candidate);
         }
-        let Some(root) = root.as_ref() else {
-            diagnostics.push(stdlib_import_diagnostic(
-                entry_file,
-                import.span,
-                format!(
-                    "Unable to resolve stdlib module '{key}' (stdlib directory not found)."
-                ),
-            ));
-            continue;
-        };
-        let module_path = stdlib_module_path(root, &import.path);
-        if !module_path.exists() {
-            diagnostics.push(stdlib_import_diagnostic(
-                entry_file,
-                import.span,
-                format!(
-                    "Unable to resolve stdlib module '{key}' (expected {}).",
-                    module_path.display()
-                ),
-            ));
-            continue;
+    }
+    None
+}
+
+enum ModuleKind {
+    Stdlib,
+    User,
+}
+
+struct ModuleLoader<'a> {
+    entry_file: &'a str,
+    entry_path: &'a Path,
+    stdlib_root: Option<PathBuf>,
+    loaded: HashSet<PathBuf>,
+    books: Vec<ast::Book>,
+    functions: Vec<ast::Function>,
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl<'a> ModuleLoader<'a> {
+    fn new(entry_file: &'a str, entry_path: &'a Path) -> Self {
+        Self {
+            entry_file,
+            entry_path,
+            stdlib_root: stdlib_root(entry_path),
+            loaded: HashSet::new(),
+            books: Vec::new(),
+            functions: Vec::new(),
+            diagnostics: Vec::new(),
         }
-        let path_str = module_path.to_string_lossy();
+    }
+
+    fn load_imports(&mut self, imports: &[ast::Import]) {
+        for import in imports {
+            if is_std_import(&import.path) {
+                if is_builtin_std_module(&import.path) {
+                    continue;
+                }
+                let key = import.path.join("::");
+                let Some(root) = self.stdlib_root.as_ref() else {
+                    self.diagnostics.push(stdlib_import_diagnostic(
+                        self.entry_file,
+                        import.span,
+                        format!(
+                            "Unable to resolve stdlib module '{key}' (stdlib directory not found)."
+                        ),
+                    ));
+                    continue;
+                };
+                let module_path = module_path_from_base(root, &import.path);
+                if !module_path.exists() {
+                    self.diagnostics.push(stdlib_import_diagnostic(
+                        self.entry_file,
+                        import.span,
+                        format!(
+                            "Unable to resolve stdlib module '{key}' (expected {}).",
+                            module_path.display()
+                        ),
+                    ));
+                    continue;
+                }
+                self.load_module(module_path, &import.path, ModuleKind::Stdlib);
+                continue;
+            }
+
+            let key = import.path.join("::");
+            let Some(module_path) = resolve_user_module_path(self.entry_path, &import.path) else {
+                let expected: Vec<String> = user_module_candidates(self.entry_path, &import.path)
+                    .into_iter()
+                    .map(|path| path.display().to_string())
+                    .collect();
+                self.diagnostics.push(module_import_diagnostic(
+                    self.entry_file,
+                    import.span,
+                    format!(
+                        "Unable to resolve module '{key}' (expected {}).",
+                        expected.join(" or ")
+                    ),
+                ));
+                continue;
+            };
+            self.load_module(module_path, &import.path, ModuleKind::User);
+        }
+    }
+
+    fn load_module(
+        &mut self,
+        path: PathBuf,
+        module_path: &[String],
+        _kind: ModuleKind,
+    ) {
+        let path = path.canonicalize().unwrap_or(path);
+        if !self.loaded.insert(path.clone()) {
+            return;
+        }
+        let path_str = path.to_string_lossy();
         let source = match load_source(path_str.as_ref()) {
             Ok(source) => source,
             Err(diag) => {
-                diagnostics.push(diag);
-                continue;
+                self.diagnostics.push(diag);
+                return;
             }
         };
         let tokens = match lexer::lex(&source) {
             Ok(tokens) => tokens,
             Err(err) => {
-                diagnostics.push(diagnostic_from_lex_error(path_str.as_ref(), err));
-                continue;
+                self.diagnostics
+                    .push(diagnostic_from_lex_error(path_str.as_ref(), err));
+                return;
             }
         };
         let mut module_program = match parser::parse_with_recovery(&tokens) {
             Ok(program) => program,
             Err(errs) => {
-                diagnostics.extend(
+                self.diagnostics.extend(
                     errs.into_iter()
                         .map(|err| diagnostic_from_parse_error(path_str.as_ref(), err)),
                 );
-                continue;
+                return;
             }
         };
-        qualify_module_program(&mut module_program, &import.path);
-        functions.extend(module_program.functions);
-    }
-
-    if diagnostics.is_empty() {
-        Ok(functions)
-    } else {
-        Err(diagnostics)
+        self.load_imports(&module_program.imports);
+        qualify_module_program(&mut module_program, module_path);
+        self.functions.extend(module_program.functions);
+        self.books.extend(module_program.books);
     }
 }
 
@@ -317,6 +406,13 @@ fn qualify_module_program(program: &mut ast::Program, module_path: &[String]) {
             qualify_stmt(stmt, &local_names, &prefix);
         }
         func.name = format!("{prefix}::{}", func.name);
+    }
+    for book in &mut program.books {
+        for method in &mut book.methods {
+            for stmt in &mut method.body {
+                qualify_stmt(stmt, &local_names, &prefix);
+            }
+        }
     }
 }
 
@@ -398,8 +494,13 @@ pub fn parse_and_typecheck(path: &str) -> Result<ast::Program, Vec<Diagnostic>> 
     })?;
     let entry_path = PathBuf::from(path);
     let entry_path = entry_path.canonicalize().unwrap_or(entry_path);
-    let stdlib_functions = load_stdlib_modules(&program.imports, path, &entry_path)?;
-    program.functions.extend(stdlib_functions);
+    let mut loader = ModuleLoader::new(path, &entry_path);
+    loader.load_imports(&program.imports);
+    if !loader.diagnostics.is_empty() {
+        return Err(loader.diagnostics);
+    }
+    program.functions.extend(loader.functions);
+    program.books.extend(loader.books);
     let diagnostics = typecheck::typecheck(&program, path);
     if diagnostics.is_empty() {
         Ok(program)

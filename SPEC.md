@@ -14,6 +14,16 @@ The entry point is:
 
 - `rule main() -> i64: ... end`
 
+### 1.1 Imports
+- `std::` imports resolve to the stdlib directory (`stdlib/`).
+- Non-stdlib imports map `::` segments to path segments ending in `.bd`.
+- Resolution order for non-stdlib modules:
+  1) Relative to the entry file directory
+  2) Relative to the project root (nearest ancestor containing `stdlib/`)
+- Imported functions are namespaced under their module path
+  (e.g. `import app::util.` defines `app::util::foo`).
+- Book/type names are global in v0.1; avoid collisions across modules.
+
 ## 2. Types
 Built-in types:
 - `i64`

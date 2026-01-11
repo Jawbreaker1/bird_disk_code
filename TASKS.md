@@ -298,6 +298,7 @@ Implement (v0.x essentials, keep scope tight):
 - [x] `std::path` (join, normalize, basename/dirname)
 - [x] `std::time` (clock/timers)
 - [x] `std::env` (args, env vars)
+- [x] Local module imports (entry dir + project root resolution)
 - [ ] `std::json` (encode/decode basic values)
 
 Add tests:
@@ -327,7 +328,7 @@ Acceptance:
 
 ## Sprint 14 — Package & module workflow (1–3 weeks)
 Implement:
-- [ ] Module resolution rules beyond stdlib (local + project packages)
+- [ ] Module resolution rules beyond stdlib (project packages + manifest)
 - [ ] Simple manifest format (project name, version, deps)
 - [ ] CLI workflow: `birddiskc build`, `birddiskc run` with manifest
 - [x] Align CLI naming: rename `birddiskc` crate or binary so build instructions match output name

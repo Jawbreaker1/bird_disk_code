@@ -1,0 +1,5 @@
+import app::stats.
+
+rule main() -> i64:
+  yield app::stats::compute().
+end
