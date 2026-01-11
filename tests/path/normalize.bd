@@ -1,0 +1,15 @@
+import std::path.
+import std::string.
+
+rule main() -> i64:
+  set norm: string = std::path::normalize("alpha/./beta/../gamma").
+  when std::string::eq(std::path::basename(norm), "gamma"):
+    when std::string::eq(std::path::dirname(norm), "alpha"):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

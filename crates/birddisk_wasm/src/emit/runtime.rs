@@ -3,8 +3,8 @@ use super::{
     HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY, HEAP_KIND_FREE, HEAP_KIND_OBJECT,
     HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, HEAP_TYPE_ID_MASK, OBJECT_HEADER_SIZE,
     STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
-    TRAP_ARRAY_OOM, TRAP_HEAP_HEADER, TRAP_KIND_BYTES, TRAP_KIND_STRING, TRAP_STRING_PARSE,
-    TRAP_TRACE_OOM, TRAP_UTF8_INVALID, TRAP_NULL_DEREF,
+    TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER, TRAP_KIND_BYTES, TRAP_KIND_STRING,
+    TRAP_PATH, TRAP_STRING_PARSE, TRAP_TRACE_OOM, TRAP_UTF8_INVALID, TRAP_NULL_DEREF,
 };
 
 pub(super) fn emit_heap_runtime(
@@ -2722,6 +2722,1346 @@ pub(super) fn emit_gc_layout_runtime(
     emitter.dedent();
     emitter.push_line(")");
     emitter.push_line("(export \"__bd_gc_adjacent_free_test\" (func $bd_gc_adjacent_free_test))");
+}
+
+pub(super) fn emit_time_runtime(emitter: &mut WatEmitter) {
+    emitter.push_line("(import \"env\" \"bd_time_now_ms\" (func $bd_time_now_ms (result i64)))");
+    emitter.push_line("(import \"env\" \"bd_time_sleep_ms\" (func $bd_time_sleep_ms (param i64) (result i64)))");
+}
+
+pub(super) fn emit_fs_imports(emitter: &mut WatEmitter) {
+    emitter.push_line(
+        "(import \"env\" \"bd_fs_read_len\" (func $bd_fs_read_len (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_fs_read_fill\" (func $bd_fs_read_fill (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_fs_write\" (func $bd_fs_write (param i32 i32 i32 i32) (result i64)))",
+    );
+}
+
+pub(super) fn emit_path_imports(emitter: &mut WatEmitter) {
+    emitter.push_line(
+        "(import \"env\" \"bd_path_join_len\" (func $bd_path_join_len (param i32 i32 i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_path_normalize_len\" (func $bd_path_normalize_len (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_path_basename_len\" (func $bd_path_basename_len (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_path_dirname_len\" (func $bd_path_dirname_len (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_path_fill\" (func $bd_path_fill (param i32 i32) (result i32)))",
+    );
+}
+
+pub(super) fn emit_env_imports(emitter: &mut WatEmitter) {
+    emitter.push_line(
+        "(import \"env\" \"bd_env_args_count\" (func $bd_env_args_count (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_args_len\" (func $bd_env_args_len (param i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_args_fill\" (func $bd_env_args_fill (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_get_len\" (func $bd_env_get_len (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_get_fill\" (func $bd_env_get_fill (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_cwd_len\" (func $bd_env_cwd_len (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_cwd_fill\" (func $bd_env_cwd_fill (param i32 i32) (result i32)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_set\" (func $bd_env_set_raw (param i32 i32 i32 i32) (result i64)))",
+    );
+    emitter.push_line(
+        "(import \"env\" \"bd_env_set_cwd\" (func $bd_env_set_cwd_raw (param i32 i32) (result i64)))",
+    );
+}
+
+pub(super) fn emit_fs_runtime(emitter: &mut WatEmitter) {
+    emitter.push_line("(func $bd_fs_read_text (param $path i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("call $bd_fs_read_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_FS_IO}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_fs_read_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_FS_IO}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_fs_read_bytes (param $path i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("call $bd_fs_read_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_FS_IO}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_ARRAY << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {ARRAY_KIND_U8}"));
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_fs_read_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_FS_IO}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_fs_write_text (param $path i32) (param $text i32) (result i64)");
+    emitter.indent();
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $text_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $text_data i32)");
+    emitter.push_line("(local $result i64)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $text");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $text");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+    emitter.push_line("local.get $text");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $text_len");
+    emitter.push_line("local.get $text");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $text_data");
+
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("local.get $text_data");
+    emitter.push_line("local.get $text_len");
+    emitter.push_line("call $bd_fs_write");
+    emitter.push_line("local.set $result");
+    emitter.push_line("local.get $result");
+    emitter.push_line("i64.const 0");
+    emitter.push_line("i64.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_FS_IO}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $result");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_fs_write_bytes (param $path i32) (param $bytes i32) (result i64)");
+    emitter.indent();
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $bytes_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $bytes_data i32)");
+    emitter.push_line("(local $result i64)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $bytes");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $bytes");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_ARRAY}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_BYTES}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $bytes");
+    emitter.push_line(format!("i32.load offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line(format!("i32.const {ARRAY_KIND_U8}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_BYTES}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+    emitter.push_line("local.get $bytes");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $bytes_len");
+    emitter.push_line("local.get $bytes");
+    emitter.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $bytes_data");
+
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("local.get $bytes_data");
+    emitter.push_line("local.get $bytes_len");
+    emitter.push_line("call $bd_fs_write");
+    emitter.push_line("local.set $result");
+    emitter.push_line("local.get $result");
+    emitter.push_line("i64.const 0");
+    emitter.push_line("i64.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_FS_IO}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $result");
+    emitter.dedent();
+    emitter.push_line(")");
+}
+
+pub(super) fn emit_path_runtime(emitter: &mut WatEmitter) {
+    emitter.push_line("(func $bd_path_join (param $left i32) (param $right i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $left_len i32)");
+    emitter.push_line("(local $right_len i32)");
+    emitter.push_line("(local $left_data i32)");
+    emitter.push_line("(local $right_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $left");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $left");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $right");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $right");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $left");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $left_len");
+    emitter.push_line("local.get $left");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $left_data");
+
+    emitter.push_line("local.get $right");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $right_len");
+    emitter.push_line("local.get $right");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $right_data");
+
+    emitter.push_line("local.get $left_data");
+    emitter.push_line("local.get $left_len");
+    emitter.push_line("local.get $right_data");
+    emitter.push_line("local.get $right_len");
+    emitter.push_line("call $bd_path_join_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_path_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_path_normalize (param $path i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("call $bd_path_normalize_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_path_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_path_basename (param $path i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("call $bd_path_basename_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_path_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_path_dirname (param $path i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("call $bd_path_dirname_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_path_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_PATH}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+}
+
+pub(super) fn emit_env_runtime(emitter: &mut WatEmitter) {
+    emitter.push_line("(func $bd_env_args (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $count i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $idx i32)");
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $str i32)");
+    emitter.push_line("(local $data i32)");
+    emitter.push_line("(local $fill i32)");
+    emitter.push_line("(local $base i32)");
+
+    emitter.push_line("call $bd_env_args_count");
+    emitter.push_line("local.set $count");
+    emitter.push_line("local.get $count");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $count");
+    emitter.push_line("i32.const 4");
+    emitter.push_line("i32.mul");
+    emitter.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_ARRAY << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $count");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {ARRAY_KIND_REF}"));
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $data");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("call $bd_root_push");
+    emitter.push_line("local.set $base");
+    emitter.push_line("local.get $base");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("call $bd_root_set");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("local.set $idx");
+
+    emitter.push_line("block $env_args_done");
+    emitter.indent();
+    emitter.push_line("loop $env_args_loop");
+    emitter.indent();
+    emitter.push_line("local.get $idx");
+    emitter.push_line("local.get $count");
+    emitter.push_line("i32.ge_u");
+    emitter.push_line("br_if $env_args_done");
+
+    emitter.push_line("local.get $idx");
+    emitter.push_line("call $bd_env_args_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $str");
+    emitter.push_line("local.get $str");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $str");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $str");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $str");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $str");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_env_args_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $str");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $data");
+    emitter.push_line("local.get $idx");
+    emitter.push_line("i32.const 4");
+    emitter.push_line("i32.mul");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $str");
+    emitter.push_line("i32.store");
+
+    emitter.push_line("local.get $idx");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $idx");
+    emitter.push_line("br $env_args_loop");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("i32.const 1");
+    emitter.push_line("call $bd_root_pop");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_env_get (param $name i32) (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $name_len i32)");
+    emitter.push_line("(local $name_data i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("local.get $name");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $name");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $name");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $name_len");
+    emitter.push_line("local.get $name");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $name_data");
+
+    emitter.push_line("local.get $name_data");
+    emitter.push_line("local.get $name_len");
+    emitter.push_line("call $bd_env_get_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_env_get_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_env_cwd (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $fill i32)");
+
+    emitter.push_line("call $bd_env_cwd_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_env_cwd_fill");
+    emitter.push_line("local.set $fill");
+    emitter.push_line("local.get $fill");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_validate_utf8");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_UTF8_INVALID}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_env_set (param $name i32) (param $value i32) (result i64)");
+    emitter.indent();
+    emitter.push_line("(local $name_len i32)");
+    emitter.push_line("(local $value_len i32)");
+    emitter.push_line("(local $name_data i32)");
+    emitter.push_line("(local $value_data i32)");
+    emitter.push_line("(local $result i64)");
+
+    emitter.push_line("local.get $name");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $name");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $value");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $value");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $name");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $name_len");
+    emitter.push_line("local.get $name");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $name_data");
+
+    emitter.push_line("local.get $value");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $value_len");
+    emitter.push_line("local.get $value");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $value_data");
+
+    emitter.push_line("local.get $name_data");
+    emitter.push_line("local.get $name_len");
+    emitter.push_line("local.get $value_data");
+    emitter.push_line("local.get $value_len");
+    emitter.push_line("call $bd_env_set_raw");
+    emitter.push_line("local.set $result");
+    emitter.push_line("local.get $result");
+    emitter.push_line("i64.const 0");
+    emitter.push_line("i64.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $result");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_env_set_cwd (param $path i32) (result i64)");
+    emitter.indent();
+    emitter.push_line("(local $path_len i32)");
+    emitter.push_line("(local $path_data i32)");
+    emitter.push_line("(local $result i64)");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $path");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $path_len");
+    emitter.push_line("local.get $path");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $path_data");
+
+    emitter.push_line("local.get $path_data");
+    emitter.push_line("local.get $path_len");
+    emitter.push_line("call $bd_env_set_cwd_raw");
+    emitter.push_line("local.set $result");
+    emitter.push_line("local.get $result");
+    emitter.push_line("i64.const 0");
+    emitter.push_line("i64.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_ENV}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $result");
+    emitter.dedent();
+    emitter.push_line(")");
 }
 
 pub(super) fn emit_io_runtime(emitter: &mut WatEmitter) {

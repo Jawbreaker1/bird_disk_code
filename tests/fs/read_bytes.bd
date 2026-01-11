@@ -1,0 +1,13 @@
+import std::fs.
+import std::bytes.
+import std::string.
+
+rule main() -> i64:
+  set data: u8[] = std::fs::read_bytes("tests/fs/bytes.bin").
+  set expected: u8[] = std::string::bytes("Bird").
+  when std::bytes::eq(data, expected):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

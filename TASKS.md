@@ -14,8 +14,8 @@ Keep scope tight. If it expands language surface area, it's likely out-of-scope 
 ### Sprint 0B — Basic completions + diagnostics (1–3 days)
 - [x] Add keyword + stdlib module completions (no type info)
 - [x] Add file-based module completions for `import`
-- [x] Wire `birddisk check --json` as diagnostics on save
-- [x] Optional: hook `birddisk fmt` as a document formatter
+- [x] Wire `birddiskc check --json` as diagnostics on save
+- [x] Optional: hook `birddiskc fmt` as a document formatter
 
 ### Sprint 0C — LSP/semantic features (future)
 - [x] Define LSP scope (hover, go-to, rename, type-aware completions)
@@ -35,7 +35,7 @@ Acceptance:
   - [x] crates/birddisk_vm
   - [x] crates/birddisk_wasm (stub)
 - [x] Baseline: `cargo test` green
-- [x] CLI stub: `birddisk --help`
+- [x] CLI stub: `birddiskc --help`
 
 Acceptance:
 - `cargo test` passes
@@ -80,14 +80,14 @@ Implement:
 - [x] Typechecking per `docs/SPEC.md`
 - [x] Inference for `set name = expr.` where expr is inferable
 - [x] Enforce explicit function param + return types
-- [x] Diagnostics JSON (`birddisk check --json`) + basic fix-its
+- [x] Diagnostics JSON (`birddiskc check --json`) + basic fix-its
 
 Add tests:
 - [x] typecheck happy paths
 - [x] failures: unknown name, wrong arity, type mismatch, non-bool condition, non-inferable `set`
 
 Acceptance:
-- `birddisk check --json` returns structured diagnostics
+- `birddiskc check --json` returns structured diagnostics
 
 ---
 
@@ -102,13 +102,13 @@ Add tests:
 - [x] control flow correctness (when/repeat)
 
 Acceptance:
-- `birddisk run --engine vm examples/*.bd` works
+- `birddiskc run --engine vm examples/*.bd` works
 
 ---
 
 ## Sprint 4 — Formatter (2–7 days)
 Implement:
-- [x] `birddisk fmt` prints canonical code from AST
+- [x] `birddiskc fmt` prints canonical code from AST
 - [x] Idempotent formatting: fmt(fmt(code)) == fmt(code)
 
 Add tests:
@@ -130,8 +130,8 @@ Add tests:
 - [ ] basic differential fuzz/mutations (optional stretch)
 
 Acceptance:
-- `birddisk run --engine wasm` works
-- `birddisk test` compares VM vs WASM outputs
+- `birddiskc run --engine wasm` works
+- `birddiskc test` compares VM vs WASM outputs
 
 ---
 
@@ -294,10 +294,10 @@ Acceptance:
 
 ## Sprint 12 — Stdlib essentials (2–4 weeks)
 Implement (v0.x essentials, keep scope tight):
-- [ ] `std::fs` (read/write file contents)
-- [ ] `std::path` (join, normalize, basename/dirname)
-- [ ] `std::time` (clock/timers)
-- [ ] `std::env` (args, env vars)
+- [x] `std::fs` (read/write file contents)
+- [x] `std::path` (join, normalize, basename/dirname)
+- [x] `std::time` (clock/timers)
+- [x] `std::env` (args, env vars)
 - [ ] `std::json` (encode/decode basic values)
 
 Add tests:
@@ -329,7 +329,8 @@ Acceptance:
 Implement:
 - [ ] Module resolution rules beyond stdlib (local + project packages)
 - [ ] Simple manifest format (project name, version, deps)
-- [ ] CLI workflow: `birddisk build`, `birddisk run` with manifest
+- [ ] CLI workflow: `birddiskc build`, `birddiskc run` with manifest
+- [x] Align CLI naming: rename `birddiskc` crate or binary so build instructions match output name
 
 Add tests:
 - [ ] Multi-module compilation tests
@@ -359,7 +360,7 @@ Acceptance:
 ## Sprint 16 — Tooling & quality (ongoing)
 Implement:
 - [ ] Linter with opinionated rules for LLM-friendly code
-- [ ] Doc generator (`birddisk doc` from source)
+- [ ] Doc generator (`birddiskc doc` from source)
 - [ ] Profiler hooks (GC stats, runtime timers)
 - [ ] Enhanced test runner (parallel, filters, snapshots)
 
@@ -400,6 +401,9 @@ Acceptance:
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)
 - [ ] Keep the VSCode extension (syntax/LSP) updated as the language surface grows
+
+## Future — Quality gates (exploration)
+- [ ] Evaluate a test-required policy (lint/tooling first, not compiler), with clear opt-outs and minimal friction
 
 ## Future — Native AOT follow-ups
 - [x] AOT wrapper: embed or pass GC layout so native GC can scan references correctly

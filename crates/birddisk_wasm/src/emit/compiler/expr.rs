@@ -79,6 +79,18 @@ impl<'a> FuncCompiler<'a> {
                 if self.emit_io_call(name, args)? {
                     return Ok(());
                 }
+                if self.emit_time_call(name, args)? {
+                    return Ok(());
+                }
+                if self.emit_fs_call(name, args)? {
+                    return Ok(());
+                }
+                if self.emit_env_call(name, args)? {
+                    return Ok(());
+                }
+                if self.emit_path_call(name, args)? {
+                    return Ok(());
+                }
                 let sig = self.functions.get(name).ok_or_else(|| {
                     wasm_error("E0400", format!("Unknown function '{name}'"))
                 })?;
@@ -536,6 +548,220 @@ impl<'a> FuncCompiler<'a> {
         }
     }
 
+    fn emit_time_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::time::now_ms" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::time::now_ms expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_time_now_ms");
+                Ok(true)
+            }
+            "std::time::sleep_ms" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::time::sleep_ms expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_time_sleep_ms");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn emit_fs_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::fs::read_text" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::fs::read_text expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_fs_read_text");
+                Ok(true)
+            }
+            "std::fs::write_text" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::fs::write_text expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_fs_write_text");
+                Ok(true)
+            }
+            "std::fs::read_bytes" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::fs::read_bytes expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_fs_read_bytes");
+                Ok(true)
+            }
+            "std::fs::write_bytes" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::fs::write_bytes expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::Array(Box::new(Type::U8))];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_fs_write_bytes");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn emit_path_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::path::join" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::path::join expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_path_join");
+                Ok(true)
+            }
+            "std::path::normalize" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::path::normalize expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_path_normalize");
+                Ok(true)
+            }
+            "std::path::basename" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::path::basename expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_path_basename");
+                Ok(true)
+            }
+            "std::path::dirname" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::path::dirname expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_path_dirname");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn emit_env_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::env::args" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::env::args expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_env_args");
+                Ok(true)
+            }
+            "std::env::get" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::env::get expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_env_get");
+                Ok(true)
+            }
+            "std::env::set_var" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::env::set_var expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_env_set");
+                Ok(true)
+            }
+            "std::env::cwd" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::env::cwd expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_env_cwd");
+                Ok(true)
+            }
+            "std::env::set_cwd" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::env::set_cwd expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_env_set_cwd");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn emit_string_literal(&mut self, value: &str) -> Result<(), WasmError> {
         let bytes = value.as_bytes();
         let len = i32::try_from(bytes.len()).map_err(|_| {
@@ -684,6 +910,21 @@ impl<'a> FuncCompiler<'a> {
             "std::bytes::eq" => Some(Type::Bool),
             "std::io::print" => Some(Type::I64),
             "std::io::read_line" => Some(Type::String),
+            "std::time::now_ms" => Some(Type::I64),
+            "std::time::sleep_ms" => Some(Type::I64),
+            "std::fs::read_text" => Some(Type::String),
+            "std::fs::write_text" => Some(Type::I64),
+            "std::fs::read_bytes" => Some(Type::Array(Box::new(Type::U8))),
+            "std::fs::write_bytes" => Some(Type::I64),
+            "std::env::args" => Some(Type::Array(Box::new(Type::String))),
+            "std::env::get" => Some(Type::String),
+            "std::env::set_var" => Some(Type::I64),
+            "std::env::cwd" => Some(Type::String),
+            "std::env::set_cwd" => Some(Type::I64),
+            "std::path::join" => Some(Type::String),
+            "std::path::normalize" => Some(Type::String),
+            "std::path::basename" => Some(Type::String),
+            "std::path::dirname" => Some(Type::String),
             _ => self.functions.get(name).map(|sig| sig.return_type.clone()),
         }
     }

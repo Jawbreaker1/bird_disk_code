@@ -4,14 +4,19 @@ use crate::value::{coerce_value, value_type, Value};
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Program, Stmt, Type, UnaryOp};
 use birddisk_core::TraceFrame;
 use std::collections::{HashMap, VecDeque};
+use std::time::{Duration, Instant};
 
 pub fn eval(program: &Program) -> Result<i64, RuntimeError> {
-    let (result, _) = eval_with_io(program, "")?;
+    let (result, _) = eval_with_io(program, "", &[])?;
     Ok(result)
 }
 
-pub fn eval_with_io(program: &Program, input: &str) -> Result<(i64, String), RuntimeError> {
-    let mut vm = Vm::new(program, input);
+pub fn eval_with_io(
+    program: &Program,
+    input: &str,
+    args: &[String],
+) -> Result<(i64, String), RuntimeError> {
+    let mut vm = Vm::new(program, input, args);
     let result = vm.eval_main()?;
     Ok((result, vm.output))
 }
@@ -20,9 +25,11 @@ pub(crate) struct Vm<'a> {
     functions: HashMap<String, &'a birddisk_core::ast::Function>,
     books: HashMap<String, BookInfo>,
     scopes: Vec<Scope>,
+    args: Vec<String>,
     input: VecDeque<String>,
     output: String,
     trace: Vec<TraceFrame>,
+    start_time: Instant,
     heap: Heap,
     roots: RootStack,
     gc_layout: GcLayout,
@@ -65,7 +72,7 @@ impl Scope {
 }
 
 impl<'a> Vm<'a> {
-    fn new(program: &'a Program, input: &str) -> Self {
+    fn new(program: &'a Program, input: &str, args: &[String]) -> Self {
         let mut functions = HashMap::new();
         for func in &program.functions {
             functions.insert(func.name.clone(), func);
@@ -103,9 +110,11 @@ impl<'a> Vm<'a> {
             functions,
             books,
             scopes: Vec::new(),
+            args: args.to_vec(),
             input: split_lines(input),
             output: String::new(),
             trace: Vec::new(),
+            start_time: Instant::now(),
             heap: Heap::new(),
             roots: RootStack::new(),
             gc_layout: GcLayout { ref_fields },
@@ -809,6 +818,24 @@ impl<'a> Vm<'a> {
         }
     }
 
+    pub(crate) fn alloc_env_args(&mut self) -> Result<Value, RuntimeError> {
+        if self.args.is_empty() {
+            return self.alloc_array(&Type::String, Vec::new());
+        }
+        let args = self.args.clone();
+        let frame_len = args.len();
+        let base = self.roots.push_frame(frame_len);
+        let mut values = Vec::with_capacity(frame_len);
+        for (index, arg) in args.iter().enumerate() {
+            let value = self.alloc_string(arg);
+            self.update_root_slot(base + index, &value);
+            values.push(value);
+        }
+        let result = self.alloc_array(&Type::String, values);
+        self.roots.pop_frame(frame_len);
+        result
+    }
+
     pub(crate) fn read_u8_array(
         &self,
         handle: HeapHandle,
@@ -829,7 +856,11 @@ impl<'a> Vm<'a> {
         Ok(bytes.to_vec())
     }
 
-    fn alloc_array(&mut self, elem_ty: &Type, elements: Vec<Value>) -> Result<Value, RuntimeError> {
+    pub(crate) fn alloc_array(
+        &mut self,
+        elem_ty: &Type,
+        elements: Vec<Value>,
+    ) -> Result<Value, RuntimeError> {
         self.maybe_collect();
         let elem_kind = elem_kind_for_type(elem_ty)?;
         let elem_size = elem_size(elem_kind);
@@ -1151,6 +1182,19 @@ impl<'a> Vm<'a> {
         self.input.pop_front().unwrap_or_default()
     }
 
+    pub(crate) fn now_ms(&self) -> i64 {
+        let elapsed = self.start_time.elapsed().as_millis();
+        i64::try_from(elapsed).unwrap_or(i64::MAX)
+    }
+
+    pub(crate) fn sleep_ms(&self, millis: i64) -> Result<i64, RuntimeError> {
+        if millis < 0 {
+            return Err(runtime_error("E0400", "Sleep duration must be >= 0."));
+        }
+        std::thread::sleep(Duration::from_millis(millis as u64));
+        Ok(millis)
+    }
+
     fn lookup(&self, name: &str) -> Option<&Value> {
         for scope in self.scopes.iter().rev() {
             if let Some(value) = scope.values.get(name) {
@@ -1200,7 +1244,7 @@ mod tests {
     fn run_with_gc(source: &str, threshold: usize) -> (i64, usize) {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        let mut vm = Vm::new(&program, "");
+        let mut vm = Vm::new(&program, "", &[]);
         vm.gc_threshold = threshold;
         let result = vm.eval_main().unwrap();
         let gc_runs = vm.heap.stats().gc_runs;
@@ -1210,7 +1254,7 @@ mod tests {
     fn run_with_gc_stats(source: &str, threshold: usize) -> (i64, crate::heap::HeapStats) {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        let mut vm = Vm::new(&program, "");
+        let mut vm = Vm::new(&program, "", &[]);
         vm.gc_threshold = threshold;
         let result = vm.eval_main().unwrap();
         let stats = vm.heap.stats();

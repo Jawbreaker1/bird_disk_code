@@ -8,7 +8,7 @@ const HELP: &str = "\
 BirdDisk compiler (POC)
 
 Usage:
-  birddisk <command> [options]
+  birddiskc <command> [options]
 
 Commands:
   fmt <file|dir>
@@ -23,7 +23,7 @@ Options:
 
 const FMT_HELP: &str = "\
 Usage:
-  birddisk fmt <file|dir>
+  birddiskc fmt <file|dir>
 
 Options:
   -h, --help     Show this help message
@@ -31,7 +31,7 @@ Options:
 
 const CHECK_HELP: &str = "\
 Usage:
-  birddisk check <file|dir> [--json]
+  birddiskc check <file|dir> [--json]
 
 Options:
   --json         Emit JSON diagnostics
@@ -40,7 +40,7 @@ Options:
 
 const RUN_HELP: &str = "\
 Usage:
-  birddisk run <file> [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
+  birddiskc run <file> [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [-- <args>...]
 
 Options:
   --engine       Execution engine (vm, wasm, or native)
@@ -48,6 +48,7 @@ Options:
   --emit         Emit compiled output (wat, wasm, obj, or exe)
   --out          Output file for --emit
   --stdin        Read stdin from file
+  --             Pass remaining arguments to std::env::args()
   --stdout       Write stdout to file (JSON still printed to stdout)
   --report       Write JSON report to file (stdout becomes program output unless --json is set)
   -h, --help     Show this help message
@@ -55,7 +56,7 @@ Options:
 
 const TEST_HELP: &str = "\
 Usage:
-  birddisk test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
+  birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
 
 Options:
   --json         Emit JSON output
@@ -78,6 +79,7 @@ enum Command {
         stdin: Option<String>,
         stdout: Option<String>,
         report: Option<String>,
+        args: Vec<String>,
     },
     Test {
         json: bool,
@@ -126,7 +128,7 @@ fn main() {
     }
 
     if args[0] == "--version" {
-        println!("birddisk 0.1.0");
+        println!("birddiskc 0.1.0");
         return;
     }
 
@@ -182,7 +184,7 @@ fn parse_fmt(args: &[String]) -> Result<Command, String> {
         parse_path_and_flags(
             args,
             ParseConfig::new(
-                true, false, false, false, false, false, false, false, false, false,
+                true, false, false, false, false, false, false, false, false, false, false,
             ),
         )?;
     let path = parsed
@@ -196,7 +198,7 @@ fn parse_check(args: &[String]) -> Result<Command, String> {
         parse_path_and_flags(
             args,
             ParseConfig::new(
-                true, false, true, false, false, false, false, false, false, false,
+                true, false, true, false, false, false, false, false, false, false, false,
             ),
         )?;
     let path = parsed
@@ -212,7 +214,7 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
     let parsed =
         parse_path_and_flags(
             args,
-            ParseConfig::new(true, true, true, true, true, false, false, true, true, true),
+            ParseConfig::new(true, true, true, true, true, false, false, true, true, true, true),
         )?;
     let path = parsed
         .path
@@ -243,13 +245,14 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
         stdin: parsed.stdin,
         stdout: parsed.stdout,
         report: parsed.report,
+        args: parsed.args,
     })
 }
 
 fn parse_test(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(false, true, true, false, false, true, true, false, false, false),
+        ParseConfig::new(false, true, true, false, false, true, true, false, false, false, false),
     )?;
     if parsed.path.is_some() {
         return Err("unexpected path for test".to_string());
@@ -274,6 +277,7 @@ struct ParseConfig {
     allow_stdin: bool,
     allow_stdout: bool,
     allow_report: bool,
+    allow_args: bool,
 }
 
 impl ParseConfig {
@@ -288,6 +292,7 @@ impl ParseConfig {
         allow_stdin: bool,
         allow_stdout: bool,
         allow_report: bool,
+        allow_args: bool,
     ) -> Self {
         Self {
             allow_path,
@@ -300,6 +305,7 @@ impl ParseConfig {
             allow_stdin,
             allow_stdout,
             allow_report,
+            allow_args,
         }
     }
 }
@@ -315,6 +321,7 @@ struct ParsedArgs {
     stdin: Option<String>,
     stdout: Option<String>,
     report: Option<String>,
+    args: Vec<String>,
 }
 
 fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedArgs, String> {
@@ -328,10 +335,21 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
     let mut stdin = None;
     let mut stdout = None;
     let mut report = None;
+    let mut arg_values = Vec::new();
     let mut iter = args.iter();
 
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--" => {
+                if !config.allow_args {
+                    return Err("unexpected --".to_string());
+                }
+                if path.is_none() {
+                    return Err("missing path before --".to_string());
+                }
+                arg_values.extend(iter.cloned());
+                break;
+            }
             "--json" => {
                 if !config.allow_json {
                     return Err("unexpected --json".to_string());
@@ -436,6 +454,7 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
         stdin,
         stdout,
         report,
+        args: arg_values,
     })
 }
 
@@ -482,6 +501,7 @@ fn execute(command: Command) -> Result<(), String> {
             stdin,
             stdout,
             report,
+            args,
         } => {
             if let Some(format) = emit {
                 return emit_compiled(&path, engine, format, out);
@@ -492,7 +512,7 @@ fn execute(command: Command) -> Result<(), String> {
                         .map_err(|err| format!("unable to read --stdin file '{path}': {err}"))?,
                     None => String::new(),
                 };
-                let run_report = run_report(&path, engine, &input);
+                let run_report = run_report(&path, engine, &input, &args);
                 let report_json =
                     serde_json::to_string_pretty(&run_report).unwrap_or_else(|_| "{}".to_string());
                 if let Some(path) = report.as_deref() {
@@ -536,10 +556,11 @@ fn run_report(
     path: &str,
     engine: birddisk_core::Engine,
     input: &str,
+    args: &[String],
 ) -> birddisk_core::RunReport {
     match birddisk_core::parse_and_typecheck(path) {
         Ok(program) => match engine {
-            birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io(&program, input) {
+            birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io(&program, input, args) {
                 Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
@@ -563,7 +584,7 @@ fn run_report(
                     )],
                 },
             },
-            birddisk_core::Engine::Wasm => match birddisk_wasm::run_with_io(&program, input) {
+            birddisk_core::Engine::Wasm => match birddisk_wasm::run_with_io(&program, input, args) {
                 Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
@@ -587,30 +608,32 @@ fn run_report(
                     )],
                 },
             },
-            birddisk_core::Engine::Native => match birddisk_native::run_with_io(&program, input) {
-                Ok((result, stdout)) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: true,
-                    result: Some(result),
-                    stdout: Some(stdout),
-                    diagnostics: Vec::new(),
-                },
-                Err(err) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: false,
-                    result: None,
-                    stdout: None,
-                    diagnostics: vec![runtime_diagnostic(
-                        path,
-                        err.message,
-                        err.code.unwrap_or("E0400"),
-                        runtime_spec_refs(err.code.unwrap_or("E0400")),
-                        err.trace,
-                    )],
-                },
-            },
+            birddisk_core::Engine::Native => {
+                match birddisk_native::run_with_io(&program, input, args) {
+                    Ok((result, stdout)) => birddisk_core::RunReport {
+                        tool: birddisk_core::TOOL_NAME,
+                        version: birddisk_core::VERSION,
+                        ok: true,
+                        result: Some(result),
+                        stdout: Some(stdout),
+                        diagnostics: Vec::new(),
+                    },
+                    Err(err) => birddisk_core::RunReport {
+                        tool: birddisk_core::TOOL_NAME,
+                        version: birddisk_core::VERSION,
+                        ok: false,
+                        result: None,
+                        stdout: None,
+                        diagnostics: vec![runtime_diagnostic(
+                            path,
+                            err.message,
+                            err.code.unwrap_or("E0400"),
+                            runtime_spec_refs(err.code.unwrap_or("E0400")),
+                            err.trace,
+                        )],
+                    },
+                }
+            }
         },
         Err(diagnostics) => birddisk_core::RunReport {
             tool: birddisk_core::TOOL_NAME,
@@ -747,6 +770,19 @@ fn read_test_input(path: &str) -> Result<String, String> {
     Ok(read_optional_file(&stdin_path)?.unwrap_or_default())
 }
 
+fn read_test_args(path: &str) -> Result<Vec<String>, String> {
+    let args_path = companion_path(path, "args");
+    let Some(contents) = read_optional_file(&args_path)? else {
+        return Ok(Vec::new());
+    };
+    Ok(contents
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(|line| line.to_string())
+        .collect())
+}
+
 fn read_expected_output(path: &str) -> Result<Option<String>, String> {
     let stdout_path = companion_path(path, "stdout");
     read_optional_file(&stdout_path)
@@ -839,6 +875,15 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
             return case;
         }
     };
+    let args = match read_test_args(path) {
+        Ok(args) => args,
+        Err(err) => {
+            case.ok = false;
+            case.diagnostics
+                .push(harness_diagnostic(path, err, "E0501"));
+            return case;
+        }
+    };
     let expected_error = match read_expected_error(path) {
         Ok(error) => error,
         Err(err) => {
@@ -876,26 +921,26 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
     if let Some(expected) = expected_error.as_ref() {
         match engine {
             Some(birddisk_core::Engine::Vm) => {
-                let vm = birddisk_vm::eval_with_io(&program, &input);
+                let vm = birddisk_vm::eval_with_io(&program, &input, &args);
                 if !check_expected_vm_error(vm, expected, &mut case) {
                     return case;
                 }
             }
             Some(birddisk_core::Engine::Wasm) => {
-                let wasm = birddisk_wasm::run_with_io(&program, &input);
+                let wasm = birddisk_wasm::run_with_io(&program, &input, &args);
                 if !check_expected_wasm_error(wasm, expected, &mut case) {
                     return case;
                 }
             }
             Some(birddisk_core::Engine::Native) => {
-                let native = birddisk_native::run_with_io(&program, &input);
+                let native = birddisk_native::run_with_io(&program, &input, &args);
                 if !check_expected_native_error(native, expected, &mut case) {
                     return case;
                 }
             }
             None => {
-                let vm = birddisk_vm::eval_with_io(&program, &input);
-                let wasm = birddisk_wasm::run_with_io(&program, &input);
+                let vm = birddisk_vm::eval_with_io(&program, &input, &args);
+                let wasm = birddisk_wasm::run_with_io(&program, &input, &args);
                 let vm_ok = check_expected_vm_error(vm, expected, &mut case);
                 let wasm_ok = check_expected_wasm_error(wasm, expected, &mut case);
                 if !vm_ok || !wasm_ok {
@@ -908,7 +953,7 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
 
     match engine {
         Some(birddisk_core::Engine::Vm) => {
-            let vm = birddisk_vm::eval_with_io(&program, &input);
+            let vm = birddisk_vm::eval_with_io(&program, &input, &args);
             match vm {
                 Ok((result, stdout)) => {
                     case.vm_result = Some(result);
@@ -927,7 +972,7 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
             }
         }
         Some(birddisk_core::Engine::Wasm) => {
-            let wasm = birddisk_wasm::run_with_io(&program, &input);
+            let wasm = birddisk_wasm::run_with_io(&program, &input, &args);
             match wasm {
                 Ok((result, stdout)) => {
                     case.wasm_result = Some(result);
@@ -946,7 +991,7 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
             }
         }
         Some(birddisk_core::Engine::Native) => {
-            let native = birddisk_native::run_with_io(&program, &input);
+            let native = birddisk_native::run_with_io(&program, &input, &args);
             match native {
                 Ok((result, stdout)) => {
                     case.native_result = Some(result);
@@ -965,8 +1010,8 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
             }
         }
         None => {
-            let vm = birddisk_vm::eval_with_io(&program, &input);
-            let wasm = birddisk_wasm::run_with_io(&program, &input);
+            let vm = birddisk_vm::eval_with_io(&program, &input, &args);
+            let wasm = birddisk_wasm::run_with_io(&program, &input, &args);
 
             match vm {
                 Ok((result, stdout)) => {
@@ -1192,7 +1237,7 @@ fn emit_compiled(
     out: Option<String>,
 ) -> Result<(), String> {
     let program = birddisk_core::parse_and_typecheck(path)
-        .map_err(|_| "emit failed; run `birddisk check --json` for diagnostics".to_string())?;
+        .map_err(|_| "emit failed; run `birddiskc check --json` for diagnostics".to_string())?;
     match engine {
         birddisk_core::Engine::Wasm => {
             let out_path = out.or_else(|| match format {
@@ -1424,7 +1469,7 @@ fn emit_json_error(code: &str, message: &str, trace: &[birddisk_native_runtime::
 
 fn maybe_report_result(result: i64) {
     if result_enabled() {
-        eprintln!("birddisk result: {result}");
+        eprintln!("birddiskc result: {result}");
     }
 }
 
@@ -1437,6 +1482,8 @@ fn main() {
     let trace: Vec<birddisk_native_runtime::TraceFrame> = __TRACE__;
     runtime.set_trace(trace);
     runtime.set_input(&input);
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    runtime.set_args(&args);
     let result = unsafe { __ENTRY__(&mut runtime) };
     if let Some(err) = runtime.take_error() {
         if json_enabled() {
@@ -1736,6 +1783,7 @@ mod tests {
                 stdin: None,
                 stdout: None,
                 report: None,
+                args: Vec::new(),
             }
         );
     }
@@ -1754,6 +1802,7 @@ mod tests {
                 stdin: None,
                 stdout: None,
                 report: None,
+                args: Vec::new(),
             }
         );
     }
@@ -1782,6 +1831,7 @@ mod tests {
                 stdin: None,
                 stdout: None,
                 report: None,
+                args: Vec::new(),
             }
         );
     }
@@ -1830,6 +1880,7 @@ mod tests {
                 stdin: Some("input.txt".to_string()),
                 stdout: Some("output.txt".to_string()),
                 report: None,
+                args: Vec::new(),
             }
         );
     }
@@ -1868,6 +1919,26 @@ mod tests {
                 stdin: None,
                 stdout: None,
                 report: Some("report.json".to_string()),
+                args: Vec::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_run_collects_args_after_dash_dash() {
+        let command = cmd(&["run", "main.bd", "--json", "--", "alpha", "beta"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Run {
+                path: "main.bd".to_string(),
+                engine: birddisk_core::Engine::Vm,
+                json: true,
+                emit: None,
+                out: None,
+                stdin: None,
+                stdout: None,
+                report: None,
+                args: vec!["alpha".to_string(), "beta".to_string()],
             }
         );
     }

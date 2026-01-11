@@ -1,35 +1,49 @@
 use crate::analysis::{
-    program_uses_arrays, program_uses_io, program_uses_objects, program_uses_string_from_bytes,
-    program_uses_strings,
+    program_uses_arrays, program_uses_env, program_uses_fs, program_uses_io,
+    program_uses_objects, program_uses_path, program_uses_string_from_bytes,
+    program_uses_strings, program_uses_time,
 };
 use crate::emit::{
     emit_wat, wasm_error, WasmError, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET,
     TRACE_STACK_SLOTS, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_KIND_ARRAY,
-    TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_STRING_PARSE,
-    TRAP_TRACE_OOM, TRAP_UTF8_INVALID, TRAP_HEAP_HEADER,
+    TRAP_ENV, TRAP_FS_IO, TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING,
+    TRAP_NULL_DEREF, TRAP_PATH, TRAP_STRING_PARSE, TRAP_TIME_NEG, TRAP_TRACE_OOM,
+    TRAP_UTF8_INVALID, TRAP_HEAP_HEADER,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
 use birddisk_core::TraceFrame;
 use std::collections::VecDeque;
+use std::path::{Component, Path, PathBuf};
+use std::time::Instant;
 
 struct IoState {
+    args: Vec<String>,
     input: VecDeque<String>,
     output: String,
     pending_line: Option<Vec<u8>>,
+    pending_file: Option<Vec<u8>>,
+    pending_path: Option<Vec<u8>>,
+    pending_env: Option<Vec<u8>>,
+    start_time: Instant,
 }
 
 impl IoState {
-    fn new(input: &str) -> Self {
+    fn new(input: &str, args: &[String]) -> Self {
         let input = if input.is_empty() {
             VecDeque::new()
         } else {
             input.split('\n').map(|line| line.to_string()).collect()
         };
         Self {
+            args: args.to_vec(),
             input,
             output: String::new(),
             pending_line: None,
+            pending_file: None,
+            pending_path: None,
+            pending_env: None,
+            start_time: Instant::now(),
         }
     }
 
@@ -51,11 +65,15 @@ impl IoState {
 }
 
 pub fn run(program: &Program) -> Result<i64, WasmError> {
-    let (result, _) = run_with_io(program, "")?;
+    let (result, _) = run_with_io(program, "", &[])?;
     Ok(result)
 }
 
-pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), WasmError> {
+pub fn run_with_io(
+    program: &Program,
+    input: &str,
+    args: &[String],
+) -> Result<(i64, String), WasmError> {
     use wasmtime::{Engine, Linker, Module, Store};
 
     let uses_arrays = program_uses_arrays(program);
@@ -63,6 +81,11 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Wasm
     let uses_from_bytes = program_uses_string_from_bytes(program);
     let uses_io = program_uses_io(program);
     let uses_objects = program_uses_objects(program);
+    let uses_time = program_uses_time(program);
+    let uses_fs = program_uses_fs(program);
+    let uses_path = program_uses_path(program);
+    let uses_env = program_uses_env(program);
+    let needs_validate_utf8 = uses_from_bytes || uses_fs || uses_path || uses_env;
     let uses_trace = true;
     let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace;
     let trace_table = build_trace_table(program);
@@ -79,7 +102,7 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Wasm
     let engine = Engine::default();
     let module = Module::new(&engine, wat)
         .map_err(|err| wasm_error("E0400", format!("WASM compile error: {err}")))?;
-    let mut store = Store::new(&engine, IoState::new(input));
+    let mut store = Store::new(&engine, IoState::new(input, args));
     let mut linker = Linker::new(&engine);
     if uses_heap {
         linker
@@ -88,7 +111,7 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Wasm
             })
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
     }
-    if uses_from_bytes {
+    if needs_validate_utf8 {
         use wasmtime::{Caller, Extern};
         linker
             .func_wrap(
@@ -170,6 +193,493 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Wasm
             )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
     }
+    if uses_time {
+        linker
+            .func_wrap("env", "bd_time_now_ms", |caller: wasmtime::Caller<'_, IoState>| {
+                let elapsed = caller.data().start_time.elapsed().as_millis();
+                i64::try_from(elapsed).unwrap_or(i64::MAX)
+            })
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_time_sleep_ms",
+                |_caller: wasmtime::Caller<'_, IoState>, millis: i64| -> anyhow::Result<i64> {
+                    if millis < 0 {
+                        return Err(anyhow::anyhow!(format!("bd_trap:{TRAP_TIME_NEG}")));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(millis as u64));
+                    Ok(millis)
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+    }
+    if uses_fs {
+        use wasmtime::{Caller, Extern};
+        linker
+            .func_wrap(
+                "env",
+                "bd_fs_read_len",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let bytes = match memory_bytes(&mut caller, ptr, len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let path = match std::str::from_utf8(&bytes) {
+                        Ok(path) => path,
+                        Err(_) => return -1,
+                    };
+                    let data = match std::fs::read(path) {
+                        Ok(data) => data,
+                        Err(_) => return -1,
+                    };
+                    let len = data.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_file = Some(data);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_fs_read_fill",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let Some(bytes) = caller.data_mut().pending_file.take() else {
+                        return -1;
+                    };
+                    if len < 0 || bytes.len() != len as usize {
+                        return -1;
+                    }
+                    let memory = match caller.get_export("memory") {
+                        Some(Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
+                    let start = ptr.max(0) as usize;
+                    if memory
+                        .write(&mut caller, start, &bytes)
+                        .is_err()
+                    {
+                        return -1;
+                    }
+                    len
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_fs_write",
+                |mut caller: Caller<'_, IoState>,
+                 path_ptr: i32,
+                 path_len: i32,
+                 data_ptr: i32,
+                 data_len: i32|
+                 -> i64 {
+                    let path_bytes = match memory_bytes(&mut caller, path_ptr, path_len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let path = match std::str::from_utf8(&path_bytes) {
+                        Ok(path) => path,
+                        Err(_) => return -1,
+                    };
+                    let data = match memory_bytes(&mut caller, data_ptr, data_len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    if std::fs::write(path, &data).is_err() {
+                        return -1;
+                    }
+                    data_len as i64
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+    }
+    if uses_path {
+        use wasmtime::{Caller, Extern};
+        linker
+            .func_wrap(
+                "env",
+                "bd_path_join_len",
+                |mut caller: Caller<'_, IoState>,
+                 left_ptr: i32,
+                 left_len: i32,
+                 right_ptr: i32,
+                 right_len: i32|
+                 -> i32 {
+                    let left = match memory_bytes(&mut caller, left_ptr, left_len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let right = match memory_bytes(&mut caller, right_ptr, right_len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let left = match std::str::from_utf8(&left) {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    let right = match std::str::from_utf8(&right) {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    let joined = std::path::Path::new(left).join(right);
+                    let output = match joined.to_str() {
+                        Some(value) => value.as_bytes().to_vec(),
+                        None => return -1,
+                    };
+                    let len = output.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_path = Some(output);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_path_normalize_len",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let bytes = match memory_bytes(&mut caller, ptr, len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let path = match std::str::from_utf8(&bytes) {
+                        Ok(path) => path,
+                        Err(_) => return -1,
+                    };
+                    let output = match normalize_path(path) {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    let len = output.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_path = Some(output);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_path_basename_len",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let bytes = match memory_bytes(&mut caller, ptr, len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let path = match std::str::from_utf8(&bytes) {
+                        Ok(path) => path,
+                        Err(_) => return -1,
+                    };
+                    let output = std::path::Path::new(path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("")
+                        .as_bytes()
+                        .to_vec();
+                    let len = output.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_path = Some(output);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_path_dirname_len",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let bytes = match memory_bytes(&mut caller, ptr, len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let path = match std::str::from_utf8(&bytes) {
+                        Ok(path) => path,
+                        Err(_) => return -1,
+                    };
+                    let path = std::path::Path::new(path);
+                    let output = if let Some(parent) = path.parent() {
+                        if parent.as_os_str().is_empty() {
+                            ".".to_string()
+                        } else {
+                            match parent.to_str() {
+                                Some(value) => value.to_string(),
+                                None => return -1,
+                            }
+                        }
+                    } else if path.has_root() {
+                        match path.to_str() {
+                            Some(value) => value.to_string(),
+                            None => return -1,
+                        }
+                    } else {
+                        ".".to_string()
+                    };
+                    let bytes = output.into_bytes();
+                    let len = bytes.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_path = Some(bytes);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_path_fill",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let Some(bytes) = caller.data_mut().pending_path.take() else {
+                        return -1;
+                    };
+                    if len < 0 || bytes.len() != len as usize {
+                        return -1;
+                    }
+                    let memory = match caller.get_export("memory") {
+                        Some(Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
+                    let start = ptr.max(0) as usize;
+                    if memory.write(&mut caller, start, &bytes).is_err() {
+                        return -1;
+                    }
+                    len
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+    }
+    if uses_env {
+        use wasmtime::{Caller, Extern};
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_args_count",
+                |caller: Caller<'_, IoState>| -> i32 {
+                    let count = caller.data().args.len();
+                    if count > i32::MAX as usize {
+                        return -1;
+                    }
+                    count as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_args_len",
+                |mut caller: Caller<'_, IoState>, index: i32| -> i32 {
+                    if index < 0 {
+                        return -1;
+                    }
+                    let idx = index as usize;
+                    let arg = match caller.data().args.get(idx) {
+                        Some(value) => value,
+                        None => return -1,
+                    };
+                    let bytes = arg.as_bytes().to_vec();
+                    let len = bytes.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_env = Some(bytes);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_args_fill",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let Some(bytes) = caller.data_mut().pending_env.take() else {
+                        return -1;
+                    };
+                    if len < 0 || bytes.len() != len as usize {
+                        return -1;
+                    }
+                    let memory = match caller.get_export("memory") {
+                        Some(Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
+                    let start = ptr.max(0) as usize;
+                    if memory.write(&mut caller, start, &bytes).is_err() {
+                        return -1;
+                    }
+                    len
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_get_len",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let bytes = match memory_bytes(&mut caller, ptr, len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let name = match std::str::from_utf8(&bytes) {
+                        Ok(name) => name,
+                        Err(_) => return -1,
+                    };
+                    let value = match std::env::var_os(name) {
+                        Some(value) => value,
+                        None => {
+                            caller.data_mut().pending_env = Some(Vec::new());
+                            return 0;
+                        }
+                    };
+                    let value = match value.into_string() {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    let bytes = value.into_bytes();
+                    let len = bytes.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_env = Some(bytes);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_get_fill",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let Some(bytes) = caller.data_mut().pending_env.take() else {
+                        return -1;
+                    };
+                    if len < 0 || bytes.len() != len as usize {
+                        return -1;
+                    }
+                    let memory = match caller.get_export("memory") {
+                        Some(Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
+                    let start = ptr.max(0) as usize;
+                    if memory.write(&mut caller, start, &bytes).is_err() {
+                        return -1;
+                    }
+                    len
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_cwd_len",
+                |mut caller: Caller<'_, IoState>| -> i32 {
+                    let cwd = match std::env::current_dir() {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    let text = match cwd.to_str() {
+                        Some(value) => value.as_bytes().to_vec(),
+                        None => return -1,
+                    };
+                    let len = text.len();
+                    if len > i32::MAX as usize {
+                        return -1;
+                    }
+                    caller.data_mut().pending_env = Some(text);
+                    len as i32
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_cwd_fill",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i32 {
+                    let Some(bytes) = caller.data_mut().pending_env.take() else {
+                        return -1;
+                    };
+                    if len < 0 || bytes.len() != len as usize {
+                        return -1;
+                    }
+                    let memory = match caller.get_export("memory") {
+                        Some(Extern::Memory(mem)) => mem,
+                        _ => return -1,
+                    };
+                    let start = ptr.max(0) as usize;
+                    if memory.write(&mut caller, start, &bytes).is_err() {
+                        return -1;
+                    }
+                    len
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_set",
+                |mut caller: Caller<'_, IoState>,
+                 name_ptr: i32,
+                 name_len: i32,
+                 value_ptr: i32,
+                 value_len: i32|
+                 -> i64 {
+                    let name = match memory_bytes(&mut caller, name_ptr, name_len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    let value = match memory_bytes(&mut caller, value_ptr, value_len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    if name.contains(&0) || value.contains(&0) {
+                        return -1;
+                    }
+                    let name = match std::str::from_utf8(&name) {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    let value = match std::str::from_utf8(&value) {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    std::env::set_var(name, value);
+                    1
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+        linker
+            .func_wrap(
+                "env",
+                "bd_env_set_cwd",
+                |mut caller: Caller<'_, IoState>, ptr: i32, len: i32| -> i64 {
+                    let bytes = match memory_bytes(&mut caller, ptr, len) {
+                        Some(bytes) => bytes,
+                        None => return -1,
+                    };
+                    if bytes.contains(&0) {
+                        return -1;
+                    }
+                    let path = match std::str::from_utf8(&bytes) {
+                        Ok(value) => value,
+                        Err(_) => return -1,
+                    };
+                    if std::env::set_current_dir(path).is_err() {
+                        return -1;
+                    }
+                    1
+                },
+            )
+            .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
+    }
     let instance = linker
         .instantiate(&mut store, &module)
         .map_err(|err| map_trap(err, "WASM instantiation error", Vec::new()))?;
@@ -204,6 +714,64 @@ fn validate_utf8<T>(
     }
 }
 
+fn memory_bytes<T>(
+    caller: &mut wasmtime::Caller<'_, T>,
+    ptr: i32,
+    len: i32,
+) -> Option<Vec<u8>> {
+    if ptr < 0 || len < 0 {
+        return None;
+    }
+    let memory = match caller.get_export("memory") {
+        Some(wasmtime::Extern::Memory(mem)) => mem,
+        _ => return None,
+    };
+    let data = memory.data(caller);
+    let start = ptr as usize;
+    let end = start.saturating_add(len as usize);
+    if end > data.len() {
+        return None;
+    }
+    Some(data[start..end].to_vec())
+}
+
+fn normalize_path(path: &str) -> Result<Vec<u8>, ()> {
+    let mut out = PathBuf::new();
+    let mut parts: Vec<std::ffi::OsString> = Vec::new();
+    let mut has_root = false;
+    for component in Path::new(path).components() {
+        match component {
+            Component::Prefix(prefix) => out.push(prefix.as_os_str()),
+            Component::RootDir => {
+                out.push(component.as_os_str());
+                has_root = true;
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if let Some(last) = parts.last() {
+                    if last != std::ffi::OsStr::new("..") {
+                        parts.pop();
+                    } else {
+                        parts.push(std::ffi::OsString::from(".."));
+                    }
+                } else if !has_root {
+                    parts.push(std::ffi::OsString::from(".."));
+                }
+            }
+            Component::Normal(part) => parts.push(part.to_os_string()),
+        }
+    }
+    for part in parts {
+        out.push(part);
+    }
+    if out.as_os_str().is_empty() {
+        return Ok(b".".to_vec());
+    }
+    out.to_str()
+        .map(|value| value.as_bytes().to_vec())
+        .ok_or(())
+}
+
 fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -> WasmError {
     let mut mapped = if let Some(code) = trap_code_from_error(&err) {
         match code {
@@ -219,6 +787,10 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
             TRAP_KIND_OBJECT => wasm_error("E0400", "Expected book handle."),
             TRAP_KIND_BYTES => wasm_error("E0400", "std::bytes expects u8 array."),
             TRAP_HEAP_HEADER => wasm_error("E0400", "Invalid heap header."),
+            TRAP_TIME_NEG => wasm_error("E0400", "Sleep duration must be >= 0."),
+            TRAP_FS_IO => wasm_error("E0400", "std::fs operation failed."),
+            TRAP_PATH => wasm_error("E0400", "std::path operation failed."),
+            TRAP_ENV => wasm_error("E0400", "std::env operation failed."),
             _ => wasm_error("E0400", format!("{default_message}: {err}")),
         }
     } else if let Some(trap) = err.downcast_ref::<wasmtime::Trap>() {

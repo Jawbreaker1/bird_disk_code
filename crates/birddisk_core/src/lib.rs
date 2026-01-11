@@ -184,7 +184,13 @@ fn is_builtin_std_module(path: &[String]) -> bool {
         path,
         [root, module]
             if root == "std"
-                && (module == "string" || module == "bytes" || module == "io")
+                && (module == "string"
+                    || module == "bytes"
+                    || module == "io"
+                    || module == "time"
+                    || module == "fs"
+                    || module == "path"
+                    || module == "env")
     )
 }
 
@@ -217,7 +223,7 @@ fn stdlib_import_diagnostic(file: &str, span: Span, message: impl Into<String>) 
         file,
         span,
         vec!["Stdlib module resolution failed.".to_string()],
-        vec!["SPEC.md#12-stdlib-layout".to_string()],
+        vec!["SPEC.md#14-stdlib-layout".to_string()],
         Vec::new(),
         None,
     )

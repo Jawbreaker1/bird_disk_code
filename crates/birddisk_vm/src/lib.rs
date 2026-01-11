@@ -198,7 +198,7 @@ mod tests {
         let source = "import std::io.\nimport std::string.\nrule main() -> i64:\n  set line: string = std::io::read_line().\n  set out: string = std::string::concat(line, \"!\").\n  yield std::io::print(out).\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        let (result, output) = eval_with_io(&program, "BirdDisk").unwrap();
+        let (result, output) = eval_with_io(&program, "BirdDisk", &[]).unwrap();
         assert_eq!(result, 9);
         assert_eq!(output, "BirdDisk!");
     }

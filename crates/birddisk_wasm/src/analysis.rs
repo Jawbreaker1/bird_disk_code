@@ -99,6 +99,50 @@ pub(crate) fn program_uses_io(program: &Program) -> bool {
     false
 }
 
+pub(crate) fn program_uses_time(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_time(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub(crate) fn program_uses_fs(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_fs(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub(crate) fn program_uses_path(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_path(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub(crate) fn program_uses_env(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_env(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn type_has_array(ty: &Type) -> bool {
     match ty {
         Type::Array(_) => true,
@@ -314,6 +358,152 @@ fn expr_has_io(expr: &Expr) -> bool {
         ExprKind::Index { base, index } => expr_has_io(base) || expr_has_io(index),
         ExprKind::Unary { expr, .. } => expr_has_io(expr),
         ExprKind::Binary { left, right, .. } => expr_has_io(left) || expr_has_io(right),
+        _ => false,
+    }
+}
+
+fn stmt_has_time(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_time(expr),
+        Stmt::Put { expr, .. } => expr_has_time(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_time(index) || expr_has_time(expr),
+        Stmt::PutField { expr, .. } => expr_has_time(expr),
+        Stmt::Yield { expr, .. } => expr_has_time(expr),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_time(cond)
+                || then_body.iter().any(stmt_has_time)
+                || else_body.iter().any(stmt_has_time)
+        }
+        Stmt::Repeat { cond, body, .. } => expr_has_time(cond) || body.iter().any(stmt_has_time),
+    }
+}
+
+fn expr_has_time(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::time::") || args.iter().any(expr_has_time)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_time),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_time),
+        ExprKind::ArrayNew { len } => expr_has_time(len),
+        ExprKind::Index { base, index } => expr_has_time(base) || expr_has_time(index),
+        ExprKind::Unary { expr, .. } => expr_has_time(expr),
+        ExprKind::Binary { left, right, .. } => {
+            expr_has_time(left) || expr_has_time(right)
+        }
+        _ => false,
+    }
+}
+
+fn stmt_has_fs(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_fs(expr),
+        Stmt::Put { expr, .. } => expr_has_fs(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_fs(index) || expr_has_fs(expr),
+        Stmt::PutField { expr, .. } => expr_has_fs(expr),
+        Stmt::Yield { expr, .. } => expr_has_fs(expr),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_fs(cond)
+                || then_body.iter().any(stmt_has_fs)
+                || else_body.iter().any(stmt_has_fs)
+        }
+        Stmt::Repeat { cond, body, .. } => expr_has_fs(cond) || body.iter().any(stmt_has_fs),
+    }
+}
+
+fn expr_has_fs(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::fs::") || args.iter().any(expr_has_fs)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_fs),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_fs),
+        ExprKind::ArrayNew { len } => expr_has_fs(len),
+        ExprKind::Index { base, index } => expr_has_fs(base) || expr_has_fs(index),
+        ExprKind::Unary { expr, .. } => expr_has_fs(expr),
+        ExprKind::Binary { left, right, .. } => expr_has_fs(left) || expr_has_fs(right),
+        _ => false,
+    }
+}
+
+fn stmt_has_path(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_path(expr),
+        Stmt::Put { expr, .. } => expr_has_path(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_path(index) || expr_has_path(expr),
+        Stmt::PutField { expr, .. } => expr_has_path(expr),
+        Stmt::Yield { expr, .. } => expr_has_path(expr),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_path(cond)
+                || then_body.iter().any(stmt_has_path)
+                || else_body.iter().any(stmt_has_path)
+        }
+        Stmt::Repeat { cond, body, .. } => expr_has_path(cond) || body.iter().any(stmt_has_path),
+    }
+}
+
+fn expr_has_path(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::path::") || args.iter().any(expr_has_path)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_path),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_path),
+        ExprKind::ArrayNew { len } => expr_has_path(len),
+        ExprKind::Index { base, index } => expr_has_path(base) || expr_has_path(index),
+        ExprKind::Unary { expr, .. } => expr_has_path(expr),
+        ExprKind::Binary { left, right, .. } => expr_has_path(left) || expr_has_path(right),
+        _ => false,
+    }
+}
+
+fn stmt_has_env(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_env(expr),
+        Stmt::Put { expr, .. } => expr_has_env(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_env(index) || expr_has_env(expr),
+        Stmt::PutField { expr, .. } => expr_has_env(expr),
+        Stmt::Yield { expr, .. } => expr_has_env(expr),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_env(cond)
+                || then_body.iter().any(stmt_has_env)
+                || else_body.iter().any(stmt_has_env)
+        }
+        Stmt::Repeat { cond, body, .. } => expr_has_env(cond) || body.iter().any(stmt_has_env),
+    }
+}
+
+fn expr_has_env(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::env::") || args.iter().any(expr_has_env)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_env),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_env),
+        ExprKind::ArrayNew { len } => expr_has_env(len),
+        ExprKind::Index { base, index } => expr_has_env(base) || expr_has_env(index),
+        ExprKind::Unary { expr, .. } => expr_has_env(expr),
+        ExprKind::Binary { left, right, .. } => expr_has_env(left) || expr_has_env(right),
         _ => false,
     }
 }

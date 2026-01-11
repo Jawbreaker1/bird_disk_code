@@ -1,0 +1,15 @@
+import std::env.
+import std::string.
+
+rule main() -> i64:
+  set args: string[] = std::env::args().
+  when std::string::eq(args[0], "alpha"):
+    when std::string::eq(args[1], "beta"):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

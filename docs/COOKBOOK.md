@@ -174,7 +174,73 @@ rule main() -> i64:
 end
 ```
 
-## 14) Native AOT (emit exe)
+## 14) Time (std::time)
+```birddisk
+import std::time.
+
+rule main() -> i64:
+  set t1: i64 = std::time::now_ms().
+  set slept: i64 = std::time::sleep_ms(1).
+  set t2: i64 = std::time::now_ms().
+  when slept == 1:
+    when t2 >= t1:
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end
+```
+
+## 15) Files (std::fs)
+```birddisk
+import std::fs.
+import std::string.
+
+rule main() -> i64:
+  set text: string = std::fs::read_text("data/input.txt").
+  yield std::string::len(text).
+end
+```
+
+## 16) Paths (std::path)
+```birddisk
+import std::path.
+import std::string.
+
+rule main() -> i64:
+  set joined: string = std::path::join("alpha", "beta").
+  set name: string = std::path::basename(joined).
+  when std::string::eq(name, "beta"):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+
+## 17) Environment (std::env)
+```birddisk
+import std::env.
+import std::string.
+
+rule main() -> i64:
+  set name: string = std::env::get("USER").
+  when std::string::len(name) > 0:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+Pass program args after `--`:
+```sh
+./target/debug/birddiskc run examples/main.bd --json -- alpha beta
+```
+
+## 18) Native AOT (emit exe)
 ```birddisk
 rule main() -> i64:
   yield 0.
@@ -182,7 +248,7 @@ end
 ```
 Build a native executable on the host:
 ```sh
-./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./bird_app
+./target/debug/birddiskc run path/to/file.bd --engine native --emit exe --out ./bird_app
 ./bird_app
 ```
 Optional reporting:
@@ -201,12 +267,12 @@ rule main() -> i64:
 end
 ```
 ```sh
-./target/debug/birddisk run path/to/file.bd --engine native --emit exe --out ./trace_app
+./target/debug/birddiskc run path/to/file.bd --engine native --emit exe --out ./trace_app
 BIRDDISK_JSON=1 ./trace_app
 ```
 Test note (optional):
 ```sh
-BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddisk native_aot_json_trace_smoke
+BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddiskc native_aot_json_trace_smoke
 ```
 
 ---

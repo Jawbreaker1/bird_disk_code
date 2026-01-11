@@ -20,13 +20,13 @@
       "properties": {
         "birddisk.compilerPath": {
           "type": "string",
-          "default": "birddisk",
-          "description": "Path to the BirdDisk compiler (birddisk)."
+          "default": "birddiskc",
+          "description": "Path to the BirdDisk compiler (birddiskc)."
         },
         "birddisk.enableDiagnostics": {
           "type": "boolean",
           "default": true,
-          "description": "Run birddisk check --json on save."
+          "description": "Run birddiskc check --json on save."
         },
         "birddisk.enableLsp": {
           "type": "boolean",

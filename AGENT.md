@@ -41,9 +41,9 @@ No floats, generics, concurrency, exceptions, closures, structs, pattern matchin
   - add tests (VM now; VM+WASM parity once WASM exists)
 
 ## CLI contracts
-- `birddisk check --json` returns structured diagnostics per `docs/DIAGNOSTICS.md`
-- `birddisk fmt` is deterministic
-- `birddisk run` supports:
+- `birddiskc check --json` returns structured diagnostics per `docs/DIAGNOSTICS.md`
+- `birddiskc fmt` is deterministic
+- `birddiskc run` supports:
   - `--engine vm` (golden)
   - `--engine wasm` (once wasm backend exists)
 

@@ -249,7 +249,73 @@ Functions:
   - Reads the next line from stdin without the trailing newline.
   - Returns an empty string on EOF.
 
-## 12. Stdlib layout
+## 12. Time (v0.1)
+BirdDisk exposes minimal timing helpers through the stdlib.
+
+### 12.1 std::time module
+To use time helpers, import the module:
+- `import std::time.`
+
+Functions:
+- `std::time::now_ms() -> i64`
+  - Returns milliseconds elapsed since the program started (monotonic).
+- `std::time::sleep_ms(ms: i64) -> i64`
+  - Sleeps for `ms` milliseconds and returns the duration.
+  - Negative values are runtime errors.
+
+## 13. Files and Paths (v0.1)
+BirdDisk exposes minimal filesystem and path helpers through the stdlib.
+
+### 13.1 std::fs module
+To use file helpers, import the module:
+- `import std::fs.`
+
+Functions:
+- `std::fs::read_text(path: string) -> string`
+  - Reads UTF-8 text from `path`.
+  - Invalid UTF-8 or IO failures are runtime errors.
+- `std::fs::write_text(path: string, text: string) -> i64`
+  - Writes `text` to `path` and returns bytes written.
+- `std::fs::read_bytes(path: string) -> u8[]`
+  - Reads raw bytes from `path`.
+- `std::fs::write_bytes(path: string, bytes: u8[]) -> i64`
+  - Writes bytes to `path` and returns bytes written.
+
+### 13.2 std::path module
+To use path helpers, import the module:
+- `import std::path.`
+
+Functions:
+- `std::path::join(left: string, right: string) -> string`
+  - Joins `left` and `right` using the host platform separators.
+- `std::path::normalize(path: string) -> string`
+  - Removes `.` segments and resolves `..` lexically (no filesystem access).
+  - Returns `.` when the result is empty.
+- `std::path::basename(path: string) -> string`
+  - Returns the final path segment or an empty string if none exists.
+- `std::path::dirname(path: string) -> string`
+  - Returns the parent path or `.` when no parent exists.
+
+### 13.3 std::env module
+To use environment helpers, import the module:
+- `import std::env.`
+
+Functions:
+- `std::env::args() -> string[]`
+  - Returns process arguments (excluding the executable name).
+  - For `birddiskc run`, pass args after `--`.
+- `std::env::get(name: string) -> string`
+  - Returns the variable value or an empty string if missing.
+  - Invalid UTF-8 is a runtime error.
+- `std::env::set_var(name: string, value: string) -> i64`
+  - Sets the variable and returns 1 on success.
+  - Strings containing NUL are runtime errors.
+- `std::env::cwd() -> string`
+  - Returns the current working directory.
+- `std::env::set_cwd(path: string) -> i64`
+  - Sets the current working directory and returns 1 on success.
+
+## 14. Stdlib layout
 BirdDisk ships stdlib modules on disk for reusable logic.
 
 - Stdlib modules live under `stdlib/` at the project root.
@@ -257,11 +323,11 @@ BirdDisk ships stdlib modules on disk for reusable logic.
   - `import std::math.` resolves to `stdlib/std/math.bd`.
 - Functions in stdlib modules are compiled with their module prefix
   (e.g. `std::math::add`).
-- `std::string`, `std::bytes`, and `std::io` remain implemented in Rust for now.
+- `std::string`, `std::bytes`, `std::io`, `std::time`, `std::fs`, `std::path`, and `std::env` remain implemented in Rust for now.
 - In v0.1, BirdDisk stdlib modules should be self-contained and avoid
   importing other modules.
 
-### 12.1 std::math module
+### 14.1 std::math module
 To use math helpers, import the module:
 - `import std::math.`
 
@@ -281,10 +347,10 @@ Functions:
 - `std::math::gcd(a: i64, b: i64) -> i64` (uses absolute values)
 - `std::math::lcm(a: i64, b: i64) -> i64` (returns 0 if `a` or `b` is 0)
 
-## 13. Objects (v0.1)
+## 15. Objects (v0.1)
 BirdDisk supports a minimal OO model via `book` declarations.
 
-### 13.1 Book declarations
+### 14.1 Book declarations
 ```birddisk
 book Counter:
   field value: i64.
@@ -306,13 +372,13 @@ end
 - The first parameter of a method must be named `self` and have the book type.
 - Book-typed fields are not supported in v0.1.
 
-### 13.2 Construction
+### 14.2 Construction
 - `new BookName(args)` constructs a new instance.
 - If `BookName::init(self, ...) -> BookName` exists, it is called with the new instance
   plus the provided arguments.
 - If `init` is missing, `new BookName()` is allowed and returns a zero-initialized instance.
 - Passing arguments without an `init` method is a compile-time error.
 
-### 13.3 Member access
+### 14.3 Member access
 - Field access: `obj::field`
 - Method call: `obj::method(args)`

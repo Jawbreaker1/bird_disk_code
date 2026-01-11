@@ -4,6 +4,8 @@ use birddisk_core::runtime as abi;
 pub use birddisk_core::{Position, Span, TraceFrame};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct HeapHandle(u32);
@@ -230,17 +232,19 @@ pub(crate) struct Heap {
     stats: HeapStats,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Runtime {
     heap: Heap,
     roots: RootStack,
     trace: TraceStack,
+    args: Vec<String>,
     input: VecDeque<String>,
     output: String,
     layout: Vec<Vec<usize>>,
     trace_frames: Vec<TraceFrame>,
     gc_threshold: usize,
     error: RefCell<Option<NativeTrap>>,
+    start_time: Instant,
 }
 
 impl Runtime {
@@ -249,12 +253,14 @@ impl Runtime {
             heap: Heap::new(),
             roots: RootStack::new(),
             trace: TraceStack::new(),
+            args: Vec::new(),
             input: VecDeque::new(),
             output: String::new(),
             layout: Vec::new(),
             trace_frames: Vec::new(),
             gc_threshold: usize::MAX,
             error: RefCell::new(None),
+            start_time: Instant::now(),
         }
     }
 
@@ -279,6 +285,10 @@ impl Runtime {
         self.input = split_lines(input);
     }
 
+    pub fn set_args(&mut self, args: &[String]) {
+        self.args = args.to_vec();
+    }
+
     pub fn take_output(&mut self) -> String {
         std::mem::take(&mut self.output)
     }
@@ -301,6 +311,11 @@ impl Runtime {
 
     fn read_line(&mut self) -> String {
         self.input.pop_front().unwrap_or_default()
+    }
+
+    fn now_ms(&self) -> i64 {
+        let elapsed = self.start_time.elapsed().as_millis();
+        i64::try_from(elapsed).unwrap_or(i64::MAX)
     }
 }
 
@@ -1831,6 +1846,612 @@ pub extern "C-unwind" fn bd_io_read_line(rt: *mut Runtime) -> u64 {
         }
     };
     handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_fs_read_text(rt: *mut Runtime, path_handle: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path_bytes = match string_bytes_slice(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match std::str::from_utf8(path_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    let text = match std::fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "std::fs::read_text failed.");
+            return 0;
+        }
+    };
+    let handle = match alloc_string_from_bytes(rt, text.as_bytes()) {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_fs_write_text(
+    rt: *mut Runtime,
+    path_handle: u64,
+    text_handle: u64,
+) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let path_handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let text_handle = match heap_handle(rt, text_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path_bytes = match string_bytes_slice(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let text_bytes = match string_bytes_slice(rt, text_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match std::str::from_utf8(path_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    if std::fs::write(path, text_bytes).is_err() {
+        runtime_error(rt, "std::fs::write_text failed.");
+        return 0;
+    }
+    text_bytes.len() as i64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_fs_read_bytes(rt: *mut Runtime, path_handle: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path_bytes = match string_bytes_slice(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match std::str::from_utf8(path_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    let bytes = match std::fs::read(path) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "std::fs::read_bytes failed.");
+            return 0;
+        }
+    };
+    let array = match rt.heap_mut().alloc_array(ElemKind::U8, bytes.len(), 1) {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    let payload = match heap_payload_mut(rt, array) {
+        Some(value) => value,
+        None => return 0,
+    };
+    payload[..bytes.len()].copy_from_slice(&bytes);
+    array.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_fs_write_bytes(
+    rt: *mut Runtime,
+    path_handle: u64,
+    bytes_handle: u64,
+) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let path_handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let bytes_handle = match heap_handle(rt, bytes_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path_bytes = match string_bytes_slice(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let bytes = match bytes_slice(rt, bytes_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match std::str::from_utf8(path_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    if std::fs::write(path, bytes).is_err() {
+        runtime_error(rt, "std::fs::write_bytes failed.");
+        return 0;
+    }
+    bytes.len() as i64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_path_join(
+    rt: *mut Runtime,
+    left_handle: u64,
+    right_handle: u64,
+) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let left_handle = match heap_handle(rt, left_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let right_handle = match heap_handle(rt, right_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let left = match path_from_handle(rt, left_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let right = match path_from_handle(rt, right_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let joined = Path::new(&left).join(&right);
+    let handle = match alloc_string_from_path(
+        rt,
+        "std::path::join produced invalid UTF-8.",
+        &joined,
+    ) {
+        Some(value) => value,
+        None => return 0,
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_path_normalize(rt: *mut Runtime, path_handle: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match path_from_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let normalized = normalize_path(&path);
+    let handle = match alloc_string_from_path(
+        rt,
+        "std::path::normalize produced invalid UTF-8.",
+        &normalized,
+    ) {
+        Some(value) => value,
+        None => return 0,
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_path_basename(rt: *mut Runtime, path_handle: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match path_from_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let name = Path::new(&path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    let handle = match alloc_string_from_bytes(rt, name.as_bytes()) {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_path_dirname(rt: *mut Runtime, path_handle: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = match path_from_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path = Path::new(&path);
+    let output = if let Some(parent) = path.parent() {
+        if parent.as_os_str().is_empty() {
+            ".".to_string()
+        } else {
+            match parent.to_str() {
+                Some(value) => value.to_string(),
+                None => {
+                    runtime_error(rt, "std::path::dirname produced invalid UTF-8.");
+                    return 0;
+                }
+            }
+        }
+    } else if path.has_root() {
+        match path.to_str() {
+            Some(value) => value.to_string(),
+            None => {
+                runtime_error(rt, "std::path::dirname produced invalid UTF-8.");
+                return 0;
+            }
+        }
+    } else {
+        ".".to_string()
+    };
+    let handle = match alloc_string_from_bytes(rt, output.as_bytes()) {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_env_args(rt: *mut Runtime) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let count = rt.args.len();
+    let handle = match rt
+        .heap_mut()
+        .alloc_array(ElemKind::Ref, count, elem_size(ElemKind::Ref))
+    {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    if count == 0 {
+        return handle.as_u32() as u64;
+    }
+    let args = rt.args.clone();
+    let mut handles = Vec::with_capacity(args.len());
+    for arg in &args {
+        let string = match alloc_string_from_bytes(rt, arg.as_bytes()) {
+            Some(value) => value,
+            None => {
+                oom_error(rt);
+                return 0;
+            }
+        };
+        handles.push(string.as_u32() as u64);
+    }
+    let payload = match heap_payload_mut(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let elem_size = elem_size(ElemKind::Ref);
+    for (idx, raw) in handles.iter().enumerate() {
+        let offset = idx * elem_size;
+        let target = match payload.get_mut(offset..offset + elem_size) {
+            Some(value) => value,
+            None => {
+                runtime_error(rt, "Array payload out of bounds.");
+                return 0;
+            }
+        };
+        target.copy_from_slice(&raw.to_le_bytes());
+    }
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_env_get(rt: *mut Runtime, name_handle: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, name_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let name_bytes = match string_bytes_slice(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let name = match std::str::from_utf8(name_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    let value = match std::env::var_os(name) {
+        Some(value) => value,
+        None => {
+            let handle = match alloc_string_from_bytes(rt, &[]) {
+                Some(value) => value,
+                None => {
+                    oom_error(rt);
+                    return 0;
+                }
+            };
+            return handle.as_u32() as u64;
+        }
+    };
+    let value = match value.into_string() {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "std::env::get returned invalid UTF-8.");
+            return 0;
+        }
+    };
+    let handle = match alloc_string_from_bytes(rt, value.as_bytes()) {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_env_set(
+    rt: *mut Runtime,
+    name_handle: u64,
+    value_handle: u64,
+) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let name_handle = match heap_handle(rt, name_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let value_handle = match heap_handle(rt, value_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let name_bytes = match string_bytes_slice(rt, name_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let value_bytes = match string_bytes_slice(rt, value_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    if name_bytes.contains(&0) || value_bytes.contains(&0) {
+        runtime_error(rt, "std::env::set_var expects strings without NUL.");
+        return 0;
+    }
+    let name = match std::str::from_utf8(name_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    let value = match std::str::from_utf8(value_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    std::env::set_var(name, value);
+    1
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_env_cwd(rt: *mut Runtime) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let cwd = match std::env::current_dir() {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "std::env::cwd failed.");
+            return 0;
+        }
+    };
+    let cwd = match cwd.to_str() {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "std::env::cwd returned invalid UTF-8.");
+            return 0;
+        }
+    };
+    let handle = match alloc_string_from_bytes(rt, cwd.as_bytes()) {
+        Some(value) => value,
+        None => {
+            oom_error(rt);
+            return 0;
+        }
+    };
+    handle.as_u32() as u64
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_env_set_cwd(rt: *mut Runtime, path_handle: u64) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, path_handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let path_bytes = match string_bytes_slice(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    if path_bytes.contains(&0) {
+        runtime_error(rt, "std::env::set_cwd expects string without NUL.");
+        return 0;
+    }
+    let path = match std::str::from_utf8(path_bytes) {
+        Ok(value) => value,
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            return 0;
+        }
+    };
+    if std::env::set_current_dir(path).is_err() {
+        runtime_error(rt, "std::env::set_cwd failed.");
+        return 0;
+    }
+    1
+}
+
+fn path_from_handle(rt: &Runtime, handle: HeapHandle) -> Option<String> {
+    let path_bytes = match string_bytes_slice(rt, handle) {
+        Some(value) => value,
+        None => return None,
+    };
+    match std::str::from_utf8(path_bytes) {
+        Ok(value) => Some(value.to_string()),
+        Err(_) => {
+            runtime_error(rt, "Invalid UTF-8 in string value.");
+            None
+        }
+    }
+}
+
+fn alloc_string_from_path(
+    rt: &mut Runtime,
+    message: &'static str,
+    path: &Path,
+) -> Option<HeapHandle> {
+    let text = match path.to_str() {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, message);
+            return None;
+        }
+    };
+    match alloc_string_from_bytes(rt, text.as_bytes()) {
+        Some(value) => Some(value),
+        None => {
+            oom_error(rt);
+            None
+        }
+    }
+}
+
+fn normalize_path(path: &str) -> PathBuf {
+    let mut out = PathBuf::new();
+    let mut parts: Vec<std::ffi::OsString> = Vec::new();
+    let mut has_root = false;
+    for component in Path::new(path).components() {
+        match component {
+            Component::Prefix(prefix) => out.push(prefix.as_os_str()),
+            Component::RootDir => {
+                out.push(component.as_os_str());
+                has_root = true;
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if let Some(last) = parts.last() {
+                    if last != std::ffi::OsStr::new("..") {
+                        parts.pop();
+                    } else {
+                        parts.push(std::ffi::OsString::from(".."));
+                    }
+                } else if !has_root {
+                    parts.push(std::ffi::OsString::from(".."));
+                }
+            }
+            Component::Normal(part) => parts.push(part.to_os_string()),
+        }
+    }
+    for part in parts {
+        out.push(part);
+    }
+    if out.as_os_str().is_empty() {
+        out.push(".");
+    }
+    out
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_time_now_ms(rt: *mut Runtime) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    rt.now_ms()
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_time_sleep_ms(rt: *mut Runtime, millis: i64) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    if millis < 0 {
+        runtime_error(rt, "Sleep duration must be >= 0.");
+        return 0;
+    }
+    std::thread::sleep(Duration::from_millis(millis as u64));
+    millis
 }
 
 fn parse_string_i64(text: &str) -> Option<i64> {

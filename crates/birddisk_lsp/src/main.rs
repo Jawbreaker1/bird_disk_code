@@ -977,12 +977,129 @@ fn stdlib_signatures(
             },
         );
     }
+    if has_import(program, &["std", "time"]) {
+        signatures.insert(
+            "std::time::now_ms".to_string(),
+            CallSignature {
+                params: Vec::new(),
+                return_type: Type::I64,
+            },
+        );
+        signatures.insert(
+            "std::time::sleep_ms".to_string(),
+            CallSignature {
+                params: vec!["ms".to_string()],
+                return_type: Type::I64,
+            },
+        );
+    }
+    if has_import(program, &["std", "fs"]) {
+        signatures.insert(
+            "std::fs::read_text".to_string(),
+            CallSignature {
+                params: vec!["path".to_string()],
+                return_type: Type::String,
+            },
+        );
+        signatures.insert(
+            "std::fs::write_text".to_string(),
+            CallSignature {
+                params: vec!["path".to_string(), "text".to_string()],
+                return_type: Type::I64,
+            },
+        );
+        signatures.insert(
+            "std::fs::read_bytes".to_string(),
+            CallSignature {
+                params: vec!["path".to_string()],
+                return_type: Type::Array(Box::new(Type::U8)),
+            },
+        );
+        signatures.insert(
+            "std::fs::write_bytes".to_string(),
+            CallSignature {
+                params: vec!["path".to_string(), "bytes".to_string()],
+                return_type: Type::I64,
+            },
+        );
+    }
+    if has_import(program, &["std", "path"]) {
+        signatures.insert(
+            "std::path::join".to_string(),
+            CallSignature {
+                params: vec!["left".to_string(), "right".to_string()],
+                return_type: Type::String,
+            },
+        );
+        signatures.insert(
+            "std::path::normalize".to_string(),
+            CallSignature {
+                params: vec!["path".to_string()],
+                return_type: Type::String,
+            },
+        );
+        signatures.insert(
+            "std::path::basename".to_string(),
+            CallSignature {
+                params: vec!["path".to_string()],
+                return_type: Type::String,
+            },
+        );
+        signatures.insert(
+            "std::path::dirname".to_string(),
+            CallSignature {
+                params: vec!["path".to_string()],
+                return_type: Type::String,
+            },
+        );
+    }
+    if has_import(program, &["std", "env"]) {
+        signatures.insert(
+            "std::env::args".to_string(),
+            CallSignature {
+                params: Vec::new(),
+                return_type: Type::Array(Box::new(Type::String)),
+            },
+        );
+        signatures.insert(
+            "std::env::get".to_string(),
+            CallSignature {
+                params: vec!["name".to_string()],
+                return_type: Type::String,
+            },
+        );
+        signatures.insert(
+            "std::env::set_var".to_string(),
+            CallSignature {
+                params: vec!["name".to_string(), "value".to_string()],
+                return_type: Type::I64,
+            },
+        );
+        signatures.insert(
+            "std::env::cwd".to_string(),
+            CallSignature {
+                params: Vec::new(),
+                return_type: Type::String,
+            },
+        );
+        signatures.insert(
+            "std::env::set_cwd".to_string(),
+            CallSignature {
+                params: vec!["path".to_string()],
+                return_type: Type::I64,
+            },
+        );
+    }
     if let Some(root) = root {
         for import in &program.imports {
             let module_name = import.path.join("::");
             if module_name.starts_with("std::string")
                 || module_name.starts_with("std::bytes")
                 || module_name.starts_with("std::io")
+                || module_name.starts_with("std::time")
+                || module_name.starts_with("std::fs")
+                || module_name.starts_with("std::path")
+                || module_name.starts_with("std::env")
             {
                 continue;
             }
@@ -1520,6 +1637,10 @@ fn import_modules(uri: &str) -> Vec<String> {
         "std::string".to_string(),
         "std::bytes".to_string(),
         "std::io".to_string(),
+        "std::time".to_string(),
+        "std::fs".to_string(),
+        "std::path".to_string(),
+        "std::env".to_string(),
     ];
     if let Some(path) = uri_to_path(uri) {
         if let Some(root) = find_stdlib_root(&path) {
@@ -1556,6 +1677,10 @@ fn builtin_stdlib_functions(module: &str) -> Vec<String> {
         ],
         "std::bytes" => vec!["len", "eq"],
         "std::io" => vec!["print", "read_line"],
+        "std::time" => vec!["now_ms", "sleep_ms"],
+        "std::fs" => vec!["read_text", "write_text", "read_bytes", "write_bytes"],
+        "std::path" => vec!["join", "normalize", "basename", "dirname"],
+        "std::env" => vec!["args", "get", "set_var", "cwd", "set_cwd"],
         _ => Vec::new(),
     }
     .into_iter()

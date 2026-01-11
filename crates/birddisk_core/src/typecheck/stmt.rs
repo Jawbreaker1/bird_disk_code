@@ -214,7 +214,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         *span,
                         vec!["Use `book` types with `obj::field`.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));
@@ -228,7 +228,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         *span,
                         vec!["Define the book before use.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));
@@ -242,7 +242,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         *span,
                         vec!["Check the field name.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));

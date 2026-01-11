@@ -1,7 +1,7 @@
 # BirdDisk Style Guide (v0.1)
 
 This document describes the **canonical formatting rules** for BirdDisk.
-The formatter (`birddisk fmt`) is the single source of truth.
+The formatter (`birddiskc fmt`) is the single source of truth.
 
 If code does not match this style, it is considered *unformatted*.
 

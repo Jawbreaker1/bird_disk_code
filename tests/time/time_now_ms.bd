@@ -1,0 +1,15 @@
+import std::time.
+
+rule main() -> i64:
+  set start: i64 = std::time::now_ms().
+  set i: i64 = 0.
+  repeat while i < 1000:
+    put i = i + 1.
+  end
+  set end: i64 = std::time::now_ms().
+  when end >= start:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

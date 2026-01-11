@@ -1,0 +1,11 @@
+import std::path.
+import std::string.
+
+rule main() -> i64:
+  set dir: string = std::path::dirname("alpha").
+  when std::string::eq(dir, "."):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

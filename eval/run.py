@@ -60,7 +60,7 @@ def run_birddisk_case(case, expect, birddisk, tmpdir: Path, task_id: str):
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True)
     except FileNotFoundError:
-        raise SystemExit(f"birddisk not found: {birddisk}")
+        raise SystemExit(f"birddiskc not found: {birddisk}")
 
     try:
         result = parse_json_output(proc.stdout, proc.stderr, task_id)
@@ -221,8 +221,8 @@ def main():
     parser = argparse.ArgumentParser(description="Run minimal BirdDisk eval tasks")
     parser.add_argument(
         "--birddisk",
-        default="birddisk",
-        help="Path to birddisk CLI (default: birddisk)",
+        default="birddiskc",
+        help="Path to birddiskc CLI (default: birddiskc)",
     )
     parser.add_argument(
         "--tasks",

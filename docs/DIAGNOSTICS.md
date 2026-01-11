@@ -50,7 +50,7 @@ Stability requirements
 	•	spec_refs should point to doc anchors where possible.
 
 ## Test JSON output
-`birddisk test --json` returns a test report:
+`birddiskc test --json` returns a test report:
 ```json
 {
   "tool": "birddisk",

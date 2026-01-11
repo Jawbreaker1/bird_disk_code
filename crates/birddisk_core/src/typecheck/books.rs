@@ -15,7 +15,7 @@ impl<'a> Checker<'a> {
                     self.file,
                     book.span,
                     vec!["Book names must be unique.".to_string()],
-                    vec!["SPEC.md#13-objects".to_string()],
+                    vec!["SPEC.md#15-objects".to_string()],
                     Vec::new(),
                     None,
                 ));
@@ -40,7 +40,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         field.span,
                         vec!["Field names must be unique within a book.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));
@@ -58,7 +58,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         field.span,
                         vec!["Book-typed fields are not supported in v0.1.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));
@@ -76,7 +76,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         method.span,
                         vec!["Method names must be unique within a book.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));
@@ -94,7 +94,7 @@ impl<'a> Checker<'a> {
                             self.file,
                             first.span,
                             vec!["Methods must take self as the first parameter.".to_string()],
-                            vec!["SPEC.md#13-objects".to_string()],
+                            vec!["SPEC.md#15-objects".to_string()],
                             Vec::new(),
                             None,
                         ));
@@ -120,7 +120,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         method.span,
                         vec!["Methods must take self as the first parameter.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));

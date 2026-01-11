@@ -1,0 +1,16 @@
+import std::env.
+import std::string.
+
+rule main() -> i64:
+  set cwd: string = std::env::cwd().
+  set ok: i64 = std::env::set_cwd(cwd).
+  when ok == 1:
+    when std::string::len(cwd) > 0:
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

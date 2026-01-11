@@ -12,9 +12,9 @@ The extension activates for `.bd` files.
 
 Notes:
 - Comments are reserved in the language today; the editor config uses `//` for convenience.
-- By default, diagnostics are provided by `birddisk check --json`.
+- By default, diagnostics are provided by `birddiskc check --json`.
 - Configure the compiler path via the `birddisk.compilerPath` setting if needed.
-- Formatting uses `birddisk fmt` on the current document.
+- Formatting uses `birddiskc fmt` on the current document.
 
 ## LSP (optional)
 BirdDisk ships with a minimal LSP server (`birddisk-lsp`) that adds hover, go-to definition,

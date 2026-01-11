@@ -3,8 +3,9 @@ mod runtime;
 mod types;
 
 use crate::analysis::{
-    program_uses_arrays, program_uses_bytes, program_uses_io, program_uses_objects,
-    program_uses_string_from_bytes, program_uses_strings,
+    program_uses_arrays, program_uses_bytes, program_uses_env, program_uses_fs,
+    program_uses_io, program_uses_objects, program_uses_path,
+    program_uses_string_from_bytes, program_uses_strings, program_uses_time,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -57,6 +58,10 @@ pub(crate) const TRAP_KIND_ARRAY: i32 = 411;
 pub(crate) const TRAP_KIND_OBJECT: i32 = 412;
 pub(crate) const TRAP_KIND_BYTES: i32 = 413;
 pub(crate) const TRAP_HEAP_HEADER: i32 = 414;
+pub(crate) const TRAP_TIME_NEG: i32 = 415;
+pub(crate) const TRAP_FS_IO: i32 = 416;
+pub(crate) const TRAP_PATH: i32 = 417;
+pub(crate) const TRAP_ENV: i32 = 418;
 
 pub(crate) const TRACE_STACK_PTR_OFFSET: i32 = 0;
 pub(crate) const TRACE_STACK_DATA_OFFSET: i32 = 4;
@@ -87,9 +92,15 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
     let uses_from_bytes = program_uses_string_from_bytes(program);
     let uses_io = program_uses_io(program);
     let uses_objects = program_uses_objects(program);
+    let uses_time = program_uses_time(program);
+    let uses_fs = program_uses_fs(program);
+    let uses_path = program_uses_path(program);
+    let uses_env = program_uses_env(program);
     let uses_trace = true;
     let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace;
-    let export_memory = uses_from_bytes || uses_io || uses_trace;
+    let needs_validate_utf8 = uses_from_bytes || uses_fs || uses_path || uses_env;
+    let export_memory =
+        uses_from_bytes || uses_io || uses_fs || uses_path || uses_env || uses_trace;
     let trace_table = build_trace_table(program);
     let mut functions = HashMap::new();
     for func in &program.functions {
@@ -155,14 +166,35 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
     emitter.push_line("(module");
     emitter.indent();
 
+    if uses_time {
+        runtime::emit_time_runtime(&mut emitter);
+    }
+    if uses_fs {
+        runtime::emit_fs_imports(&mut emitter);
+    }
+    if uses_path {
+        runtime::emit_path_imports(&mut emitter);
+    }
+    if uses_env {
+        runtime::emit_env_imports(&mut emitter);
+    }
     if uses_heap {
         runtime::emit_heap_runtime(
             &mut emitter,
             export_memory,
-            uses_from_bytes,
+            needs_validate_utf8,
             uses_io,
             heap_start,
         );
+    }
+    if uses_fs {
+        runtime::emit_fs_runtime(&mut emitter);
+    }
+    if uses_path {
+        runtime::emit_path_runtime(&mut emitter);
+    }
+    if uses_env {
+        runtime::emit_env_runtime(&mut emitter);
     }
     if uses_strings {
         runtime::emit_string_runtime(&mut emitter, uses_from_bytes);
@@ -484,7 +516,7 @@ mod tests {
         )
         .unwrap();
         let program = parser::parse(&tokens).unwrap();
-        let (result, output) = run_with_io(&program, "BirdDisk").unwrap();
+        let (result, output) = run_with_io(&program, "BirdDisk", &[]).unwrap();
         assert_eq!(result, 9);
         assert_eq!(output, "BirdDisk!");
     }

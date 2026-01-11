@@ -282,7 +282,7 @@ impl<'a> Checker<'a> {
                 self.file,
                 span,
                 vec!["Use `obj::field` with a book value.".to_string()],
-                vec!["SPEC.md#13-objects".to_string()],
+                vec!["SPEC.md#15-objects".to_string()],
                 Vec::new(),
                 None,
             ));
@@ -296,7 +296,7 @@ impl<'a> Checker<'a> {
                 self.file,
                 span,
                 vec!["Define the book before use.".to_string()],
-                vec!["SPEC.md#13-objects".to_string()],
+                vec!["SPEC.md#15-objects".to_string()],
                 Vec::new(),
                 None,
             ));
@@ -310,7 +310,7 @@ impl<'a> Checker<'a> {
                 self.file,
                 span,
                 vec!["Check the field name.".to_string()],
-                vec!["SPEC.md#13-objects".to_string()],
+                vec!["SPEC.md#15-objects".to_string()],
                 Vec::new(),
                 None,
             ));
@@ -333,7 +333,7 @@ impl<'a> Checker<'a> {
                 self.file,
                 span,
                 notes,
-                vec!["SPEC.md#13-objects".to_string()],
+                vec!["SPEC.md#15-objects".to_string()],
                 Vec::new(),
                 None,
             ));
@@ -350,7 +350,7 @@ impl<'a> Checker<'a> {
                     self.file,
                     span,
                     vec!["Add a self parameter to the init method.".to_string()],
-                    vec!["SPEC.md#13-objects".to_string()],
+                    vec!["SPEC.md#15-objects".to_string()],
                     Vec::new(),
                     None,
                 ));
@@ -368,7 +368,7 @@ impl<'a> Checker<'a> {
                         self.file,
                         span,
                         vec!["Argument count must match the constructor signature.".to_string()],
-                        vec!["SPEC.md#13-objects".to_string()],
+                        vec!["SPEC.md#15-objects".to_string()],
                         Vec::new(),
                         None,
                     ));
@@ -404,7 +404,7 @@ impl<'a> Checker<'a> {
                     self.file,
                     span,
                     vec!["Define `rule init(self: Book, ...) -> Book`.".to_string()],
-                    vec!["SPEC.md#13-objects".to_string()],
+                    vec!["SPEC.md#15-objects".to_string()],
                     Vec::new(),
                     None,
                 ));
@@ -427,7 +427,7 @@ impl<'a> Checker<'a> {
                             self.file,
                             span,
                             vec!["Define the method on the book.".to_string()],
-                            vec!["SPEC.md#13-objects".to_string()],
+                            vec!["SPEC.md#15-objects".to_string()],
                             Vec::new(),
                             None,
                         ));
@@ -441,7 +441,7 @@ impl<'a> Checker<'a> {
                             self.file,
                             span,
                             vec!["Add a self parameter to the method.".to_string()],
-                            vec!["SPEC.md#13-objects".to_string()],
+                            vec!["SPEC.md#15-objects".to_string()],
                             Vec::new(),
                             None,
                         ));
@@ -459,7 +459,7 @@ impl<'a> Checker<'a> {
                             self.file,
                             span,
                             vec!["Argument count must match the method signature.".to_string()],
-                            vec!["SPEC.md#13-objects".to_string()],
+                            vec!["SPEC.md#15-objects".to_string()],
                             Vec::new(),
                             None,
                         ));

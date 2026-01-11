@@ -263,7 +263,7 @@ impl<'a> Checker<'a> {
                     self.file,
                     span,
                     notes,
-                    vec!["SPEC.md#13-objects".to_string()],
+                    vec!["SPEC.md#15-objects".to_string()],
                     Vec::new(),
                     None,
                 ));

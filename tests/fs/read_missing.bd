@@ -1,0 +1,6 @@
+import std::fs.
+
+rule main() -> i64:
+  set text: string = std::fs::read_text("tests/fs/no_such_file.txt").
+  yield 0.
+end

@@ -1,0 +1,11 @@
+import std::path.
+import std::string.
+
+rule main() -> i64:
+  set name: string = std::path::basename("alpha/beta.txt").
+  when std::string::eq(name, "beta.txt"):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

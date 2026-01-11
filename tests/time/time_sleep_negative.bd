@@ -1,0 +1,5 @@
+import std::time.
+
+rule main() -> i64:
+  yield std::time::sleep_ms(-1).
+end

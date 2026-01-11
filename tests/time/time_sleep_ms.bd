@@ -1,0 +1,10 @@
+import std::time.
+
+rule main() -> i64:
+  set slept: i64 = std::time::sleep_ms(1).
+  when slept == 1:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

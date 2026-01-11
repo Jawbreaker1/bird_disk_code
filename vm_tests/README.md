@@ -5,5 +5,5 @@ Use it for future features that are not yet implemented in WASM.
 
 Run them with:
 ```sh
-./target/debug/birddisk test --json --engine vm --dir vm_tests
+./target/debug/birddiskc test --json --engine vm --dir vm_tests
 ```

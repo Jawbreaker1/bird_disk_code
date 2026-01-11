@@ -1,0 +1,19 @@
+import std::fs.
+import std::string.
+
+rule main() -> i64:
+  set path: string = "tests/fs/write_text.txt".
+  set text: string = "ok\n".
+  set written: i64 = std::fs::write_text(path, text).
+  set size: i64 = std::string::len(text).
+  set read_back: string = std::fs::read_text(path).
+  when written == size:
+    when std::string::eq(read_back, text):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

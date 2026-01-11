@@ -1,7 +1,7 @@
 # BirdDisk tests
 
 This folder contains runnable BirdDisk programs used by the differential
-test harness (`birddisk test --json`).
+test harness (`birddiskc test --json`).
 
 ## Conventions
 - Keep each file small and focused (one feature per file).
@@ -16,15 +16,15 @@ Tags are derived from:
 
 Examples:
 ```sh
-./target/debug/birddisk test --json --tag loops
-./target/debug/birddisk test --json --tag repeat
-./target/debug/birddisk test --json --dir tests --tag unary
+./target/debug/birddiskc test --json --tag loops
+./target/debug/birddiskc test --json --tag repeat
+./target/debug/birddiskc test --json --dir tests --tag unary
 ```
 
 ## VM-only fixtures
 VM-only programs live under `vm_tests/`. Run them with the VM engine:
 ```sh
-./target/debug/birddisk test --json --engine vm --dir vm_tests
+./target/debug/birddiskc test --json --engine vm --dir vm_tests
 ```
 Currently, array fixtures are in `tests/arrays/` and run in VM + WASM.
 
@@ -42,6 +42,7 @@ diagnostics.
 For IO tests, place optional companion files alongside the `.bd` source:
 - `<name>.stdin` supplies stdin content.
 - `<name>.stdout` is the expected stdout string.
+- `<name>.args` supplies command-line args (one per line) for `std::env::args()`.
 
 ## Expected error fixtures
 To assert a compile-time or runtime error, add a companion `.error` file:

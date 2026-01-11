@@ -21,7 +21,15 @@ const KEYWORDS = [
   'new'
 ];
 
-const BUILTIN_MODULES = ['std::string', 'std::bytes', 'std::io'];
+const BUILTIN_MODULES = [
+  'std::string',
+  'std::bytes',
+  'std::io',
+  'std::time',
+  'std::fs',
+  'std::path',
+  'std::env',
+];
 const SEMANTIC_TOKEN_TYPES = [
   'keyword',
   'type',
@@ -298,7 +306,7 @@ function runDiagnostics(document, diagnostics, output) {
     diagnostics.delete(document.uri);
     return;
   }
-  const compilerPath = config.get('compilerPath', 'birddisk');
+  const compilerPath = config.get('compilerPath', 'birddiskc');
   const args = ['check', '--json', document.uri.fsPath];
   const cwd = workspaceFolderFor(document.uri);
 
@@ -391,7 +399,7 @@ function workspaceRootUri() {
 
 function formatDocument(document, output) {
   const config = vscode.workspace.getConfiguration('birddisk', document.uri);
-  const compilerPath = config.get('compilerPath', 'birddisk');
+  const compilerPath = config.get('compilerPath', 'birddiskc');
   const cwd = workspaceFolderFor(document.uri);
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'birddisk-'));
   const tempPath = path.join(tempDir, path.basename(document.uri.fsPath));

@@ -2,6 +2,8 @@
 
 BirdDisk is a proof-of-concept compiled programming language and toolchain designed for an agentic/LLM-driven workflow.
 
+Why this exists: modern teams increasingly rely on LLMs to generate and modify code, but general-purpose languages and tooling are noisy for machines, leading to ambiguous parses, fragile edits, and slow fix loops. BirdDisk explores a language + compiler stack that is intentionally easier for LLMs to read, write, and correct while staying clear to humans, delivering faster iteration, fewer broken builds, and portable execution (VM/WASM/native) with deterministic formatting and machine-readable diagnostics.
+
 Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.
 
 BirdDisk focuses on:
@@ -54,15 +56,15 @@ end
 ```
 3) Run in the VM (reference interpreter).
 ```sh
-./target/debug/birddisk run hello.bd --engine vm --json
+./target/debug/birddiskc run hello.bd --engine vm --json
 ```
 4) Run in WASM (portable backend).
 ```sh
-./target/debug/birddisk run hello.bd --engine wasm --json
+./target/debug/birddiskc run hello.bd --engine wasm --json
 ```
 5) Build a native executable (host).
 ```sh
-./target/debug/birddisk run hello.bd --engine native --emit exe --out ./bird_hello
+./target/debug/birddiskc run hello.bd --engine native --emit exe --out ./bird_hello
 ./bird_hello
 ```
 6) Optional: install the VSCode extension (syntax + LSP).
@@ -73,7 +75,7 @@ are compared against it during development.
 
 WASM notes (advanced):
 - If a program uses arrays, the emitted WASM module imports `env.bd_trap`
-  for runtime error reporting; `birddisk run` provides it automatically.
+  for runtime error reporting; `birddiskc run` provides it automatically.
 - If a program uses `std::string::from_bytes`, the emitted WASM module
   also imports `env.bd_validate_utf8` and exports `memory`.
 
@@ -130,14 +132,14 @@ eval/               # LLM syntax evaluation tasks + scoring notes
 CLI (current)
 
 - JSON output is supported for check/run/test; non-JSON paths are stubbed.
-- birddisk fmt <file|dir> (canonical formatter)
-- birddisk check <file|dir> [--json] (JSON implemented)
-- birddisk run <file> [--engine vm|wasm|native] [--json] [--stdin <file>] [--stdout <file>] [--report <file>] (VM + WASM + native implemented)
-- birddisk run <file> --engine wasm --emit wat (print generated WAT)
-- birddisk run <file> --engine wasm --emit wasm [--out <file>] (write .wasm)
-- birddisk run <file> --engine native --emit obj [--out <file>] (write native .o)
-- birddisk run <file> --engine native --emit exe [--out <file>] (write native executable)
-- birddisk test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] (VM vs WASM diff by default)
+- birddiskc fmt <file|dir> (canonical formatter)
+- birddiskc check <file|dir> [--json] (JSON implemented)
+- birddiskc run <file> [--engine vm|wasm|native] [--json] [--stdin <file>] [--stdout <file>] [--report <file>] (VM + WASM + native implemented)
+- birddiskc run <file> --engine wasm --emit wat (print generated WAT)
+- birddiskc run <file> --engine wasm --emit wasm [--out <file>] (write .wasm)
+- birddiskc run <file> --engine native --emit obj [--out <file>] (write native .o)
+- birddiskc run <file> --engine native --emit exe [--out <file>] (write native executable)
+- birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] (VM vs WASM diff by default)
 
 Native AOT notes
 - `--engine native --emit obj` writes a host object file (`.o`).
@@ -178,14 +180,18 @@ Status
 - Implemented: JSON diagnostics (check/run) + fix-its + suggestions
 - Implemented: eval harness with task runner
 - Implemented: WASM backend (minimal, via wasmtime)
-- Implemented: WASM emission via `birddisk run --engine wasm --emit wasm`
-- Implemented: WAT emission via `birddisk run --engine wasm --emit wat`
-- Implemented: differential test harness (`birddisk test --json`)
-- Implemented: formatter (`birddisk fmt`)
+- Implemented: WASM emission via `birddiskc run --engine wasm --emit wasm`
+- Implemented: WAT emission via `birddiskc run --engine wasm --emit wat`
+- Implemented: differential test harness (`birddiskc test --json`)
+- Implemented: formatter (`birddiskc fmt`)
 - Implemented: arrays + indexing (VM + WASM)
 - Implemented: strings + std::string (VM + WASM)
 - Implemented: u8 + std::bytes + std::string::bytes (VM + WASM)
 - Implemented: std::io (VM + WASM)
+- Implemented: std::time (VM + WASM)
+- Implemented: std::fs (VM + WASM)
+- Implemented: std::path (VM + WASM)
+- Implemented: std::env (VM + WASM)
 - Implemented: stdlib module loading + `std::math` (BirdDisk)
 - Implemented: OO core (book + fields + methods, VM + WASM)
 - Stubbed: non-JSON CLI paths

@@ -1,0 +1,20 @@
+import std::fs.
+import std::bytes.
+import std::string.
+
+rule main() -> i64:
+  set path: string = "tests/fs/write_bytes.bin".
+  set data: u8[] = std::string::bytes("Bird").
+  set written: i64 = std::fs::write_bytes(path, data).
+  set read_back: u8[] = std::fs::read_bytes(path).
+  set size: i64 = std::bytes::len(data).
+  when written == size:
+    when std::bytes::eq(read_back, data):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

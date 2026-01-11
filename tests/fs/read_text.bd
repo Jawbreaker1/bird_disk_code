@@ -1,0 +1,11 @@
+import std::fs.
+import std::string.
+
+rule main() -> i64:
+  set text: string = std::fs::read_text("tests/fs/hello.txt").
+  when std::string::eq(text, "hello\n"):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

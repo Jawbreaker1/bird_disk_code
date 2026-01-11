@@ -4,9 +4,9 @@ This folder contains a small, CLI-driven evaluation harness for BirdDisk.
 It is intentionally small and will grow into a full suite later.
 
 Goals:
-- Run small tasks through `birddisk check` and `birddisk run`
+- Run small tasks through `birddiskc check` and `birddiskc run`
 - Provide a stable task schema for cross-language comparisons
-- Keep requirements minimal (Python 3 + birddisk CLI)
+- Keep requirements minimal (Python 3 + birddiskc CLI)
 
 Files:
 - `eval/tasks.json`: task definitions
@@ -49,8 +49,8 @@ Notes:
   or set `wrap: true` to wrap the input in a generated `main` method.
 
 Expected JSON output
-- `birddisk check --json` should follow `docs/DIAGNOSTICS.md`.
-- `birddisk run --json` should return:
+- `birddiskc check --json` should follow `docs/DIAGNOSTICS.md`.
+- `birddiskc run --json` should return:
 ```json
 {
   "tool": "birddisk",
@@ -64,5 +64,5 @@ For errors, `ok` should be `false` with `diagnostics` per the diagnostics schema
 Usage:
 ```sh
 cargo build -p birddiskc
-python3 eval/run.py --birddisk ./target/debug/birddisk
+python3 eval/run.py --birddisk ./target/debug/birddiskc
 ```

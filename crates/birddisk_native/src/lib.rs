@@ -81,6 +81,21 @@ struct RuntimeFuncs {
     bytes_eq: FuncId,
     io_print: FuncId,
     io_read_line: FuncId,
+    time_now_ms: FuncId,
+    time_sleep_ms: FuncId,
+    fs_read_text: FuncId,
+    fs_write_text: FuncId,
+    fs_read_bytes: FuncId,
+    fs_write_bytes: FuncId,
+    path_join: FuncId,
+    path_normalize: FuncId,
+    path_basename: FuncId,
+    path_dirname: FuncId,
+    env_args: FuncId,
+    env_get: FuncId,
+    env_set: FuncId,
+    env_cwd: FuncId,
+    env_set_cwd: FuncId,
 }
 
 impl RuntimeFuncs {
@@ -280,6 +295,92 @@ impl RuntimeFuncs {
         )?;
         let io_read_line =
             declare_runtime_func(module, "bd_io_read_line", &[types::I64], &[types::I64])?;
+        let time_now_ms =
+            declare_runtime_func(module, "bd_time_now_ms", &[types::I64], &[types::I64])?;
+        let time_sleep_ms = declare_runtime_func(
+            module,
+            "bd_time_sleep_ms",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let fs_read_text = declare_runtime_func(
+            module,
+            "bd_fs_read_text",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let fs_write_text = declare_runtime_func(
+            module,
+            "bd_fs_write_text",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let fs_read_bytes = declare_runtime_func(
+            module,
+            "bd_fs_read_bytes",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let fs_write_bytes = declare_runtime_func(
+            module,
+            "bd_fs_write_bytes",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let path_join = declare_runtime_func(
+            module,
+            "bd_path_join",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let path_normalize = declare_runtime_func(
+            module,
+            "bd_path_normalize",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let path_basename = declare_runtime_func(
+            module,
+            "bd_path_basename",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let path_dirname = declare_runtime_func(
+            module,
+            "bd_path_dirname",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let env_args = declare_runtime_func(
+            module,
+            "bd_env_args",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let env_get = declare_runtime_func(
+            module,
+            "bd_env_get",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let env_set = declare_runtime_func(
+            module,
+            "bd_env_set",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let env_cwd = declare_runtime_func(
+            module,
+            "bd_env_cwd",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let env_set_cwd = declare_runtime_func(
+            module,
+            "bd_env_set_cwd",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
         Ok(Self {
             root_push,
             root_pop,
@@ -317,6 +418,21 @@ impl RuntimeFuncs {
             bytes_eq,
             io_print,
             io_read_line,
+            time_now_ms,
+            time_sleep_ms,
+            fs_read_text,
+            fs_write_text,
+            fs_read_bytes,
+            fs_write_bytes,
+            path_join,
+            path_normalize,
+            path_basename,
+            path_dirname,
+            env_args,
+            env_get,
+            env_set,
+            env_cwd,
+            env_set_cwd,
         })
     }
 }
@@ -359,11 +475,15 @@ struct BookLayout {
 }
 
 pub fn run(program: &Program) -> Result<i64, NativeError> {
-    let (result, _) = run_with_io(program, "")?;
+    let (result, _) = run_with_io(program, "", &[])?;
     Ok(result)
 }
 
-pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), NativeError> {
+pub fn run_with_io(
+    program: &Program,
+    input: &str,
+    args: &[String],
+) -> Result<(i64, String), NativeError> {
     if program.functions.is_empty() {
         return Err(native_error("missing main function."));
     }
@@ -428,6 +548,21 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
     builder.symbol("bd_bytes_eq", runtime::bd_bytes_eq as *const u8);
     builder.symbol("bd_io_print", runtime::bd_io_print as *const u8);
     builder.symbol("bd_io_read_line", runtime::bd_io_read_line as *const u8);
+    builder.symbol("bd_time_now_ms", runtime::bd_time_now_ms as *const u8);
+    builder.symbol("bd_time_sleep_ms", runtime::bd_time_sleep_ms as *const u8);
+    builder.symbol("bd_fs_read_text", runtime::bd_fs_read_text as *const u8);
+    builder.symbol("bd_fs_write_text", runtime::bd_fs_write_text as *const u8);
+    builder.symbol("bd_fs_read_bytes", runtime::bd_fs_read_bytes as *const u8);
+    builder.symbol("bd_fs_write_bytes", runtime::bd_fs_write_bytes as *const u8);
+    builder.symbol("bd_path_join", runtime::bd_path_join as *const u8);
+    builder.symbol("bd_path_normalize", runtime::bd_path_normalize as *const u8);
+    builder.symbol("bd_path_basename", runtime::bd_path_basename as *const u8);
+    builder.symbol("bd_path_dirname", runtime::bd_path_dirname as *const u8);
+    builder.symbol("bd_env_args", runtime::bd_env_args as *const u8);
+    builder.symbol("bd_env_get", runtime::bd_env_get as *const u8);
+    builder.symbol("bd_env_set", runtime::bd_env_set as *const u8);
+    builder.symbol("bd_env_cwd", runtime::bd_env_cwd as *const u8);
+    builder.symbol("bd_env_set_cwd", runtime::bd_env_set_cwd as *const u8);
     let mut module = JITModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, layout) = build_book_layouts(program)?;
@@ -512,6 +647,7 @@ pub fn run_with_io(program: &Program, input: &str) -> Result<(i64, String), Nati
     runtime.set_layout(layout);
     runtime.set_trace(trace_table.frames.clone());
     runtime.set_input(input);
+    runtime.set_args(args);
     let func = unsafe { std::mem::transmute::<_, fn(*mut runtime::Runtime) -> i64>(code) };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| func(&mut runtime)));
     match result {
@@ -1287,6 +1423,57 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             "std::io::read_line" => {
                 self.call_runtime_value(self.runtime.io_read_line, &[self.rt_ptr])
             }
+            "std::time::now_ms" => {
+                self.call_runtime_value(self.runtime.time_now_ms, &[self.rt_ptr])
+            }
+            "std::time::sleep_ms" => self.call_runtime_value(
+                self.runtime.time_sleep_ms,
+                &[self.rt_ptr, arg_vals[0]],
+            ),
+            "std::fs::read_text" => {
+                self.call_runtime_value(self.runtime.fs_read_text, &[self.rt_ptr, arg_vals[0]])
+            }
+            "std::fs::write_text" => self.call_runtime_value(
+                self.runtime.fs_write_text,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
+            ),
+            "std::fs::read_bytes" => {
+                self.call_runtime_value(self.runtime.fs_read_bytes, &[self.rt_ptr, arg_vals[0]])
+            }
+            "std::fs::write_bytes" => self.call_runtime_value(
+                self.runtime.fs_write_bytes,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
+            ),
+            "std::path::join" => self.call_runtime_value(
+                self.runtime.path_join,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
+            ),
+            "std::path::normalize" => {
+                self.call_runtime_value(self.runtime.path_normalize, &[self.rt_ptr, arg_vals[0]])
+            }
+            "std::path::basename" => {
+                self.call_runtime_value(self.runtime.path_basename, &[self.rt_ptr, arg_vals[0]])
+            }
+            "std::path::dirname" => {
+                self.call_runtime_value(self.runtime.path_dirname, &[self.rt_ptr, arg_vals[0]])
+            }
+            "std::env::args" => {
+                self.call_runtime_value(self.runtime.env_args, &[self.rt_ptr])
+            }
+            "std::env::get" => {
+                self.call_runtime_value(self.runtime.env_get, &[self.rt_ptr, arg_vals[0]])
+            }
+            "std::env::set_var" => self.call_runtime_value(
+                self.runtime.env_set,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
+            ),
+            "std::env::cwd" => {
+                self.call_runtime_value(self.runtime.env_cwd, &[self.rt_ptr])
+            }
+            "std::env::set_cwd" => self.call_runtime_value(
+                self.runtime.env_set_cwd,
+                &[self.rt_ptr, arg_vals[0]],
+            ),
             _ => return Err(native_error(format!("unknown function '{name}'."))),
         };
         Ok(value)
@@ -2111,6 +2298,66 @@ fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::String,
         }),
+        "std::time::now_ms" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::time::sleep_ms" => Some(FunctionSig {
+            params: vec![Type::I64],
+            return_type: Type::I64,
+        }),
+        "std::fs::read_text" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
+        "std::fs::write_text" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::I64,
+        }),
+        "std::fs::read_bytes" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Array(Box::new(Type::U8)),
+        }),
+        "std::fs::write_bytes" => Some(FunctionSig {
+            params: vec![Type::String, Type::Array(Box::new(Type::U8))],
+            return_type: Type::I64,
+        }),
+        "std::path::join" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::String,
+        }),
+        "std::path::normalize" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
+        "std::path::basename" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
+        "std::path::dirname" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
+        "std::env::args" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Array(Box::new(Type::String)),
+        }),
+        "std::env::get" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
+        "std::env::set_var" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::I64,
+        }),
+        "std::env::cwd" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::String,
+        }),
+        "std::env::set_cwd" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::I64,
+        }),
         _ => None,
     }
 }
@@ -2202,13 +2449,13 @@ mod tests {
     fn run_source_with_io(source: &str, input: &str) -> (i64, String) {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        run_with_io(&program, input).unwrap()
+        run_with_io(&program, input, &[]).unwrap()
     }
 
     fn run_source_error(source: &str) -> super::NativeError {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        run_with_io(&program, "").unwrap_err()
+        run_with_io(&program, "", &[]).unwrap_err()
     }
 
     fn emit_source(source: &str) -> Vec<u8> {

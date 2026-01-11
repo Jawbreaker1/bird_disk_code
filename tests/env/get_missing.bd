@@ -1,0 +1,11 @@
+import std::env.
+import std::string.
+
+rule main() -> i64:
+  set value: string = std::env::get("BIRDDISK_TEST_ENV_MISSING_5F4C").
+  when std::string::eq(value, ""):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

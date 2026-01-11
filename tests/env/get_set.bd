@@ -1,0 +1,18 @@
+import std::env.
+import std::string.
+
+rule main() -> i64:
+  set name: string = "BIRDDISK_TEST_ENV".
+  set value: string = "bird".
+  set ok: i64 = std::env::set_var(name, value).
+  when ok == 1:
+    set got: string = std::env::get(name).
+    when std::string::eq(got, value):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end
