@@ -1,3 +1,9 @@
-rule double(value: i64) -> i64:
-  yield value * 2.
+book Math:
+  rule double(self: Math, value: i64) -> i64:
+    yield value * 2.
+  end
+end
+
+rule new_math() -> Math:
+  yield new Math().
 end

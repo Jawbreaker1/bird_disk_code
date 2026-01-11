@@ -1,7 +1,14 @@
 import app::math.
 
-rule compute() -> i64:
-  set base: i64 = 21.
-  set doubled: i64 = app::math::double(base).
-  yield doubled + 1.
+book Stats:
+  rule compute(self: Stats) -> i64:
+    set base: i64 = 21.
+    set math: Math = app::math::new_math().
+    set doubled: i64 = math::double(base).
+    yield doubled + 1.
+  end
+end
+
+rule new_stats() -> Stats:
+  yield new Stats().
 end
