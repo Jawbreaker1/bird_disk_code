@@ -59,10 +59,6 @@ pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>>
         }
     }
 
-    if functions.is_empty() && errors.is_empty() {
-        errors.push(parser.error("E0201", "Expected at least one function rule."));
-    }
-
     if errors.is_empty() {
         Ok(Program {
             imports,
@@ -115,10 +111,6 @@ impl<'a> Parser<'a> {
                     );
                 }
             }
-        }
-
-        if functions.is_empty() {
-            return Err(self.error("E0201", "Expected at least one function rule."));
         }
 
         Ok(Program {

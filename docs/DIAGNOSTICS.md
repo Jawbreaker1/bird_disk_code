@@ -111,7 +111,7 @@ E0305: Cannot infer type for binding
 E0306: Not all control-flow paths yield a value
 E0307: Duplicate function
 E0308: Duplicate parameter
-E0309: Missing 'main' entry point
+E0309: Missing 'main' entry point (entry file only)
 E0310: Array constructor requires explicit array type
 E0311: u8 literal out of range
 

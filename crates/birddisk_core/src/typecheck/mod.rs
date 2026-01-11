@@ -140,10 +140,13 @@ impl<'a> Checker<'a> {
             self.diagnostics.push(diagnostic(
                 "E0309",
                 "error",
-                "Missing 'main' entry point.".to_string(),
+                "Missing 'main' entry point in entry file.".to_string(),
                 self.file,
                 span,
-                vec!["Add `rule main() -> i64:` to define the entry point.".to_string()],
+                vec![
+                    "Add `rule main() -> i64:` to define the entry point.".to_string(),
+                    "Imported modules may omit `main`.".to_string(),
+                ],
                 vec!["SPEC.md#1-program-structure".to_string()],
                 fixits,
                 None,

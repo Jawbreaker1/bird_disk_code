@@ -4,15 +4,17 @@ This spec is intentionally small and strict.
 If something is not defined here, it is not part of v0.1.
 
 ## 1. Program structure
-A program is a set of optional import statements followed by function definitions.
-Imports are top-level only.
+A program is a sequence of top-level items: imports, book declarations, and
+function rules. Imports are top-level only.
 
 Syntax:
 - `import std::module.`
 
-The entry point is:
+The entry point (when running a program) is:
 
 - `rule main() -> i64: ... end`
+
+Imported modules do not need a `main` rule and may contain only books or helper rules.
 
 ### 1.1 Imports
 - `std::` imports resolve to the stdlib directory (`stdlib/`).

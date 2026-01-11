@@ -82,6 +82,7 @@ end
 ```
 
 ## 7) Objects (book)
+Books can live in imported modules; module files may contain only books or helper rules.
 ```birddisk
 book Counter:
   field value: i64.

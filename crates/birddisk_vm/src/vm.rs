@@ -126,7 +126,7 @@ impl<'a> Vm<'a> {
         let main = self
             .functions
             .get("main")
-            .ok_or_else(|| runtime_error("E0400", "missing main function"))?;
+            .ok_or_else(|| runtime_error("E0400", "missing main entry point in entry file"))?;
         let value = match self.eval_function(main, &[]) {
             Ok(value) => value,
             Err(err) => return Err(self.with_trace(err)),

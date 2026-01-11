@@ -93,7 +93,7 @@ pub fn run_with_io(
         .functions
         .iter()
         .find(|func| func.name == "main")
-        .ok_or_else(|| wasm_error("E0400", "missing main function"))?;
+        .ok_or_else(|| wasm_error("E0400", "missing main entry point in entry file"))?;
     if &main.return_type != &Type::I64 {
         return Err(wasm_error("E0400", "main must return i64"));
     }

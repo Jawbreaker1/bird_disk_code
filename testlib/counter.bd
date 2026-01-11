@@ -1,0 +1,12 @@
+book Counter:
+  field value: i64.
+
+  rule init(self: Counter) -> Counter:
+    yield self.
+  end
+
+  rule add(self: Counter, delta: i64) -> i64:
+    put self::value = self::value + delta.
+    yield self::value.
+  end
+end

@@ -1,0 +1,6 @@
+import testlib::counter.
+
+rule main() -> i64:
+  set c: Counter = new Counter().
+  yield c::add(5).
+end
