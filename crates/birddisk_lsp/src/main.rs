@@ -431,6 +431,11 @@ fn extract_uri_and_position(params: &Value) -> Option<(String, Position)> {
     Some((uri, Position::new(line, col)))
 }
 
+struct CompletionPath {
+    segments: Vec<String>,
+    after_colon: bool,
+}
+
 fn extract_range(params: &Value) -> Option<Span> {
     let range = params.get("range")?;
     let start = range.get("start")?;
@@ -504,6 +509,66 @@ fn token_before_position(tokens: &[Token], pos: Position) -> Option<(usize, &Tok
         }
     }
     best
+}
+
+fn completion_path(tokens: &[Token], pos: Position) -> Option<CompletionPath> {
+    let (mut idx, token) = token_before_position(tokens, pos)?;
+    let after_colon = matches!(token.kind, TokenKind::DoubleColon);
+    if matches!(token.kind, TokenKind::DoubleColon) {
+        if idx == 0 {
+            return None;
+        }
+        idx = idx.saturating_sub(1);
+    }
+    if path_segment(tokens.get(idx)?).is_none() {
+        return None;
+    }
+    let mut segments = Vec::new();
+    let mut expect_ident = true;
+    loop {
+        if expect_ident {
+            let tok = tokens.get(idx)?;
+            if let Some(segment) = path_segment(tok) {
+                segments.push(segment);
+            } else {
+                break;
+            }
+            if idx == 0 {
+                break;
+            }
+            idx = idx.saturating_sub(1);
+            expect_ident = false;
+        } else {
+            let tok = tokens.get(idx)?;
+            if !matches!(tok.kind, TokenKind::DoubleColon) {
+                break;
+            }
+            if idx == 0 {
+                break;
+            }
+            idx = idx.saturating_sub(1);
+            expect_ident = true;
+        }
+    }
+    if segments.is_empty() {
+        return None;
+    }
+    segments.reverse();
+    Some(CompletionPath {
+        segments,
+        after_colon,
+    })
+}
+
+fn path_segment(token: &Token) -> Option<String> {
+    match &token.kind {
+        TokenKind::Ident(name) => Some(name.clone()),
+        TokenKind::TypeI64 => Some("i64".to_string()),
+        TokenKind::TypeBool => Some("bool".to_string()),
+        TokenKind::TypeString => Some("string".to_string()),
+        TokenKind::TypeU8 => Some("u8".to_string()),
+        _ => None,
+    }
 }
 
 fn span_contains(span: Span, pos: Position) -> bool {
@@ -1377,6 +1442,29 @@ fn completion_items(
         }
     }
 
+    if let Some(path) = completion_path(tokens, pos) {
+        if path.after_colon && !path.segments.is_empty() && path.segments[0] == "std" {
+            if path.segments.len() == 1 {
+                for module in import_modules(uri) {
+                    let tail = module.strip_prefix("std::").unwrap_or(&module);
+                    if !tail.is_empty() {
+                        items.push(completion_item(tail, 9));
+                    }
+                }
+                return items;
+            }
+            let module_name = path.segments.join("::");
+            let stdlib_root = uri_to_path(uri).and_then(|path| find_stdlib_root(&path));
+            let functions = stdlib_module_functions(&module_name, stdlib_root.as_deref());
+            for func in functions {
+                items.push(completion_item(&func, 3));
+            }
+            if !items.is_empty() {
+                return items;
+            }
+        }
+    }
+
     if let Some((base, member)) = member_context(tokens, pos) {
         if !base.is_empty() {
             if base == "std" {
@@ -1441,6 +1529,38 @@ fn import_modules(uri: &str) -> Vec<String> {
     modules.sort();
     modules.dedup();
     modules
+}
+
+fn stdlib_module_functions(module: &str, root: Option<&Path>) -> Vec<String> {
+    let mut names = builtin_stdlib_functions(module);
+    if let Some(root) = root {
+        let segments: Vec<String> = module.split("::").map(|part| part.to_string()).collect();
+        if let Some(path) = stdlib_module_path(root, &segments) {
+            let module_signatures = parse_stdlib_module(module, &path);
+            for (name, _) in module_signatures {
+                if let Some((_, func)) = name.rsplit_once("::") {
+                    names.push(func.to_string());
+                }
+            }
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn builtin_stdlib_functions(module: &str) -> Vec<String> {
+    match module {
+        "std::string" => vec![
+            "len", "concat", "eq", "bytes", "from_bytes", "to_i64", "from_i64",
+        ],
+        "std::bytes" => vec!["len", "eq"],
+        "std::io" => vec!["print", "read_line"],
+        _ => Vec::new(),
+    }
+    .into_iter()
+    .map(|name| name.to_string())
+    .collect()
 }
 
 fn find_stdlib_root(path: &Path) -> Option<PathBuf> {
@@ -1551,6 +1671,20 @@ mod tests {
         let tokens = lexer::lex(source).unwrap();
         let data = semantic_tokens(&tokens);
         assert!(!data.is_empty());
+    }
+
+    #[test]
+    fn completion_stdlib_functions() {
+        let source = "rule main() -> i64:\n  set x = std::string::\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let pos = Position::new(2, 24);
+        let items = completion_items("file:///tmp/test.bd", source, &tokens, None, pos);
+        let labels: Vec<String> = items
+            .into_iter()
+            .filter_map(|item| item.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .collect();
+        assert!(labels.contains(&"len".to_string()));
+        assert!(labels.contains(&"concat".to_string()));
     }
 
     #[test]
