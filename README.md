@@ -87,14 +87,25 @@ Examples
 - `examples/terminal_calculator.bd` (terminal IO + operator dispatch)
 - `examples/yahtzee/` (multi-file ASCII Yahtzee demo; VM/WASM/native)
 
+Yahtzee demo (interactive):
+```sh
+./target/debug/birddiskc run examples/yahtzee/main.bd --engine vm
+```
+Or build a native executable and run it:
+```sh
+./target/debug/birddiskc run examples/yahtzee/main.bd --engine native --emit exe --out ./target/native/yahtzee
+./target/native/yahtzee
+```
+Note: this is the first fully LLM-generated Yahtzee game written in native BirdDisk,
+and it exists to test whether an LLM can build a complete, multi-file program in a brand-new language.
+
 Yahtzee demo (scripted run):
 ```sh
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.input
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine wasm --json --stdin examples/yahtzee/demo.input
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine native --json --stdin examples/yahtzee/demo.input
 ```
-For interactive play, use `birddiskc run --engine vm` without `--json`,
-or run a native executable built with `--emit exe`.
+For non-interactive validation, `--stdin` supplies a scripted input file.
 
 Typing model (v0.1)
 - Built-in types: i64, bool, string, u8, void

@@ -182,6 +182,7 @@ Record decisions in `docs/DECISIONS.md` for each item before implementation.
 - [x] String type + literal syntax + encoding
 - [x] Primitive types beyond `i64`/`bool`
 - [x] Stdlib scope and module/import system
+- [ ] Namespacing rules (module vs book resolution, aliasing, and conflicts)
 - [x] Native backend approach (Cranelift vs LLVM) + target order
 
 Acceptance:
