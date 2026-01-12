@@ -2,11 +2,11 @@ import std::io.
 import std::string.
 
 rule main() -> i64:
-  set dummy = std::io::print("Enter first number: ").
+  std::io::print("Enter first number: ").
   set left_number_text: string = std::io::read_line().
-  put dummy = std::io::print("Enter operator (+, -, *, %): ").
+  std::io::print("Enter operator (+, -, *, %): ").
   set op: string = std::io::read_line().
-  put dummy = std::io::print("Enter second number: ").
+  std::io::print("Enter second number: ").
   set right_number_text: string = std::io::read_line().
 
   set left: i64 = std::string::to_i64(left_number_text).
@@ -25,7 +25,8 @@ rule main() -> i64:
         when std::string::eq(op, "%"):
           put result = left % right.
         otherwise:
-          yield std::io::print("unknown operator\n").
+          std::io::print("unknown operator\n").
+          yield 0.
         end
       end
     end
@@ -34,5 +35,6 @@ rule main() -> i64:
   set result_text: string = std::string::from_i64(result).
   set message: string = std::string::concat("Result: ", result_text).
   put message = std::string::concat(message, "\n").
-  yield std::io::print(message).
+  std::io::print(message).
+  yield result.
 end

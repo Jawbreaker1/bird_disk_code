@@ -195,7 +195,7 @@ mod tests {
 
     #[test]
     fn eval_io_print_and_read_line() {
-        let source = "import std::io.\nimport std::string.\nrule main() -> i64:\n  set line: string = std::io::read_line().\n  set out: string = std::string::concat(line, \"!\").\n  yield std::io::print(out).\nend\n";
+        let source = "import std::io.\nimport std::string.\nrule main() -> i64:\n  set line: string = std::io::read_line().\n  set out: string = std::string::concat(line, \"!\").\n  std::io::print(out).\n  yield std::string::len(out).\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
         let (result, output) = eval_with_io(&program, "BirdDisk", &[]).unwrap();

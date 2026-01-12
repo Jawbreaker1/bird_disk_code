@@ -25,6 +25,19 @@ Questions:
 
 ---
 
+## 1a) Void/unit return + call statements
+status: decided
+date: 2026-01-12
+decision: Add a `void` (unit) return type. Allow call statements only for functions returning `void` (e.g. `std::io::print("Hi").` is a statement). Non-void calls must be used in expressions or assigned; no implicit discards.
+rationale: Removes noisy “ignore” variables for side-effect calls, keeps rules strict and unambiguous for LLMs and humans.
+impact: SPEC/GRAMMAR/COOKBOOK, parser/typechecker, formatter, stdlib signatures, tests
+
+Notes:
+- `yield` remains required for non-void functions.
+- If a value is intentionally ignored, use an explicit assignment (e.g. `set _ = ...`) until/unless a discard syntax is added.
+
+---
+
 ## 2) Object model (OO core)
 status: decided
 date: 2026-01-08

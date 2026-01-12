@@ -19,7 +19,9 @@ pub(super) fn emit_function(
     for param in &func.params {
         signature.push_str(&format!(" (param {})", wat_type(&param.ty)));
     }
-    signature.push_str(&format!(" (result {})", wat_type(&func.return_type)));
+    if !matches!(func.return_type, Type::Void) {
+        signature.push_str(&format!(" (result {})", wat_type(&func.return_type)));
+    }
 
     emitter.push_line(format!("(func ${}{}", func_name, signature));
     emitter.indent();
@@ -157,6 +159,16 @@ impl<'a> FuncCompiler<'a> {
                 self.emit_local_set(idx, &inferred);
                 self.bind_local(name, idx, inferred);
             }
+            Stmt::Expr { expr, .. } => {
+                let expr_ty = self.infer_expr_type(expr)?;
+                if !matches!(expr_ty, Type::Void) {
+                    return Err(wasm_error(
+                        "E0400",
+                        "Call statements require void return type.",
+                    ));
+                }
+                self.emit_expr(expr, None)?;
+            }
             Stmt::Put { name, expr, .. } => {
                 let info = self
                     .lookup(name)
@@ -225,6 +237,12 @@ impl<'a> FuncCompiler<'a> {
                 self.emit_field_store(field_ty);
             }
             Stmt::Yield { expr, .. } => {
+                if matches!(self.func.return_type, Type::Void) {
+                    return Err(wasm_error(
+                        "E0400",
+                        "Void functions cannot yield a value.",
+                    ));
+                }
                 let ret_local = self.temp_local(self.func.return_type.clone());
                 self.emit_expr(expr, Some(&self.func.return_type))?;
                 self.emit_local_set(ret_local, &self.func.return_type);
@@ -284,12 +302,19 @@ impl<'a> FuncCompiler<'a> {
     }
 
     fn emit_default_return(&mut self) {
+        if matches!(self.func.return_type, Type::Void) {
+            self.emit_root_pop();
+            self.emit_trace_pop();
+            self.push_line("return");
+            return;
+        }
         let ret_local = self.temp_local(self.func.return_type.clone());
         match &self.func.return_type {
             Type::I64 => self.push_line("i64.const 0"),
             Type::Bool | Type::String | Type::U8 | Type::Array(_) | Type::Book(_) => {
                 self.push_line("i32.const 0")
             }
+            Type::Void => {}
         }
         self.emit_local_set(ret_local, &self.func.return_type);
         self.emit_root_pop();

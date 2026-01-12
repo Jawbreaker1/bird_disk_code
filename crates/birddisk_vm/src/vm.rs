@@ -154,6 +154,7 @@ impl<'a> Vm<'a> {
             Value::Bool(_)
             | Value::String(_)
             | Value::U8(_)
+            | Value::Void
             | Value::Array { .. }
             | Value::Object { .. } => Err(runtime_error("E0400", "main must return i64")),
         }
@@ -187,13 +188,26 @@ impl<'a> Vm<'a> {
             Ok(Some(value)) => {
                 self.pop_trace();
                 let expected = &function.return_type;
+                if matches!(expected, Type::Void) {
+                    return Err(runtime_error(
+                        "E0400",
+                        format!("void function '{}' yielded a value", function.name),
+                    ));
+                }
                 let value = coerce_value(value, expected)?;
                 Ok(value)
             }
-            Ok(None) => Err(runtime_error(
-                "E0400",
-                format!("function '{}' did not yield", function.name),
-            )),
+            Ok(None) => {
+                if matches!(function.return_type, Type::Void) {
+                    self.pop_trace();
+                    Ok(Value::Void)
+                } else {
+                    Err(runtime_error(
+                        "E0400",
+                        format!("function '{}' did not yield", function.name),
+                    ))
+                }
+            }
             Err(err) => Err(err),
         }
     }
@@ -268,6 +282,10 @@ impl<'a> Vm<'a> {
                     value
                 };
                 self.bind_local(name.clone(), value);
+                Ok(None)
+            }
+            Stmt::Expr { expr, .. } => {
+                self.eval_expr(expr)?;
                 Ok(None)
             }
             Stmt::Put { name, expr, .. } => {
@@ -783,6 +801,7 @@ impl<'a> Vm<'a> {
             Type::Bool => Ok(Value::Bool(false)),
             Type::String => Ok(self.alloc_string("")),
             Type::U8 => Ok(Value::U8(0)),
+            Type::Void => Err(runtime_error("E0400", "Void has no default value.")),
             Type::Array(inner) => self.alloc_array(&*inner.clone(), Vec::new()),
             Type::Book(name) => self.alloc_object(name),
         }
@@ -1052,6 +1071,7 @@ impl<'a> Vm<'a> {
             Type::String | Type::Array(_) | Type::Book(_) => {
                 self.value_from_handle(HeapHandle::from_u32(raw as u32), field_ty)
             }
+            Type::Void => Err(runtime_error("E0400", "Void is not a valid field type.")),
         }
     }
 
@@ -1103,6 +1123,9 @@ impl<'a> Vm<'a> {
                     runtime_error("E0400", "Object payload out of bounds.")
                 })?;
                 target.copy_from_slice(&(handle.as_u32() as u64).to_le_bytes());
+            }
+            Value::Void => {
+                return Err(runtime_error("E0400", "Void is not a valid field value."));
             }
         }
         Ok(())
@@ -1285,6 +1308,7 @@ fn elem_kind_for_type(ty: &Type) -> Result<ElemKind, RuntimeError> {
         Type::Bool => Ok(ElemKind::Bool),
         Type::U8 => Ok(ElemKind::U8),
         Type::String | Type::Array(_) | Type::Book(_) => Ok(ElemKind::Ref),
+        Type::Void => Err(runtime_error("E0400", "Void is not a valid array element type.")),
     }
 }
 

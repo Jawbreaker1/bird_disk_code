@@ -85,7 +85,7 @@ impl<'a> Checker<'a> {
             );
         }
         if has_std_io {
-            self.insert_function("std::io::print", vec![Ty::String], Ty::I64);
+            self.insert_function("std::io::print", vec![Ty::String], Ty::Void);
             self.insert_function("std::io::read_line", Vec::new(), Ty::String);
         }
         if has_std_time {

@@ -1,30 +1,28 @@
 import std::io.
 import std::string.
 
-rule print(text: string) -> i64:
-  yield std::io::print(text).
+rule print(text: string) -> void:
+  std::io::print(text).
 end
 
-rule println(text: string) -> i64:
+rule println(text: string) -> void:
   set line: string = std::string::concat(text, "\n").
-  yield std::io::print(line).
+  std::io::print(line).
 end
 
-rule banner() -> i64:
-  set ignored: i64 = 0.
-  put ignored = println("+--------------------------------------+").
-  put ignored = println("|        BIRD DISK YAHTZEE 1.0         |").
-  put ignored = println("+--------------------------------------+").
-  yield ignored.
+rule banner() -> void:
+  println("+--------------------------------------+").
+  println("|        BIRD DISK YAHTZEE 1.0         |").
+  println("+--------------------------------------+").
 end
 
-rule divider() -> i64:
-  yield println("----------------------------------------").
+rule divider() -> void:
+  println("----------------------------------------").
 end
 
-rule player_header(name: string) -> i64:
+rule player_header(name: string) -> void:
   set left: string = std::string::concat("-- Player: ", name).
-  yield println(left).
+  println(left).
 end
 
 rule die_pips(value: i64, row: i64) -> string:
@@ -126,12 +124,11 @@ rule dice_row(dice: i64[], row: i64) -> string:
   yield line.
 end
 
-rule print_dice(dice: i64[]) -> i64:
+rule print_dice(dice: i64[]) -> void:
   set row: i64 = 0.
   repeat while row < 5:
     set line: string = dice_row(dice, row).
-    set ignored: i64 = println(line).
+    println(line).
     put row = row + 1.
   end
-  yield 0.
 end

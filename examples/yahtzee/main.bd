@@ -8,9 +8,8 @@ import app::player.
 import app::rng.
 
 rule main() -> i64:
-  set ignored: i64 = 0.
-  put ignored = app::ui::banner().
-  put ignored = app::ui::println("Hot-seat multiplayer Yahtzee. Numbers only.").
+  app::ui::banner().
+  app::ui::println("Hot-seat multiplayer Yahtzee. Numbers only.").
   set count: i64 = app::input::read_i64("Number of players (2-4): ").
   set players: Player[] = array(count).
   set i: i64 = 0.

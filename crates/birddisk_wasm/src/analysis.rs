@@ -164,6 +164,7 @@ fn stmt_has_array(stmt: &Stmt) -> bool {
         Stmt::Set { ty, expr, .. } => {
             ty.as_ref().map_or(false, type_has_array) || expr_has_array(expr)
         }
+        Stmt::Expr { expr, .. } => expr_has_array(expr),
         Stmt::Put { expr, .. } => expr_has_array(expr),
         Stmt::PutIndex { .. } => true,
         Stmt::PutField { expr, .. } => expr_has_array(expr),
@@ -204,6 +205,7 @@ fn stmt_has_string(stmt: &Stmt) -> bool {
         Stmt::Set { ty, expr, .. } => {
             ty.as_ref().map_or(false, type_has_string) || expr_has_string(expr)
         }
+        Stmt::Expr { expr, .. } => expr_has_string(expr),
         Stmt::Put { expr, .. } => expr_has_string(expr),
         Stmt::PutIndex { index, expr, .. } => {
             expr_has_string(index) || expr_has_string(expr)
@@ -247,6 +249,7 @@ fn expr_has_string(expr: &Expr) -> bool {
 fn stmt_has_string_from_bytes(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_string_from_bytes(expr),
+        Stmt::Expr { expr, .. } => expr_has_string_from_bytes(expr),
         Stmt::Put { expr, .. } => expr_has_string_from_bytes(expr),
         Stmt::PutIndex { index, expr, .. } => {
             expr_has_string_from_bytes(index) || expr_has_string_from_bytes(expr)
@@ -291,6 +294,7 @@ fn expr_has_string_from_bytes(expr: &Expr) -> bool {
 fn stmt_has_bytes(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_bytes(expr),
+        Stmt::Expr { expr, .. } => expr_has_bytes(expr),
         Stmt::Put { expr, .. } => expr_has_bytes(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_bytes(index) || expr_has_bytes(expr),
         Stmt::PutField { expr, .. } => expr_has_bytes(expr),
@@ -331,6 +335,7 @@ fn expr_has_bytes(expr: &Expr) -> bool {
 fn stmt_has_io(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_io(expr),
+        Stmt::Expr { expr, .. } => expr_has_io(expr),
         Stmt::Put { expr, .. } => expr_has_io(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_io(index) || expr_has_io(expr),
         Stmt::PutField { expr, .. } => expr_has_io(expr),
@@ -365,6 +370,7 @@ fn expr_has_io(expr: &Expr) -> bool {
 fn stmt_has_time(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_time(expr),
+        Stmt::Expr { expr, .. } => expr_has_time(expr),
         Stmt::Put { expr, .. } => expr_has_time(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_time(index) || expr_has_time(expr),
         Stmt::PutField { expr, .. } => expr_has_time(expr),
@@ -403,6 +409,7 @@ fn expr_has_time(expr: &Expr) -> bool {
 fn stmt_has_fs(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_fs(expr),
+        Stmt::Expr { expr, .. } => expr_has_fs(expr),
         Stmt::Put { expr, .. } => expr_has_fs(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_fs(index) || expr_has_fs(expr),
         Stmt::PutField { expr, .. } => expr_has_fs(expr),
@@ -439,6 +446,7 @@ fn expr_has_fs(expr: &Expr) -> bool {
 fn stmt_has_path(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_path(expr),
+        Stmt::Expr { expr, .. } => expr_has_path(expr),
         Stmt::Put { expr, .. } => expr_has_path(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_path(index) || expr_has_path(expr),
         Stmt::PutField { expr, .. } => expr_has_path(expr),
@@ -475,6 +483,7 @@ fn expr_has_path(expr: &Expr) -> bool {
 fn stmt_has_env(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Set { expr, .. } => expr_has_env(expr),
+        Stmt::Expr { expr, .. } => expr_has_env(expr),
         Stmt::Put { expr, .. } => expr_has_env(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_env(index) || expr_has_env(expr),
         Stmt::PutField { expr, .. } => expr_has_env(expr),
@@ -516,6 +525,7 @@ fn stmt_has_object(stmt: &Stmt) -> bool {
                 .unwrap_or(false)
                 || expr_has_object(expr)
         }
+        Stmt::Expr { expr, .. } => expr_has_object(expr),
         Stmt::Put { expr, .. } => expr_has_object(expr),
         Stmt::PutIndex { index, expr, .. } => expr_has_object(index) || expr_has_object(expr),
         Stmt::PutField { .. } => true,

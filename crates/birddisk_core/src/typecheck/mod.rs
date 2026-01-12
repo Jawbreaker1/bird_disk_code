@@ -13,6 +13,7 @@ enum Ty {
     Bool,
     String,
     U8,
+    Void,
     Array(Box<Ty>),
     Book(String),
     Unknown,
@@ -25,6 +26,7 @@ impl Ty {
             Type::Bool => Ty::Bool,
             Type::String => Ty::String,
             Type::U8 => Ty::U8,
+            Type::Void => Ty::Void,
             Type::Array(inner) => Ty::Array(Box::new(Ty::from_ast(*inner))),
             Type::Book(name) => Ty::Book(name),
         }
@@ -36,6 +38,7 @@ impl Ty {
             Ty::Bool => "bool".to_string(),
             Ty::String => "string".to_string(),
             Ty::U8 => "u8".to_string(),
+            Ty::Void => "void".to_string(),
             Ty::Array(inner) => format!("{}[]", inner.name()),
             Ty::Book(name) => name.clone(),
             Ty::Unknown => "unknown".to_string(),
@@ -104,7 +107,7 @@ impl<'a> Checker<'a> {
                 .iter()
                 .map(|p| {
                     let ty = Ty::from_ast(p.ty.clone());
-                    self.validate_type(&ty, p.span);
+                    self.validate_value_type(&ty, p.span);
                     ty
                 })
                 .collect();
@@ -112,7 +115,7 @@ impl<'a> Checker<'a> {
                 params,
                 return_type: {
                     let ty = Ty::from_ast(function.return_type.clone());
-                    self.validate_type(&ty, function.span);
+                    self.validate_return_type(&ty, function.span);
                     ty
                 },
             };
@@ -189,7 +192,7 @@ impl<'a> Checker<'a> {
             self.check_stmt(stmt);
         }
 
-        if !block_always_yields(&function.body) {
+        if self.current_return != Ty::Void && !block_always_yields(&function.body) {
             self.diagnostics.push(diagnostic(
                 "E0306",
                 "error",
@@ -247,9 +250,22 @@ impl<'a> Checker<'a> {
         best_suggestion(name, self.books.keys().map(|key| key.as_str()))
     }
 
-    fn validate_type(&mut self, ty: &Ty, span: Span) {
+    fn validate_value_type(&mut self, ty: &Ty, span: Span) {
         match ty {
-            Ty::Array(inner) => self.validate_type(inner, span),
+            Ty::Void => {
+                self.diagnostics.push(diagnostic(
+                    "E0312",
+                    "error",
+                    "Void type is only allowed as a function return type.".to_string(),
+                    self.file,
+                    span,
+                    vec!["Use a concrete value type for bindings and fields.".to_string()],
+                    vec!["SPEC.md#2-types".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+            }
+            Ty::Array(inner) => self.validate_value_type(inner, span),
             Ty::Book(name) => {
                 if self.books.contains_key(name) {
                     return;
@@ -273,6 +289,13 @@ impl<'a> Checker<'a> {
             }
             _ => {}
         }
+    }
+
+    fn validate_return_type(&mut self, ty: &Ty, span: Span) {
+        if matches!(ty, Ty::Void) {
+            return;
+        }
+        self.validate_value_type(ty, span);
     }
 }
 
@@ -369,6 +392,7 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
         } => block_always_yields(then_body) && block_always_yields(else_body),
         Stmt::Repeat { .. } => false,
         Stmt::Set { .. }
+        | Stmt::Expr { .. }
         | Stmt::Put { .. }
         | Stmt::PutIndex { .. }
         | Stmt::PutField { .. } => false,
@@ -546,7 +570,7 @@ mod tests {
     #[test]
     fn typecheck_rejects_std_io_without_import() {
         let diags = check(
-            "rule main() -> i64:\n  yield std::io::print(\"hi\").\nend\n",
+            "rule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n",
         );
         assert!(diags.iter().any(|d| d.code == "E0303"));
     }
@@ -554,9 +578,41 @@ mod tests {
     #[test]
     fn typecheck_accepts_std_io_import() {
         let diags = check(
-            "import std::io.\nrule main() -> i64:\n  yield std::io::print(\"hi\").\nend\n",
+            "import std::io.\nrule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n",
         );
         assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_accepts_void_function_without_yield() {
+        let diags = check(
+            "import std::io.\nrule log() -> void:\n  std::io::print(\"hi\").\nend\n\nrule main() -> i64:\n  log().\n  yield 0.\nend\n",
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_rejects_void_yield() {
+        let diags = check(
+            "rule log() -> void:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0312"));
+    }
+
+    #[test]
+    fn typecheck_rejects_void_binding() {
+        let diags = check(
+            "rule log() -> void:\nend\n\nrule main() -> i64:\n  set x = log().\n  yield 0.\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0312"));
+    }
+
+    #[test]
+    fn typecheck_rejects_call_stmt_non_void() {
+        let diags = check(
+            "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n\nrule main() -> i64:\n  add(1, 2).\n  yield 0.\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0312"));
     }
 
     #[test]

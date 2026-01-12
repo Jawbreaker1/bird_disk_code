@@ -1,6 +1,6 @@
 use super::FuncCompiler;
 use super::super::{
-    WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY,
+    wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY,
     HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, OBJECT_FIELD_SIZE,
     OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM,
     TRAP_KIND_ARRAY, TRAP_KIND_OBJECT, TRAP_NULL_DEREF,
@@ -133,14 +133,18 @@ impl<'a> FuncCompiler<'a> {
         match ty {
             Type::I64 => self.push_line("i64.store"),
             Type::U8 => self.push_line("i32.store8"),
-            Type::Bool | Type::String | Type::Array(_) | Type::Book(_) => self.push_line("i32.store"),
+            Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
+                debug_assert!(!matches!(ty, Type::Void));
+                self.push_line("i32.store");
+            }
         }
     }
 
     pub(super) fn emit_field_store(&mut self, ty: &Type) {
         match ty {
             Type::I64 => self.push_line("i64.store"),
-            Type::U8 | Type::Bool | Type::String | Type::Array(_) | Type::Book(_) => {
+            Type::U8 | Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
+                debug_assert!(!matches!(ty, Type::Void));
                 self.push_line("i64.extend_i32_u");
                 self.push_line("i64.store");
             }
@@ -151,14 +155,18 @@ impl<'a> FuncCompiler<'a> {
         match ty {
             Type::I64 => self.push_line("i64.load"),
             Type::U8 => self.push_line("i32.load8_u"),
-            Type::Bool | Type::String | Type::Array(_) | Type::Book(_) => self.push_line("i32.load"),
+            Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
+                debug_assert!(!matches!(ty, Type::Void));
+                self.push_line("i32.load");
+            }
         }
     }
 
     pub(super) fn emit_field_load(&mut self, ty: &Type) {
         match ty {
             Type::I64 => self.push_line("i64.load"),
-            Type::U8 | Type::Bool | Type::String | Type::Array(_) | Type::Book(_) => {
+            Type::U8 | Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
+                debug_assert!(!matches!(ty, Type::Void));
                 self.push_line("i64.load");
                 self.push_line("i32.wrap_i64");
             }
@@ -210,11 +218,23 @@ impl<'a> FuncCompiler<'a> {
             Type::Book(_) => {
                 self.push_line("i32.const 0");
             }
+            Type::Void => {
+                return Err(wasm_error(
+                    "E0400",
+                    "Void has no default value.",
+                ));
+            }
         }
         Ok(())
     }
 
     pub(super) fn emit_empty_array(&mut self, elem_ty: &Type) -> Result<(), WasmError> {
+        if matches!(elem_ty, Type::Void) {
+            return Err(wasm_error(
+                "E0400",
+                "Void is not a valid array element type.",
+            ));
+        }
         let ptr_local = self.temp_local(Type::Array(Box::new(elem_ty.clone())));
         self.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
         self.push_line("call $bd_alloc");

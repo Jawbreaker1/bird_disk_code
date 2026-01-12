@@ -6,7 +6,7 @@ Implement BirdDisk v0.1 incrementally with tight verification loops.
 ## Non-negotiables
 1) Small, safe diffs. One concern per change.
 2) Add tests as you go. No large refactors without tests.
-3) Never guess language rules. `docs/SPEC.md` and `docs/GRAMMAR.ebnf` are the source of truth.
+3) Never guess language rules. `docs/SPEC.md` and `GRAMMAR.md` are the source of truth.
 4) Diagnostics must be machine-readable (JSON) and stable (stable error codes).
 5) Formatting must be deterministic and idempotent.
 6) Prefer portability + correctness over early performance.
@@ -21,7 +21,7 @@ Implement BirdDisk v0.1 incrementally with tight verification loops.
 - Loop: `repeat while cond: ... end`
 
 ### Types
-- Built-in: `i64`, `bool`
+- Built-in: `i64`, `bool`, `string`, `u8`, `void`
 - Array types: `T[]`
 - Strong static typing
 - Function params + return types are explicit
@@ -36,7 +36,7 @@ No floats, generics, concurrency, exceptions, closures, structs, pattern matchin
 - Run tests
 - If syntax/semantics changed:
   - update `docs/SPEC.md`
-  - update `docs/GRAMMAR.md`
+  - update `GRAMMAR.md`
   - add/update an example in `docs/COOKBOOK.md`
   - add tests (VM now; VM+WASM parity once WASM exists)
 
@@ -45,7 +45,8 @@ No floats, generics, concurrency, exceptions, closures, structs, pattern matchin
 - `birddiskc fmt` is deterministic
 - `birddiskc run` supports:
   - `--engine vm` (golden)
-  - `--engine wasm` (once wasm backend exists)
+  - `--engine wasm`
+  - `--engine native`
 
 ## Error handling
 - Internal compiler errors: non-zero exit with a clear message (and ideally a bug code).

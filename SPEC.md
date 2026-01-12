@@ -32,6 +32,7 @@ Built-in types:
 - `bool`
 - `string`
 - `u8` (unsigned 8-bit integer, 0..255)
+- `void` (return type only)
 - `T[]` array type (where `T` is a built-in type)
 
 No implicit casts.
@@ -50,7 +51,9 @@ Rules:
 - Parameter types are required.
 - Return type is required.
 - Functions are top-level only (no nesting) in v0.1.
-- All control-flow paths must `yield` a value compatible with the declared return type.
+- All control-flow paths must `yield` a value compatible with the declared return type, unless the
+  return type is `void`.
+- `void` functions must not `yield` a value.
 
 ## 5. Statements
 All statements end with a `.` terminator, except block openers/closers.
@@ -76,7 +79,15 @@ Rules:
 - For indexed assignment, `name` must be an array, `index` must be `i64`,
   and `expr` must match the array element type.
 
-### 5.3 Return (`yield`)
+### 5.3 Call statement
+Syntax:
+- `function(args).`
+
+Rules:
+- Call statements are only valid for functions returning `void`.
+- Non-void calls must be used in expressions or assigned to bindings.
+
+### 5.4 Return (`yield`)
 Syntax:
 - `yield expr.`
 
@@ -84,7 +95,7 @@ Rules:
 - `expr` type must match the function return type exactly.
 - `yield` exits the current function.
 
-### 5.4 Conditional (`when/otherwise/end`)
+### 5.5 Conditional (`when/otherwise/end`)
 Syntax:
 
 when cond:
@@ -99,7 +110,7 @@ Rules:
 - Both branches are separate lexical scopes.
 - The typechecker must ensure function-level “all paths yield” (it is OK if one branch yields and the other yields; if one branch doesn’t yield, later statements can still yield).
 
-### 5.5 Loop (`repeat while/end`)
+### 5.6 Loop (`repeat while/end`)
 Syntax:
 repeat while cond:
 …
@@ -254,7 +265,7 @@ To use IO, import the module:
 - `import std::io.`
 
 Functions:
-- `std::io::print(s: string) -> i64`
+- `std::io::print(s: string) -> void`
   - Appends `s` to stdout without adding a newline.
   - Returns the byte length of `s`.
 - `std::io::read_line() -> string`

@@ -49,7 +49,8 @@ cargo build -p birddiskc
 import std::io.
 
 rule main() -> i64:
-  yield std::io::print("Hello, BirdDisk!\n").
+  std::io::print("Hello, BirdDisk!\n").
+  yield 0.
 end
 ```
 3) Run in the VM (reference interpreter).
@@ -92,10 +93,11 @@ cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdi
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine wasm --json --stdin examples/yahtzee/demo.input
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine native --json --stdin examples/yahtzee/demo.input
 ```
-Omit `--stdin` to play interactively.
+For interactive play, use `birddiskc run --engine vm` without `--json`,
+or run a native executable built with `--emit exe`.
 
 Typing model (v0.1)
-- Built-in types: i64, bool, string, u8
+- Built-in types: i64, bool, string, u8, void
 - Array types: T[]
 - Function params and return types are always explicit
 - set name = expr. may omit the type if expr is inferable
@@ -119,7 +121,7 @@ Targets
 Repo layout
 docs/
   SPEC.md
-  GRAMMAR.md
+  GRAMMAR.md (repo root)
   DIAGNOSTICS.md
   COOKBOOK.md
   STYLES.md
@@ -139,7 +141,9 @@ eval/               # LLM syntax evaluation tasks + scoring notes
 
 CLI (current)
 
-- JSON output is supported for check/run/test; non-JSON paths are stubbed.
+- JSON output is supported for check/run/test.
+- Non-JSON `run` is supported for VM interactive mode and native AOT executables;
+  other non-JSON CLI paths remain stubbed.
 - birddiskc fmt <file|dir> (canonical formatter)
 - birddiskc check <file|dir> [--json] (JSON implemented)
 - birddiskc run <file> [--engine vm|wasm|native] [--json] [--stdin <file>] [--stdout <file>] [--report <file>] (VM + WASM + native implemented)
@@ -161,7 +165,7 @@ Development principles
 	•	Diagnostics must be structured and actionable (fix-its where possible).
 	•	Every new feature must update:
 	•	docs/SPEC.md
-	•	docs/GRAMMAR.md
+	•	GRAMMAR.md
 	•	docs/COOKBOOK.md
 	•	tests (VM + WASM parity once WASM exists)
 
@@ -179,9 +183,9 @@ VSCode extension (local install)
 
 Upcoming (planned):
 - VSCode extension maintenance (syntax/LSP updates)
-- GC runtime (tracing mark/sweep)
-- std::time (clock/timers)
-- Native backend spike
+- GC improvements (free-list coalescing + reuse)
+- Multi-file project manifests + build workflow
+- Native backend expansion (more targets + AOT polish)
 
 Status
 - Implemented: lexer, parser, AST, typechecker, VM interpreter
@@ -192,17 +196,17 @@ Status
 - Implemented: WAT emission via `birddiskc run --engine wasm --emit wat`
 - Implemented: differential test harness (`birddiskc test --json`)
 - Implemented: formatter (`birddiskc fmt`)
-- Implemented: arrays + indexing (VM + WASM)
-- Implemented: strings + std::string (VM + WASM)
-- Implemented: u8 + std::bytes + std::string::bytes (VM + WASM)
-- Implemented: std::io (VM + WASM)
-- Implemented: std::time (VM + WASM)
-- Implemented: std::fs (VM + WASM)
-- Implemented: std::path (VM + WASM)
-- Implemented: std::env (VM + WASM)
+- Implemented: native backend (JIT + AOT via Cranelift)
+- Implemented: arrays + indexing (VM + WASM + native)
+- Implemented: strings + std::string (VM + WASM + native)
+- Implemented: u8 + std::bytes + std::string::bytes (VM + WASM + native)
+- Implemented: std::io (VM + WASM + native)
+- Implemented: std::time (VM + WASM + native)
+- Implemented: std::fs (VM + WASM + native)
+- Implemented: std::path (VM + WASM + native)
+- Implemented: std::env (VM + WASM + native)
 - Implemented: stdlib module loading + `std::math` (BirdDisk)
-- Implemented: OO core (book + fields + methods, VM + WASM)
-- Stubbed: non-JSON CLI paths
+- Implemented: OO core (book + fields + methods, VM + WASM + native)
 
 
 Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.

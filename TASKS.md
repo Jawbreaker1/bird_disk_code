@@ -30,10 +30,10 @@ Acceptance:
 
 ## Sprint 0 — Repo bootstrap (0.5–1 day)
 - [x] Initialize Rust workspace with crates:
-  - [x] crates/birddisk_core
-  - [x] crates/birddiskc
-  - [x] crates/birddisk_vm
-  - [x] crates/birddisk_wasm (stub)
+- [x] crates/birddisk_core
+- [x] crates/birddiskc
+- [x] crates/birddisk_vm
+- [x] crates/birddisk_wasm
 - [x] Baseline: `cargo test` green
 - [x] CLI stub: `birddiskc --help`
 

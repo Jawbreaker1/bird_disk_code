@@ -567,6 +567,7 @@ fn path_segment(token: &Token) -> Option<String> {
         TokenKind::TypeBool => Some("bool".to_string()),
         TokenKind::TypeString => Some("string".to_string()),
         TokenKind::TypeU8 => Some("u8".to_string()),
+        TokenKind::TypeVoid => Some("void".to_string()),
         _ => None,
     }
 }
@@ -775,7 +776,8 @@ fn semantic_kind(tokens: &[Token], idx: usize) -> Option<SemanticTokenKind> {
         TokenKind::TypeI64
         | TokenKind::TypeBool
         | TokenKind::TypeString
-        | TokenKind::TypeU8 => Some(SemanticTokenKind::Type),
+        | TokenKind::TypeU8
+        | TokenKind::TypeVoid => Some(SemanticTokenKind::Type),
         TokenKind::BoolLit(_) => Some(SemanticTokenKind::Keyword),
         TokenKind::IntLit(_) => Some(SemanticTokenKind::Number),
         TokenKind::StringLit(_) => Some(SemanticTokenKind::String),
@@ -966,7 +968,7 @@ fn stdlib_signatures(
             "std::io::print".to_string(),
             CallSignature {
                 params: vec!["text".to_string()],
-                return_type: Type::I64,
+                return_type: Type::Void,
             },
         );
         signatures.insert(
@@ -1192,6 +1194,9 @@ fn collect_inlay_hints_in_stmt(
             } else if let Some(inferred) = inferred {
                 env.insert(name.clone(), inferred);
             }
+        }
+        Stmt::Expr { expr, .. } => {
+            collect_inlay_hints_in_expr(expr, env, index, stdlib, range, hints);
         }
         Stmt::Put { name, expr, .. } => {
             let inferred = collect_inlay_hints_in_expr(expr, env, index, stdlib, range, hints);
@@ -1759,6 +1764,7 @@ fn type_name(ty: &Type) -> String {
         Type::Bool => "bool".to_string(),
         Type::String => "string".to_string(),
         Type::U8 => "u8".to_string(),
+        Type::Void => "void".to_string(),
         Type::Array(inner) => format!("{}[]", type_name(inner)),
         Type::Book(name) => name.clone(),
     }

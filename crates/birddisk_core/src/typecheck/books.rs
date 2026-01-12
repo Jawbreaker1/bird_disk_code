@@ -47,6 +47,7 @@ impl<'a> Checker<'a> {
                     continue;
                 }
                 let ty = Ty::from_ast(field.ty.clone());
+                self.validate_value_type(&ty, field.span);
                 if matches!(ty, Ty::Book(_)) {
                     self.diagnostics.push(diagnostic(
                         "E0300",
@@ -130,7 +131,7 @@ impl<'a> Checker<'a> {
                     .iter()
                     .map(|p| {
                         let ty = Ty::from_ast(p.ty.clone());
-                        self.validate_type(&ty, p.span);
+                        self.validate_value_type(&ty, p.span);
                         ty
                     })
                     .collect();
@@ -138,7 +139,7 @@ impl<'a> Checker<'a> {
                     params,
                     return_type: {
                         let ty = Ty::from_ast(method.return_type.clone());
-                        self.validate_type(&ty, method.span);
+                        self.validate_return_type(&ty, method.span);
                         ty
                     },
                 };

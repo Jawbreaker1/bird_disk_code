@@ -6,8 +6,8 @@ rule main() -> i64:
   repeat while i < 1000:
     put i = i + 1.
   end
-  set end: i64 = std::time::now_ms().
-  when end >= start:
+  set finish: i64 = std::time::now_ms().
+  when finish >= start:
     yield 1.
   otherwise:
     yield 0.

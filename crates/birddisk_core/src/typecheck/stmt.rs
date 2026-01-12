@@ -25,7 +25,7 @@ impl<'a> Checker<'a> {
                 };
                 let bound_ty = if let Some(ty) = ty {
                     let annotated = Ty::from_ast(ty.clone());
-                    self.validate_type(&annotated, *span);
+                    self.validate_value_type(&annotated, *span);
                     if expr_ty != Ty::Unknown && expr_ty != annotated {
                         self.diagnostics.push(type_mismatch(
                             self.file,
@@ -52,10 +52,53 @@ impl<'a> Checker<'a> {
                         None,
                     ));
                     Ty::Unknown
+                } else if expr_ty == Ty::Void {
+                    self.diagnostics.push(diagnostic(
+                        "E0312",
+                        "error",
+                        format!("Cannot bind void result to '{name}'."),
+                        self.file,
+                        *span,
+                        vec!["Call void functions as statements.".to_string()],
+                        vec!["SPEC.md#4-functions".to_string()],
+                        Vec::new(),
+                        None,
+                    ));
+                    Ty::Unknown
                 } else {
                     expr_ty
                 };
                 self.current_scope_mut().insert(name.clone(), bound_ty);
+            }
+            Stmt::Expr { expr, span } => {
+                if !matches!(expr.kind, ExprKind::Call { .. }) {
+                    self.diagnostics.push(diagnostic(
+                        "E0312",
+                        "error",
+                        "Only function calls may be used as statements.".to_string(),
+                        self.file,
+                        *span,
+                        vec!["Use a call expression like `foo()`.".to_string()],
+                        vec!["SPEC.md#4-functions".to_string()],
+                        Vec::new(),
+                        None,
+                    ));
+                    return;
+                }
+                let expr_ty = self.check_expr(expr);
+                if expr_ty != Ty::Unknown && expr_ty != Ty::Void {
+                    self.diagnostics.push(diagnostic(
+                        "E0312",
+                        "error",
+                        "Call statements require void return type.".to_string(),
+                        self.file,
+                        *span,
+                        vec!["Assign the result or change the callee to return void.".to_string()],
+                        vec!["SPEC.md#4-functions".to_string()],
+                        Vec::new(),
+                        None,
+                    ));
+                }
             }
             Stmt::Put { name, expr, span } => {
                 let expr_ty = match &expr.kind {
@@ -258,6 +301,20 @@ impl<'a> Checker<'a> {
                 }
             }
             Stmt::Yield { expr, span } => {
+                if self.current_return == Ty::Void {
+                    self.diagnostics.push(diagnostic(
+                        "E0312",
+                        "error",
+                        "Void functions cannot yield a value.".to_string(),
+                        self.file,
+                        *span,
+                        vec!["Remove the yield or change the return type.".to_string()],
+                        vec!["SPEC.md#4-functions".to_string()],
+                        Vec::new(),
+                        None,
+                    ));
+                    return;
+                }
                 let expected = self.current_return.clone();
                 let expr_ty = match (&expr.kind, &expected) {
                     (ExprKind::Int(value), Ty::U8) => {

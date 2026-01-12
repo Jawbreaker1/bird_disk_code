@@ -14,9 +14,10 @@ params        = param { "," param } ;
 param         = ident ":" type ;
 
 type          = base_type { "[]" } ;
-base_type     = "i64" | "bool" | "string" | "u8" | ident ;
+base_type     = "i64" | "bool" | "string" | "u8" | "void" | ident ;
 
 stmt          = set_stmt
+              | call_stmt
               | put_stmt
               | yield_stmt
               | when_stmt
@@ -24,6 +25,7 @@ stmt          = set_stmt
               ;
 
 set_stmt      = "set" ident [ ":" type ] "=" expr "." ;
+call_stmt     = qualified_ident "(" [ args ] ")" "." ;
 put_stmt      = "put" ( ident [ "[" expr "]" ] | member_access ) "=" expr "." ;
 yield_stmt    = "yield" expr "." ;
 

@@ -5,7 +5,7 @@ Layout
 - import paths map directly to file paths
   - import std::math. -> stdlib/std/math.bd
 
-Modules
+Modules (BirdDisk)
 - std::math
   - add(a, b) -> i64
   - sub(a, b) -> i64
@@ -28,6 +28,11 @@ Modules
   - contains_i64(xs, len, value) -> bool
   - index_of_i64(xs, len, value) -> i64
   - count_i64(xs, len, value) -> i64
+
+Runtime modules (implemented in Rust)
+- std::string
+- std::bytes
+- std::io
 - std::time
   - now_ms() -> i64
   - sleep_ms(ms: i64) -> i64

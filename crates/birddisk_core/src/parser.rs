@@ -421,6 +421,10 @@ impl<'a> Parser<'a> {
                 self.bump();
                 Type::U8
             }
+            TokenKind::TypeVoid => {
+                self.bump();
+                Type::Void
+            }
             TokenKind::Ident(_) => {
                 let token = self.bump();
                 Type::Book(extract_ident(&token))
@@ -556,8 +560,22 @@ impl<'a> Parser<'a> {
             TokenKind::Yield => self.parse_yield(),
             TokenKind::When => self.parse_when(),
             TokenKind::Repeat => self.parse_repeat(),
+            TokenKind::Ident(_) => self.parse_call_stmt(),
             _ => Err(self.error("E0200", "Unexpected token in statement.")),
         }
+    }
+
+    fn parse_call_stmt(&mut self) -> Result<Stmt, ParseError> {
+        let expr = self.parse_expr("Expected function call.")?;
+        let ExprKind::Call { .. } = expr.kind else {
+            return Err(self.error("E0200", "Expected function call statement."));
+        };
+        let span_start = expr.span.start;
+        let end = self.expect_dot(expr.span.end)?;
+        Ok(Stmt::Expr {
+            expr,
+            span: Span::new(span_start, end.span.end),
+        })
     }
 
     fn parse_set(&mut self) -> Result<Stmt, ParseError> {
@@ -1288,6 +1306,10 @@ impl<'a> Parser<'a> {
             TokenKind::TypeU8 => {
                 let token = self.bump();
                 Ok(("u8".to_string(), token.span))
+            }
+            TokenKind::Array => {
+                let token = self.bump();
+                Ok(("array".to_string(), token.span))
             }
             _ => Err(self.error("E0205", message)),
         }

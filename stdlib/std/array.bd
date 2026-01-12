@@ -18,6 +18,7 @@ rule min_i64(xs: i64[], len: i64) -> i64:
       set value: i64 = xs[i].
       when value < best:
         put best = value.
+      otherwise:
       end
       put i = i + 1.
     end
@@ -35,6 +36,7 @@ rule max_i64(xs: i64[], len: i64) -> i64:
       set value: i64 = xs[i].
       when value > best:
         put best = value.
+      otherwise:
       end
       put i = i + 1.
     end
@@ -47,6 +49,7 @@ rule contains_i64(xs: i64[], len: i64, value: i64) -> bool:
   repeat while i < len:
     when xs[i] == value:
       yield true.
+    otherwise:
     end
     put i = i + 1.
   end
@@ -58,6 +61,7 @@ rule index_of_i64(xs: i64[], len: i64, value: i64) -> i64:
   repeat while i < len:
     when xs[i] == value:
       yield i.
+    otherwise:
     end
     put i = i + 1.
   end
@@ -70,6 +74,7 @@ rule count_i64(xs: i64[], len: i64, value: i64) -> i64:
   repeat while i < len:
     when xs[i] == value:
       put count = count + 1.
+    otherwise:
     end
     put i = i + 1.
   end

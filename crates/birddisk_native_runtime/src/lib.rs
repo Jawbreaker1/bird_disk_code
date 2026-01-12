@@ -1848,30 +1848,29 @@ pub extern "C-unwind" fn bd_bytes_eq(rt: *mut Runtime, left: u64, right: u64) ->
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_io_print(rt: *mut Runtime, handle: u64) -> i64 {
+pub extern "C-unwind" fn bd_io_print(rt: *mut Runtime, handle: u64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
-        return 0;
+        return;
     }
     let handle = match heap_handle(rt, handle) {
         Some(value) => value,
-        None => return 0,
+        None => return,
     };
     let text = match {
         let bytes = match string_bytes_slice(rt, handle) {
             Some(value) => value,
-            None => return 0,
+            None => return,
         };
         std::str::from_utf8(bytes)
     } {
         Ok(value) => value.to_string(),
         Err(_) => {
             runtime_error(rt, "Invalid UTF-8 in string value.");
-            return 0;
+            return;
         }
     };
     rt.push_output(&text);
-    text.len() as i64
 }
 
 #[no_mangle]

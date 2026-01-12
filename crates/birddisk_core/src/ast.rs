@@ -50,6 +50,7 @@ pub enum Type {
     Bool,
     String,
     U8,
+    Void,
     Array(Box<Type>),
     Book(String),
 }
@@ -59,6 +60,10 @@ pub enum Stmt {
     Set {
         name: String,
         ty: Option<Type>,
+        expr: Expr,
+        span: Span,
+    },
+    Expr {
         expr: Expr,
         span: Span,
     },

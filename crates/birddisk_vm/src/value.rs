@@ -8,6 +8,7 @@ pub(crate) enum Value {
     Bool(bool),
     String(HeapHandle),
     U8(u8),
+    Void,
     Array { handle: HeapHandle, elem_type: Type },
     Object { handle: HeapHandle, book: String },
 }
@@ -29,6 +30,7 @@ pub(crate) fn value_type(value: &Value) -> Result<Type, RuntimeError> {
         Value::Bool(_) => Ok(Type::Bool),
         Value::String(_) => Ok(Type::String),
         Value::U8(_) => Ok(Type::U8),
+        Value::Void => Ok(Type::Void),
         Value::Array { elem_type, .. } => Ok(Type::Array(Box::new(elem_type.clone()))),
         Value::Object { book, .. } => Ok(Type::Book(book.clone())),
     }
@@ -58,6 +60,10 @@ pub(crate) fn coerce_value(value: Value, expected: &Type) -> Result<Value, Runti
                 }
             }
             _ => Err(runtime_error("E0400", "Expected u8 value.")),
+        },
+        Type::Void => match value {
+            Value::Void => Ok(Value::Void),
+            _ => Err(runtime_error("E0400", "Expected void value.")),
         },
         Type::Array(expected_elem) => match value {
             Value::Array { handle, elem_type } => {

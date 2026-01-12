@@ -183,7 +183,7 @@ impl<'a> Vm<'a> {
                     Value::String(handle) => {
                         let text = self.string_text(*handle)?;
                         self.push_output(&text);
-                        Ok(Some(Value::I64(text.len() as i64)))
+                        Ok(Some(Value::Void))
                     }
                     _ => Err(runtime_error("E0400", "std::io::print expects string argument")),
                 }

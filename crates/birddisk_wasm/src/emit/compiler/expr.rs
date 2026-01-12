@@ -35,6 +35,15 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line(format!("local.get {}", info.idx));
             }
             ExprKind::Call { name, args } => {
+                if expected.is_some() {
+                    let inferred = self.infer_expr_type(expr)?;
+                    if matches!(inferred, Type::Void) {
+                        return Err(wasm_error(
+                            "E0400",
+                            "Void call cannot be used as an expression.",
+                        ));
+                    }
+                }
                 if let Some((base, method)) = name.split_once("::") {
                     if let Some(info) = self.lookup(base) {
                         if let Type::Book(book_name) = &info.ty {
@@ -908,7 +917,7 @@ impl<'a> FuncCompiler<'a> {
             "std::string::from_i64" => Some(Type::String),
             "std::bytes::len" => Some(Type::I64),
             "std::bytes::eq" => Some(Type::Bool),
-            "std::io::print" => Some(Type::I64),
+            "std::io::print" => Some(Type::Void),
             "std::io::read_line" => Some(Type::String),
             "std::time::now_ms" => Some(Type::I64),
             "std::time::sleep_ms" => Some(Type::I64),

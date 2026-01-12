@@ -1,5 +1,6 @@
 import std::io.
 
 rule main() -> i64:
-  yield std::io::print("Hello").
+  std::io::print("Hello").
+  yield 0.
 end

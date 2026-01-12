@@ -4065,7 +4065,7 @@ pub(super) fn emit_env_runtime(emitter: &mut WatEmitter) {
 }
 
 pub(super) fn emit_io_runtime(emitter: &mut WatEmitter) {
-    emitter.push_line("(func $bd_io_print (param $str i32) (result i64)");
+    emitter.push_line("(func $bd_io_print (param $str i32)");
     emitter.indent();
     emitter.push_line("(local $len i32)");
     emitter.push_line("local.get $str");
@@ -4096,8 +4096,6 @@ pub(super) fn emit_io_runtime(emitter: &mut WatEmitter) {
     emitter.push_line("i32.add");
     emitter.push_line("local.get $len");
     emitter.push_line("call $bd_print");
-    emitter.push_line("local.get $len");
-    emitter.push_line("i64.extend_i32_u");
     emitter.dedent();
     emitter.push_line(")");
 

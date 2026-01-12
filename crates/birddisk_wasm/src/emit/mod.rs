@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn wasm_runs_io_print_and_read_line() {
         let tokens = lexer::lex(
-            "import std::io.\nimport std::string.\nrule main() -> i64:\n  set line: string = std::io::read_line().\n  set out: string = std::string::concat(line, \"!\").\n  yield std::io::print(out).\nend\n",
+            "import std::io.\nimport std::string.\nrule main() -> i64:\n  set line: string = std::io::read_line().\n  set out: string = std::string::concat(line, \"!\").\n  std::io::print(out).\n  yield std::string::len(out).\nend\n",
         )
         .unwrap();
         let program = parser::parse(&tokens).unwrap();

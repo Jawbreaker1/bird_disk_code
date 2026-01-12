@@ -2,7 +2,7 @@ import std::io.
 import std::string.
 
 rule prompt(text: string) -> string:
-  set ignored: i64 = std::io::print(text).
+  std::io::print(text).
   set line: string = std::io::read_line().
   yield line.
 end

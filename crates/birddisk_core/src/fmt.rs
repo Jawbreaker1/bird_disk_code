@@ -160,6 +160,10 @@ impl Formatter {
                 line.push('.');
                 self.push_line(&line);
             }
+            Stmt::Expr { expr, .. } => {
+                let line = format!("{}.", format_expr(expr, 0));
+                self.push_line(&line);
+            }
             Stmt::Put { name, expr, .. } => {
                 let line = format!("put {name} = {}.", format_expr(expr, 0));
                 self.push_line(&line);
@@ -224,6 +228,7 @@ fn format_type(ty: &Type) -> String {
         Type::Bool => "bool".to_string(),
         Type::String => "string".to_string(),
         Type::U8 => "u8".to_string(),
+        Type::Void => "void".to_string(),
         Type::Array(inner) => format!("{}[]", format_type(inner)),
         Type::Book(name) => name.clone(),
     }

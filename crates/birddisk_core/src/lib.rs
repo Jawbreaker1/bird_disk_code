@@ -419,6 +419,7 @@ fn qualify_module_program(program: &mut ast::Program, module_path: &[String]) {
 fn qualify_stmt(stmt: &mut ast::Stmt, local_names: &HashSet<String>, prefix: &str) {
     match stmt {
         ast::Stmt::Set { expr, .. } => qualify_expr(expr, local_names, prefix),
+        ast::Stmt::Expr { expr, .. } => qualify_expr(expr, local_names, prefix),
         ast::Stmt::Put { expr, .. } => qualify_expr(expr, local_names, prefix),
         ast::Stmt::PutIndex { index, expr, .. } => {
             qualify_expr(index, local_names, prefix);

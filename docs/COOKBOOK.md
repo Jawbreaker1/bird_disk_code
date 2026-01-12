@@ -171,7 +171,8 @@ import std::string.
 rule main() -> i64:
   set line: string = std::io::read_line().
   set out: string = std::string::concat(line, "!").
-  yield std::io::print(out).
+  std::io::print(out).
+  yield std::string::len(out).
 end
 ```
 

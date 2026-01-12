@@ -291,7 +291,7 @@ impl RuntimeFuncs {
             module,
             "bd_io_print",
             &[types::I64, types::I64],
-            &[types::I64],
+            &[],
         )?;
         let io_read_line =
             declare_runtime_func(module, "bd_io_read_line", &[types::I64], &[types::I64])?;
@@ -594,6 +594,7 @@ pub fn run_with_io(
             runtime_funcs,
             rt_ptr,
             error_block,
+            function.return_type.clone(),
             locals,
             root_slots,
             &books,
@@ -619,10 +620,14 @@ pub fn run_with_io(
             }
         }
         if !returned {
-            let zero = compiler.builder.ins().iconst(types::I64, 0);
             compiler.emit_root_pop();
             compiler.emit_trace_pop();
-            compiler.builder.ins().return_(&[zero]);
+            if matches!(function.return_type, Type::Void) {
+                compiler.builder.ins().return_(&[]);
+            } else {
+                let zero = compiler.builder.ins().iconst(types::I64, 0);
+                compiler.builder.ins().return_(&[zero]);
+            }
         }
         compiler.emit_error_block();
         function_builder.finalize();
@@ -740,6 +745,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
             runtime_funcs,
             rt_ptr,
             error_block,
+            function.return_type.clone(),
             locals,
             root_slots,
             &books,
@@ -765,10 +771,14 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
             }
         }
         if !returned {
-            let zero = compiler.builder.ins().iconst(types::I64, 0);
             compiler.emit_root_pop();
             compiler.emit_trace_pop();
-            compiler.builder.ins().return_(&[zero]);
+            if matches!(function.return_type, Type::Void) {
+                compiler.builder.ins().return_(&[]);
+            } else {
+                let zero = compiler.builder.ins().iconst(types::I64, 0);
+                compiler.builder.ins().return_(&[zero]);
+            }
         }
         compiler.emit_error_block();
         function_builder.finalize();
@@ -802,6 +812,7 @@ struct NativeCompiler<'a, 'b, M: Module> {
     runtime: RuntimeFuncs,
     rt_ptr: Value,
     error_block: cranelift_codegen::ir::Block,
+    return_type: Type,
     root_base: Option<Value>,
     root_slots: HashMap<String, u32>,
     locals: HashMap<String, Type>,
@@ -821,6 +832,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         runtime: RuntimeFuncs,
         rt_ptr: Value,
         error_block: cranelift_codegen::ir::Block,
+        return_type: Type,
         locals: HashMap<String, Type>,
         root_slots: HashMap<String, u32>,
         books: &'a HashMap<String, BookLayout>,
@@ -835,6 +847,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             runtime,
             rt_ptr,
             error_block,
+            return_type,
             root_base: None,
             root_slots,
             locals,
@@ -920,6 +933,16 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.update_root(name, value);
                 Ok(false)
             }
+            Stmt::Expr { expr, .. } => {
+                let ExprKind::Call { name, args } = &expr.kind else {
+                    return Err(native_error("call statements require function calls."));
+                };
+                let result = self.emit_call(name, args, Some(&Type::Void))?;
+                if result.is_some() {
+                    return Err(native_error("call statements require void return type."));
+                }
+                Ok(false)
+            }
             Stmt::Put { name, expr, .. } => {
                 let var = self
                     .vars
@@ -985,7 +1008,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 Ok(false)
             }
             Stmt::Yield { expr, .. } => {
-                let value = self.emit_expr(expr, Some(&Type::I64))?;
+                if matches!(self.return_type, Type::Void) {
+                    return Err(native_error("void functions cannot yield a value."));
+                }
+                let return_type = self.return_type.clone();
+                let value = self.emit_expr(expr, Some(&return_type))?;
                 self.emit_root_pop();
                 self.emit_trace_pop();
                 self.builder.ins().return_(&[value]);
@@ -1081,7 +1108,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .ok_or_else(|| native_error(format!("unknown name '{name}'.")))?;
                 Ok(self.builder.use_var(var.var))
             }
-            ExprKind::Call { name, args } => self.emit_call(name, args, expected),
+            ExprKind::Call { name, args } => {
+                let value = self.emit_call(name, args, expected)?;
+                value.ok_or_else(|| native_error("void call cannot be used as expression."))
+            }
             ExprKind::New { book, args } => self.emit_new(book, args),
             ExprKind::MemberAccess { base, field } => self.emit_member_access(base, field),
             ExprKind::Unary { op, expr } => {
@@ -1247,7 +1277,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         name: &str,
         args: &[Expr],
         expected: Option<&Type>,
-    ) -> Result<Value, NativeError> {
+    ) -> Result<Option<Value>, NativeError> {
         if name.starts_with("std::") {
             return self.emit_std_call(name, args, expected);
         }
@@ -1291,7 +1321,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             call_args.push(value);
         }
         let call = self.builder.ins().call(func_ref, &call_args);
-        Ok(self.builder.inst_results(call)[0])
+        if matches!(sig.return_type, Type::Void) {
+            Ok(None)
+        } else {
+            Ok(Some(self.builder.inst_results(call)[0]))
+        }
     }
 
     fn emit_method_call(
@@ -1301,7 +1335,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         method: &str,
         args: &[Expr],
         expected: Option<&Type>,
-    ) -> Result<Value, NativeError> {
+    ) -> Result<Option<Value>, NativeError> {
         let full_name = format!("{book}::{method}");
         let sig = self
             .functions
@@ -1349,7 +1383,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             call_args.push(self.emit_expr(arg, Some(param_ty))?);
         }
         let call = self.builder.ins().call(func_ref, &call_args);
-        Ok(self.builder.inst_results(call)[0])
+        if matches!(sig.return_type, Type::Void) {
+            Ok(None)
+        } else {
+            Ok(Some(self.builder.inst_results(call)[0]))
+        }
     }
 
     fn emit_std_call(
@@ -1357,7 +1395,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         name: &str,
         args: &[Expr],
         expected: Option<&Type>,
-    ) -> Result<Value, NativeError> {
+    ) -> Result<Option<Value>, NativeError> {
         let sig = stdlib_signature(name)
             .ok_or_else(|| native_error(format!("unknown function '{name}'.")))?;
         if sig.params.len() != args.len() {
@@ -1376,104 +1414,115 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 )));
             }
         }
-            let mut arg_vals = Vec::with_capacity(args.len());
-            for (arg, param_ty) in args.iter().zip(sig.params.iter()) {
-                arg_vals.push(self.emit_expr(arg, Some(param_ty))?);
-            }
-            let value = match name {
-            "std::string::len" => self.call_runtime_value(
+        let mut arg_vals = Vec::with_capacity(args.len());
+        for (arg, param_ty) in args.iter().zip(sig.params.iter()) {
+            arg_vals.push(self.emit_expr(arg, Some(param_ty))?);
+        }
+        let value = match name {
+            "std::string::len" => Some(self.call_runtime_value(
                 self.runtime.string_len,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::string::concat" => self.call_runtime_value(
+            )),
+            "std::string::concat" => Some(self.call_runtime_value(
                 self.runtime.string_concat,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::string::eq" => self.call_runtime_value(
+            )),
+            "std::string::eq" => Some(self.call_runtime_value(
                 self.runtime.string_eq,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::string::bytes" => self.call_runtime_value(
+            )),
+            "std::string::bytes" => Some(self.call_runtime_value(
                 self.runtime.string_bytes,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::string::from_bytes" => self.call_runtime_value(
+            )),
+            "std::string::from_bytes" => Some(self.call_runtime_value(
                 self.runtime.string_from_bytes,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::string::to_i64" => self.call_runtime_value(
+            )),
+            "std::string::to_i64" => Some(self.call_runtime_value(
                 self.runtime.string_to_i64,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::string::from_i64" => self.call_runtime_value(
+            )),
+            "std::string::from_i64" => Some(self.call_runtime_value(
                 self.runtime.string_from_i64,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::bytes::len" => {
-                self.call_runtime_value(self.runtime.bytes_len, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::bytes::eq" => self.call_runtime_value(
+            )),
+            "std::bytes::len" => Some(self.call_runtime_value(
+                self.runtime.bytes_len,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::bytes::eq" => Some(self.call_runtime_value(
                 self.runtime.bytes_eq,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::io::print" => self.call_runtime_value(
-                self.runtime.io_print,
-                &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::io::read_line" => {
-                self.call_runtime_value(self.runtime.io_read_line, &[self.rt_ptr])
+            )),
+            "std::io::print" => {
+                self.call_runtime_void(self.runtime.io_print, &[self.rt_ptr, arg_vals[0]]);
+                None
             }
-            "std::time::now_ms" => {
-                self.call_runtime_value(self.runtime.time_now_ms, &[self.rt_ptr])
-            }
-            "std::time::sleep_ms" => self.call_runtime_value(
+            "std::io::read_line" => Some(self.call_runtime_value(
+                self.runtime.io_read_line,
+                &[self.rt_ptr],
+            )),
+            "std::time::now_ms" => Some(self.call_runtime_value(
+                self.runtime.time_now_ms,
+                &[self.rt_ptr],
+            )),
+            "std::time::sleep_ms" => Some(self.call_runtime_value(
                 self.runtime.time_sleep_ms,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
-            "std::fs::read_text" => {
-                self.call_runtime_value(self.runtime.fs_read_text, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::fs::write_text" => self.call_runtime_value(
+            )),
+            "std::fs::read_text" => Some(self.call_runtime_value(
+                self.runtime.fs_read_text,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::fs::write_text" => Some(self.call_runtime_value(
                 self.runtime.fs_write_text,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::fs::read_bytes" => {
-                self.call_runtime_value(self.runtime.fs_read_bytes, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::fs::write_bytes" => self.call_runtime_value(
+            )),
+            "std::fs::read_bytes" => Some(self.call_runtime_value(
+                self.runtime.fs_read_bytes,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::fs::write_bytes" => Some(self.call_runtime_value(
                 self.runtime.fs_write_bytes,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::path::join" => self.call_runtime_value(
+            )),
+            "std::path::join" => Some(self.call_runtime_value(
                 self.runtime.path_join,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::path::normalize" => {
-                self.call_runtime_value(self.runtime.path_normalize, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::path::basename" => {
-                self.call_runtime_value(self.runtime.path_basename, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::path::dirname" => {
-                self.call_runtime_value(self.runtime.path_dirname, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::env::args" => {
-                self.call_runtime_value(self.runtime.env_args, &[self.rt_ptr])
-            }
-            "std::env::get" => {
-                self.call_runtime_value(self.runtime.env_get, &[self.rt_ptr, arg_vals[0]])
-            }
-            "std::env::set_var" => self.call_runtime_value(
+            )),
+            "std::path::normalize" => Some(self.call_runtime_value(
+                self.runtime.path_normalize,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::path::basename" => Some(self.call_runtime_value(
+                self.runtime.path_basename,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::path::dirname" => Some(self.call_runtime_value(
+                self.runtime.path_dirname,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::env::args" => Some(self.call_runtime_value(
+                self.runtime.env_args,
+                &[self.rt_ptr],
+            )),
+            "std::env::get" => Some(self.call_runtime_value(
+                self.runtime.env_get,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::env::set_var" => Some(self.call_runtime_value(
                 self.runtime.env_set,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
-            ),
-            "std::env::cwd" => {
-                self.call_runtime_value(self.runtime.env_cwd, &[self.rt_ptr])
-            }
-            "std::env::set_cwd" => self.call_runtime_value(
+            )),
+            "std::env::cwd" => Some(self.call_runtime_value(
+                self.runtime.env_cwd,
+                &[self.rt_ptr],
+            )),
+            "std::env::set_cwd" => Some(self.call_runtime_value(
                 self.runtime.env_set_cwd,
                 &[self.rt_ptr, arg_vals[0]],
-            ),
+            )),
             _ => return Err(native_error(format!("unknown function '{name}'."))),
         };
         Ok(value)
@@ -1584,6 +1633,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             Type::String => self.emit_string_literal(""),
             Type::Array(elem_ty) => self.emit_empty_array(elem_ty.as_ref()),
             Type::Book(book) => self.emit_default_book(book),
+            Type::Void => Err(native_error("void has no default value.")),
         }
     }
 
@@ -1659,6 +1709,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.array_get_ref,
                 &[self.rt_ptr, handle, index],
             )),
+            Type::Void => Err(native_error("void is not a valid array element type.")),
         }
     }
 
@@ -1686,6 +1737,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.array_set_ref,
                 &[self.rt_ptr, handle, index, value],
             ),
+            Type::Void => return Err(native_error("void is not a valid array element type.")),
         }
         Ok(())
     }
@@ -1801,6 +1853,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.object_get_ref,
                 &[self.rt_ptr, handle, index],
             )),
+            Type::Void => Err(native_error("void is not a valid field type.")),
         }
     }
 
@@ -1828,6 +1881,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.object_set_ref,
                 &[self.rt_ptr, handle, index, value],
             ),
+            Type::Void => return Err(native_error("void is not a valid field type.")),
         }
         Ok(())
     }
@@ -1850,8 +1904,12 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
 
     fn emit_error_block(&mut self) {
         self.builder.switch_to_block(self.error_block);
-        let zero = self.builder.ins().iconst(types::I64, 0);
-        self.builder.ins().return_(&[zero]);
+        if matches!(self.return_type, Type::Void) {
+            self.builder.ins().return_(&[]);
+        } else {
+            let zero = self.builder.ins().iconst(types::I64, 0);
+            self.builder.ins().return_(&[zero]);
+        }
         self.builder.seal_block(self.error_block);
     }
 
@@ -2136,6 +2194,7 @@ fn elem_kind_for_type(ty: &Type) -> Result<u32, NativeError> {
         Type::Bool => Ok(abi::ARRAY_KIND_BOOL),
         Type::U8 => Ok(abi::ARRAY_KIND_U8),
         Type::String | Type::Array(_) | Type::Book(_) => Ok(abi::ARRAY_KIND_REF),
+        Type::Void => Err(native_error("void is not a valid array element type.")),
     }
 }
 
@@ -2221,7 +2280,9 @@ fn make_signature(
     for _ in &function.params {
         sig.params.push(AbiParam::new(types::I64));
     }
-    sig.returns.push(AbiParam::new(types::I64));
+    if !matches!(function.return_type, Type::Void) {
+        sig.returns.push(AbiParam::new(types::I64));
+    }
     sig
 }
 
@@ -2231,6 +2292,7 @@ fn type_name(ty: &Type) -> &'static str {
         Type::Bool => "bool",
         Type::String => "string",
         Type::U8 => "u8",
+        Type::Void => "void",
         Type::Array(_) => "array",
         Type::Book(_) => "book",
     }
@@ -2292,7 +2354,7 @@ fn stdlib_signature(name: &str) -> Option<FunctionSig> {
         }),
         "std::io::print" => Some(FunctionSig {
             params: vec![Type::String],
-            return_type: Type::I64,
+            return_type: Type::Void,
         }),
         "std::io::read_line" => Some(FunctionSig {
             params: Vec::new(),
@@ -2566,7 +2628,7 @@ mod tests {
 
     #[test]
     fn native_runs_std_io_roundtrip() {
-        let source = "import std::io.\nimport std::string.\nrule main() -> i64:\n  set name: string = std::io::read_line().\n  set greet: string = std::string::concat(\"Hello \", name).\n  set ignored: i64 = std::io::print(greet).\n  yield std::string::len(greet).\nend\n";
+        let source = "import std::io.\nimport std::string.\nrule main() -> i64:\n  set name: string = std::io::read_line().\n  set greet: string = std::string::concat(\"Hello \", name).\n  std::io::print(greet).\n  yield std::string::len(greet).\nend\n";
         let (result, output) = run_source_with_io(source, "Ada");
         assert_eq!(result, 9);
         assert_eq!(output, "Hello Ada");

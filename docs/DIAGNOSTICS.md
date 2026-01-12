@@ -114,6 +114,7 @@ E0308: Duplicate parameter
 E0309: Missing 'main' entry point (entry file only)
 E0310: Array constructor requires explicit array type
 E0311: u8 literal out of range
+E0312: Invalid void usage
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)
