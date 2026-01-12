@@ -7,7 +7,7 @@ mod value;
 mod vm;
 
 pub use runtime_error::RuntimeError;
-pub use vm::{eval, eval_with_io};
+pub use vm::{eval, eval_with_io, eval_with_io_streaming};
 
 #[cfg(test)]
 mod tests {

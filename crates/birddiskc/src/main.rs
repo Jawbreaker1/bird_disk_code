@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::collections::HashSet;
 use std::env;
+use std::io::{IsTerminal, Read};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -532,6 +533,32 @@ fn execute(command: Command) -> Result<(), String> {
                     }
                 }
                 Ok(())
+            } else if engine == birddisk_core::Engine::Vm {
+                let input = if std::io::stdin().is_terminal() {
+                    String::new()
+                } else {
+                    let mut buf = String::new();
+                    std::io::stdin()
+                        .read_to_string(&mut buf)
+                        .map_err(|err| format!("unable to read stdin: {err}"))?;
+                    buf
+                };
+                let program = birddisk_core::parse_and_typecheck(&path).map_err(|diags| {
+                    let hint = diags
+                        .first()
+                        .map(|diag| diag.message.as_str())
+                        .unwrap_or("parse/typecheck failed");
+                    format!("{hint} (use --json for full diagnostics)")
+                })?;
+                match birddisk_vm::eval_with_io_streaming(
+                    &program,
+                    &input,
+                    &args,
+                    std::io::stdin().is_terminal(),
+                ) {
+                    Ok(_) => Ok(()),
+                    Err(err) => Err(format!("runtime error {}: {}", err.code, err.message)),
+                }
             } else {
                 Err("run not implemented (use --json or --report)".to_string())
             }

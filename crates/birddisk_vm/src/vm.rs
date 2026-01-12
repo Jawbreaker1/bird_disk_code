@@ -4,6 +4,7 @@ use crate::value::{coerce_value, value_type, Value};
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Program, Stmt, Type, UnaryOp};
 use birddisk_core::TraceFrame;
 use std::collections::{HashMap, VecDeque};
+use std::io::{BufRead, Write};
 use std::time::{Duration, Instant};
 
 pub fn eval(program: &Program) -> Result<i64, RuntimeError> {
@@ -21,6 +22,19 @@ pub fn eval_with_io(
     Ok((result, vm.output))
 }
 
+pub fn eval_with_io_streaming(
+    program: &Program,
+    input: &str,
+    args: &[String],
+    stdin_fallback: bool,
+) -> Result<(i64, String), RuntimeError> {
+    let mut vm = Vm::new(program, input, args);
+    vm.set_stdout_live(true);
+    vm.set_stdin_fallback(stdin_fallback);
+    let result = vm.eval_main()?;
+    Ok((result, vm.output))
+}
+
 pub(crate) struct Vm<'a> {
     functions: HashMap<String, &'a birddisk_core::ast::Function>,
     books: HashMap<String, BookInfo>,
@@ -34,6 +48,8 @@ pub(crate) struct Vm<'a> {
     roots: RootStack,
     gc_layout: GcLayout,
     gc_threshold: usize,
+    stdin_fallback: bool,
+    stdout_live: bool,
 }
 
 pub(crate) struct BookInfo {
@@ -119,6 +135,8 @@ impl<'a> Vm<'a> {
             roots: RootStack::new(),
             gc_layout: GcLayout { ref_fields },
             gc_threshold: GC_MIN_THRESHOLD,
+            stdin_fallback: false,
+            stdout_live: false,
         }
     }
 
@@ -1184,11 +1202,24 @@ impl<'a> Vm<'a> {
     }
 
     pub(crate) fn push_output(&mut self, value: &str) {
+        if self.stdout_live {
+            print!("{value}");
+            let _ = std::io::stdout().flush();
+        }
         self.output.push_str(value);
     }
 
     pub(crate) fn read_input_line(&mut self) -> String {
-        self.input.pop_front().unwrap_or_default()
+        if let Some(line) = self.input.pop_front() {
+            return line;
+        }
+        if !self.stdin_fallback {
+            return String::new();
+        }
+        let mut buf = String::new();
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut buf);
+        trim_line_end(buf)
     }
 
     pub(crate) fn now_ms(&self) -> i64 {
@@ -1212,6 +1243,14 @@ impl<'a> Vm<'a> {
         }
         None
     }
+
+    fn set_stdin_fallback(&mut self, enabled: bool) {
+        self.stdin_fallback = enabled;
+    }
+
+    fn set_stdout_live(&mut self, enabled: bool) {
+        self.stdout_live = enabled;
+    }
 }
 
 fn split_lines(input: &str) -> VecDeque<String> {
@@ -1222,6 +1261,16 @@ fn split_lines(input: &str) -> VecDeque<String> {
         .split('\n')
         .map(|line| line.strip_suffix('\r').unwrap_or(line).to_string())
         .collect()
+}
+
+fn trim_line_end(mut line: String) -> String {
+    if line.ends_with('\n') {
+        line.pop();
+    }
+    if line.ends_with('\r') {
+        line.pop();
+    }
+    line
 }
 
 const GC_MIN_THRESHOLD: usize = 1024 * 64;
