@@ -1218,7 +1218,10 @@ fn split_lines(input: &str) -> VecDeque<String> {
     if input.is_empty() {
         return VecDeque::new();
     }
-    input.split('\n').map(|line| line.to_string()).collect()
+    input
+        .split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line).to_string())
+        .collect()
 }
 
 const GC_MIN_THRESHOLD: usize = 1024 * 64;
@@ -1268,6 +1271,13 @@ mod tests {
         let result = vm.eval_main().unwrap();
         let stats = vm.heap.stats();
         (result, stats)
+    }
+
+    #[test]
+    fn split_lines_strips_cr() {
+        let lines = split_lines("123\r\n456\r\n");
+        let collected: Vec<String> = lines.into_iter().collect();
+        assert_eq!(collected, vec!["123".to_string(), "456".to_string(), "".to_string()]);
     }
 
     #[test]

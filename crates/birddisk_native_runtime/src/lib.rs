@@ -4,6 +4,7 @@ use birddisk_core::runtime as abi;
 pub use birddisk_core::{Position, Span, TraceFrame};
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::io::{BufRead, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -245,6 +246,8 @@ pub struct Runtime {
     gc_threshold: usize,
     error: RefCell<Option<NativeTrap>>,
     start_time: Instant,
+    stdin_fallback: bool,
+    stdout_live: bool,
 }
 
 impl Runtime {
@@ -261,6 +264,8 @@ impl Runtime {
             gc_threshold: usize::MAX,
             error: RefCell::new(None),
             start_time: Instant::now(),
+            stdin_fallback: false,
+            stdout_live: false,
         }
     }
 
@@ -285,6 +290,14 @@ impl Runtime {
         self.input = split_lines(input);
     }
 
+    pub fn set_stdin_fallback(&mut self, enabled: bool) {
+        self.stdin_fallback = enabled;
+    }
+
+    pub fn set_stdout_live(&mut self, enabled: bool) {
+        self.stdout_live = enabled;
+    }
+
     pub fn set_args(&mut self, args: &[String]) {
         self.args = args.to_vec();
     }
@@ -306,11 +319,24 @@ impl Runtime {
     }
 
     fn push_output(&mut self, value: &str) {
+        if self.stdout_live {
+            print!("{value}");
+            let _ = std::io::stdout().flush();
+        }
         self.output.push_str(value);
     }
 
     fn read_line(&mut self) -> String {
-        self.input.pop_front().unwrap_or_default()
+        if let Some(line) = self.input.pop_front() {
+            return line;
+        }
+        if !self.stdin_fallback {
+            return String::new();
+        }
+        let mut buf = String::new();
+        let stdin = std::io::stdin();
+        let _ = stdin.lock().read_line(&mut buf);
+        trim_line_end(buf)
     }
 
     fn now_ms(&self) -> i64 {
@@ -747,7 +773,24 @@ fn split_lines(input: &str) -> VecDeque<String> {
     if input.is_empty() {
         return VecDeque::new();
     }
-    input.split('\n').map(|line| line.to_string()).collect()
+    input
+        .split('\n')
+        .map(|line| strip_cr(line).to_string())
+        .collect()
+}
+
+fn strip_cr(line: &str) -> &str {
+    line.strip_suffix('\r').unwrap_or(line)
+}
+
+fn trim_line_end(mut line: String) -> String {
+    if line.ends_with('\n') {
+        line.pop();
+    }
+    if line.ends_with('\r') {
+        line.pop();
+    }
+    line
 }
 
 #[no_mangle]
@@ -2518,5 +2561,12 @@ mod tests {
         let report = heap.gc(&roots);
         assert_eq!(report.freed, 1);
         assert_eq!(heap.header(drop).kind(), HeapKind::Free);
+    }
+
+    #[test]
+    fn split_lines_strips_cr() {
+        let lines = split_lines("123\r\n456\r\n");
+        let collected: Vec<String> = lines.into_iter().collect();
+        assert_eq!(collected, vec!["123".to_string(), "456".to_string(), "".to_string()]);
     }
 }

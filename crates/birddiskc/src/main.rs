@@ -558,6 +558,53 @@ fn run_report(
     input: &str,
     args: &[String],
 ) -> birddisk_core::RunReport {
+    if engine == birddisk_core::Engine::Wasm {
+        let bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                return birddisk_core::RunReport {
+                    tool: birddisk_core::TOOL_NAME,
+                    version: birddisk_core::VERSION,
+                    ok: false,
+                    result: None,
+                    stdout: None,
+                    diagnostics: vec![runtime_diagnostic(
+                        path,
+                        format!("Unable to read file: {err}"),
+                        "E0400",
+                        runtime_spec_refs("E0400"),
+                        Vec::new(),
+                    )],
+                };
+            }
+        };
+        if is_wasm_bytes(&bytes) {
+            return match birddisk_wasm::run_wasm_bytes_with_io(&bytes, input, args) {
+                Ok((result, stdout)) => birddisk_core::RunReport {
+                    tool: birddisk_core::TOOL_NAME,
+                    version: birddisk_core::VERSION,
+                    ok: true,
+                    result: Some(result),
+                    stdout: Some(stdout),
+                    diagnostics: Vec::new(),
+                },
+                Err(err) => birddisk_core::RunReport {
+                    tool: birddisk_core::TOOL_NAME,
+                    version: birddisk_core::VERSION,
+                    ok: false,
+                    result: None,
+                    stdout: None,
+                    diagnostics: vec![runtime_diagnostic(
+                        path,
+                        err.message,
+                        err.code,
+                        runtime_spec_refs(err.code),
+                        err.trace,
+                    )],
+                },
+            };
+        }
+    }
     match birddisk_core::parse_and_typecheck(path) {
         Ok(program) => match engine {
             birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io(&program, input, args) {
@@ -644,6 +691,10 @@ fn run_report(
             diagnostics,
         },
     }
+}
+
+fn is_wasm_bytes(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"\0asm")
 }
 
 fn run_tests_json(
@@ -1370,7 +1421,7 @@ fn native_wrapper_source(layout: &[Vec<usize>], trace: &[birddisk_core::TraceFra
     let tool = birddisk_core::TOOL_NAME;
     let version = birddisk_core::VERSION;
     let template = r#"use std::fmt::Write;
-use std::io::Read;
+use std::io::{IsTerminal, Read};
 
 const TOOL: &str = "__TOOL__";
 const VERSION: &str = "__VERSION__";
@@ -1475,29 +1526,34 @@ fn maybe_report_result(result: i64) {
 
 fn main() {
     let mut input = String::new();
-    let _ = std::io::stdin().read_to_string(&mut input);
+    let mut stdin = std::io::stdin();
+    if !stdin.is_terminal() {
+        let _ = stdin.read_to_string(&mut input);
+    }
+    let json = json_enabled();
     let mut runtime = birddisk_native_runtime::Runtime::new();
     let layout: Vec<Vec<usize>> = __LAYOUT__;
     runtime.set_layout(layout);
     let trace: Vec<birddisk_native_runtime::TraceFrame> = __TRACE__;
     runtime.set_trace(trace);
     runtime.set_input(&input);
+    runtime.set_stdin_fallback(true);
+    runtime.set_stdout_live(!json);
     let args: Vec<String> = std::env::args().skip(1).collect();
     runtime.set_args(&args);
     let result = unsafe { __ENTRY__(&mut runtime) };
     if let Some(err) = runtime.take_error() {
-        if json_enabled() {
+        if json {
             emit_json_error(err.code, err.message, &err.trace);
         }
         eprintln!("runtime error {}: {}", err.code, err.message);
         std::process::exit(1);
     }
-    let output = runtime.take_output();
-    if json_enabled() {
+    if json {
+        let output = runtime.take_output();
         emit_json_success(result, &output);
         return;
     }
-    print!("{output}");
     maybe_report_result(result);
 }
 "#;

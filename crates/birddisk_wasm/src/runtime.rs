@@ -33,7 +33,10 @@ impl IoState {
         let input = if input.is_empty() {
             VecDeque::new()
         } else {
-            input.split('\n').map(|line| line.to_string()).collect()
+            input
+                .split('\n')
+                .map(|line| line.strip_suffix('\r').unwrap_or(line).to_string())
+                .collect()
         };
         Self {
             args: args.to_vec(),
@@ -104,6 +107,75 @@ pub fn run_with_io(
         .map_err(|err| wasm_error("E0400", format!("WASM compile error: {err}")))?;
     let mut store = Store::new(&engine, IoState::new(input, args));
     let mut linker = Linker::new(&engine);
+    link_imports(
+        &mut linker,
+        uses_heap,
+        needs_validate_utf8,
+        uses_io,
+        uses_time,
+        uses_fs,
+        uses_path,
+        uses_env,
+    )?;
+    let instance = linker
+        .instantiate(&mut store, &module)
+        .map_err(|err| map_trap(err, "WASM instantiation error", Vec::new()))?;
+    let func = instance
+        .get_typed_func::<(), i64>(&mut store, "main")
+        .map_err(|err| map_trap(err, "WASM missing main export", Vec::new()))?;
+    let result = match func.call(&mut store, ()) {
+        Ok(result) => result,
+        Err(err) => {
+            let trace = read_trace(&mut store, &instance, &trace_table.frames);
+            return Err(map_trap(err, "WASM runtime error", trace));
+        }
+    };
+    let output = store.data().output.clone();
+    Ok((result, output))
+}
+
+pub fn run_wasm_bytes(bytes: &[u8]) -> Result<i64, WasmError> {
+    let (result, _) = run_wasm_bytes_with_io(bytes, "", &[])?;
+    Ok(result)
+}
+
+pub fn run_wasm_bytes_with_io(
+    bytes: &[u8],
+    input: &str,
+    args: &[String],
+) -> Result<(i64, String), WasmError> {
+    use wasmtime::{Engine, Linker, Module, Store};
+
+    let engine = Engine::default();
+    let module = Module::new(&engine, bytes)
+        .map_err(|err| wasm_error("E0400", format!("WASM compile error: {err}")))?;
+    let mut store = Store::new(&engine, IoState::new(input, args));
+    let mut linker = Linker::new(&engine);
+    link_imports(&mut linker, true, true, true, true, true, true, true)?;
+    let instance = linker
+        .instantiate(&mut store, &module)
+        .map_err(|err| map_trap(err, "WASM instantiation error", Vec::new()))?;
+    let func = instance
+        .get_typed_func::<(), i64>(&mut store, "main")
+        .map_err(|err| map_trap(err, "WASM missing main export", Vec::new()))?;
+    let result = match func.call(&mut store, ()) {
+        Ok(result) => result,
+        Err(err) => return Err(map_trap(err, "WASM runtime error", Vec::new())),
+    };
+    let output = store.data().output.clone();
+    Ok((result, output))
+}
+
+fn link_imports(
+    linker: &mut wasmtime::Linker<IoState>,
+    uses_heap: bool,
+    needs_validate_utf8: bool,
+    uses_io: bool,
+    uses_time: bool,
+    uses_fs: bool,
+    uses_path: bool,
+    uses_env: bool,
+) -> Result<(), WasmError> {
     if uses_heap {
         linker
             .func_wrap("env", "bd_trap", |code: i32| -> anyhow::Result<()> {
@@ -188,7 +260,11 @@ pub fn run_with_io(
                     if end > memory.data_size(&caller) {
                         return;
                     }
-                    let _ = memory.write(&mut caller, start, &bytes[..bytes.len().min(len as usize)]);
+                    let _ = memory.write(
+                        &mut caller,
+                        start,
+                        &bytes[..bytes.len().min(len as usize)],
+                    );
                 },
             )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
@@ -258,10 +334,7 @@ pub fn run_with_io(
                         _ => return -1,
                     };
                     let start = ptr.max(0) as usize;
-                    if memory
-                        .write(&mut caller, start, &bytes)
-                        .is_err()
-                    {
+                    if memory.write(&mut caller, start, &bytes).is_err() {
                         return -1;
                     }
                     len
@@ -680,21 +753,7 @@ pub fn run_with_io(
             )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
     }
-    let instance = linker
-        .instantiate(&mut store, &module)
-        .map_err(|err| map_trap(err, "WASM instantiation error", Vec::new()))?;
-    let func = instance
-        .get_typed_func::<(), i64>(&mut store, "main")
-        .map_err(|err| map_trap(err, "WASM missing main export", Vec::new()))?;
-    let result = match func.call(&mut store, ()) {
-        Ok(result) => result,
-        Err(err) => {
-            let trace = read_trace(&mut store, &instance, &trace_table.frames);
-            return Err(map_trap(err, "WASM runtime error", trace));
-        }
-    };
-    let output = store.data().output.clone();
-    Ok((result, output))
+    Ok(())
 }
 
 fn validate_utf8<T>(
@@ -872,10 +931,12 @@ fn trap_code_from_message(message: &str) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
-    use super::map_trap;
+    use super::{map_trap, run_wasm_bytes_with_io, IoState};
     use crate::emit::{
-        TRAP_HEAP_HEADER, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING,
+        emit_wasm, TRAP_HEAP_HEADER, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_OBJECT,
+        TRAP_KIND_STRING,
     };
+    use birddisk_core::{lexer, parser};
 
     #[test]
     fn maps_kind_traps() {
@@ -909,5 +970,25 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(err.message, "Invalid heap header.");
+    }
+
+    #[test]
+    fn io_state_strips_cr() {
+        let mut state = IoState::new("123\r\n456\r\n", &[]);
+        assert_eq!(state.prepare_line(), 3);
+        assert_eq!(state.consume_line(), b"123".to_vec());
+        assert_eq!(state.prepare_line(), 3);
+        assert_eq!(state.consume_line(), b"456".to_vec());
+    }
+
+    #[test]
+    fn wasm_bytes_runner_executes_module() {
+        let source = "rule main() -> i64:\n  yield 7.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let bytes = emit_wasm(&program).unwrap();
+        let (result, stdout) = run_wasm_bytes_with_io(&bytes, "", &[]).unwrap();
+        assert_eq!(result, 7);
+        assert!(stdout.is_empty());
     }
 }
