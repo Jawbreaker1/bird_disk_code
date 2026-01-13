@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/birddisk_logo.png" alt="BirdDisk" width="320">
+</p>
+
 # BirdDisk — AI-first compiled language (POC)
 
 BirdDisk is a proof-of-concept compiled programming language and toolchain designed for an agentic/LLM-driven workflow.
