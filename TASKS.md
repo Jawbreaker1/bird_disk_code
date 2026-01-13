@@ -159,6 +159,8 @@ Implement:
 - [x] Split `crates/birddisk_vm/src/lib.rs` into focused modules (vm, builtins, values, errors)
 - [x] Split `crates/birddisk_wasm/src/lib.rs` into emitter + runtime helpers
 - [x] Split `crates/birddisk_core/src/typecheck.rs` into submodules (stdlib, oo, core)
+- [ ] Split `crates/birddisk_native/src/lib.rs` (currently ~2.7k LOC)
+- [ ] Split `crates/birddisk_native_runtime/src/lib.rs` (currently ~2.6k LOC)
 
 Add tests:
 - [ ] Ensure existing tests still pass after module moves
@@ -401,6 +403,7 @@ Acceptance:
 - [ ] Parallel execution + threading model (VM, WASM, native backends)
 - [ ] Networking standard library (client/server primitives)
 - [ ] Graphics/windowing library (cross-platform surface)
+- [ ] Plan stdlib bootstrap: move most stdlib to BirdDisk while keeping a minimal Rust host layer (ABI/layout, build + link order, tests)
 
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)
