@@ -2,7 +2,7 @@
 
 BirdDisk is a proof-of-concept compiled programming language and toolchain designed for an agentic/LLM-driven workflow.
 
-**Why this exists:** modern teams increasingly rely on LLMs to generate and modify code, but general-purpose languages and tooling are noisy for machines, leading to ambiguous parses, fragile edits, and slow fix loops. BirdDisk explores a language + compiler stack that is intentionally easier for LLMs to read, write, and correct while staying clear to humans, delivering faster iteration, fewer broken builds, and portable execution (VM/WASM/native) with deterministic formatting and machine-readable diagnostics.
+**Why this exists:** LLMs now write a growing share of code, but most languages are still optimized for humans, not machines. That mismatch means LLM-generated changes break more often, are harder to review, and take longer to fix. BirdDisk explores an LLM-first language + compiler stack that stays readable for humans while enabling deterministic parsing, machine-actionable diagnostics, and portable execution (VM/WASM/native) for faster iteration and fewer broken builds.
 
 BirdDisk focuses on:
 - **Unique, LLM-friendly syntax** (low ambiguity, few special cases)
