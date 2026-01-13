@@ -14,8 +14,9 @@ BirdDisk focuses on:
 - **Deterministic formatter** (one canonical style)
 - **Structured JSON diagnostics + fix-its** (machine actionable)
 - **Golden reference execution** (VM/interpreter)
-- **WASM as first compilation target** (portable baseline)
-- **Differential testing**: VM output == WASM output
+- **Native compilation** (host JIT + AOT object/exe)
+- **WASM as a portable baseline**
+- **Differential testing**: VM output == WASM/native output
 
 How it works
 ```
