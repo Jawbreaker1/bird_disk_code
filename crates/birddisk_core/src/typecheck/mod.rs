@@ -385,11 +385,17 @@ fn block_always_yields(stmts: &[Stmt]) -> bool {
 fn stmt_always_yields(stmt: &Stmt) -> bool {
     match stmt {
         Stmt::Yield { .. } => true,
+        Stmt::Throw { .. } => true,
         Stmt::When {
             then_body,
             else_body,
             ..
         } => block_always_yields(then_body) && block_always_yields(else_body),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => block_always_yields(try_body) && block_always_yields(catch_body),
         Stmt::Repeat { .. } => false,
         Stmt::Set { .. }
         | Stmt::Expr { .. }
@@ -429,6 +435,20 @@ mod tests {
     fn typecheck_rejects_non_bool_condition() {
         let diags = check("rule main() -> i64:\n  when 1:\n    yield 0.\n  otherwise:\n    yield 1.\n  end\nend\n");
         assert!(diags.iter().any(|d| d.code == "E0304"));
+    }
+
+    #[test]
+    fn typecheck_throw_requires_string() {
+        let diags = check("rule main() -> i64:\n  throw 1.\n  yield 0.\nend\n");
+        assert!(diags.iter().any(|d| d.code == "E0300"));
+    }
+
+    #[test]
+    fn typecheck_try_catch_binds_string() {
+        let diags = check(
+            "rule main() -> i64:\n  try:\n    throw \"boom\".\n  catch err:\n    set msg: string = err.\n    yield 0.\n  end\nend\n",
+        );
+        assert!(diags.is_empty());
     }
 
     #[test]

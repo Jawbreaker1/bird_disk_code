@@ -135,16 +135,14 @@ Acceptance:
 
 ---
 
-## Sprint 6 — AI-first diagnostics polish (ongoing)
+## Sprint 6 — AI-first diagnostics polish (closed)
 - [x] Expand JSON diagnostics:
   - [x] `spec_refs` to doc anchors
   - [x] more fix-its
   - [x] “did you mean” suggestions (similar identifiers)
 - [x] Add runtime stack traces in JSON diagnostics (function + line/col)
 - [x] Add minimal cross-language eval tasks (Python/JS/Java)
-- [ ] Expand `eval/` tasks to measure LLM-friendliness
-- [ ] Expand cross-language eval suite as the language matures (arrays/IO/OO/error cases)
-- [ ] Add `std::time` (clock/timers) once runtime APIs are defined
+- [x] Add `std::time` (clock/timers) once runtime APIs are defined
 
 Acceptance:
 - common mistakes can be fixed mechanically from fix-its
@@ -159,11 +157,11 @@ Implement:
 - [x] Split `crates/birddisk_vm/src/lib.rs` into focused modules (vm, builtins, values, errors)
 - [x] Split `crates/birddisk_wasm/src/lib.rs` into emitter + runtime helpers
 - [x] Split `crates/birddisk_core/src/typecheck.rs` into submodules (stdlib, oo, core)
-- [ ] Split `crates/birddisk_native/src/lib.rs` (currently ~2.7k LOC)
-- [ ] Split `crates/birddisk_native_runtime/src/lib.rs` (currently ~2.6k LOC)
+- [x] Split `crates/birddisk_native/src/lib.rs` (currently ~2.7k LOC)
+- [x] Split `crates/birddisk_native_runtime/src/lib.rs` (currently ~2.6k LOC)
 
 Add tests:
-- [ ] Ensure existing tests still pass after module moves
+- [x] Ensure existing tests still pass after module moves
 
 Acceptance:
 - Core modules are under the checkpoint threshold or clearly partitioned
@@ -184,7 +182,7 @@ Record decisions in `docs/DECISIONS.md` for each item before implementation.
 - [x] String type + literal syntax + encoding
 - [x] Primitive types beyond `i64`/`bool`
 - [x] Stdlib scope and module/import system
-- [ ] Namespacing rules (module vs book resolution, aliasing, and conflicts)
+- [x] Namespacing rules (module vs book resolution, aliasing, and conflicts)
 - [x] Native backend approach (Cranelift vs LLVM) + target order
 
 Acceptance:
@@ -296,6 +294,22 @@ Acceptance:
 
 ---
 
+## Sprint 13 — Error handling + stack traces (2–4 weeks)
+Implement:
+- [x] Decide error model (exceptions vs result types)
+- [x] Runtime error propagation (`try`/`catch` or `Result` helpers)
+- [ ] Stack trace frames enriched with source spans + code snippets
+- [x] Standard error output format in JSON (match `docs/DIAGNOSTICS.md`)
+
+Add tests:
+- [x] VM + WASM parity tests for error propagation
+- [ ] Diagnostics tests for stack trace format stability
+
+Acceptance:
+- Runtime errors provide actionable traces and can be handled in user code
+
+---
+
 ## Sprint 12 — Stdlib essentials (2–4 weeks)
 Implement (v0.x essentials, keep scope tight):
 - [x] `std::fs` (read/write file contents)
@@ -303,30 +317,14 @@ Implement (v0.x essentials, keep scope tight):
 - [x] `std::time` (clock/timers)
 - [x] `std::env` (args, env vars)
 - [x] Local module imports (entry dir + project root resolution)
-- [ ] `std::json` (encode/decode basic values)
+- [x] `std::json` (encode/decode basic values)
 
 Add tests:
-- [ ] VM + WASM parity tests for each module
-- [ ] IO harness tests for file and env operations
+- [x] VM + WASM parity tests for each module
+- [x] IO harness tests for file and env operations
 
 Acceptance:
 - Minimal CLI programs can read/write files and parse JSON on VM + WASM
-
----
-
-## Sprint 13 — Error handling + stack traces (2–4 weeks)
-Implement:
-- [ ] Decide error model (exceptions vs result types)
-- [ ] Runtime error propagation (`try`/`catch` or `Result` helpers)
-- [ ] Stack trace frames enriched with source spans + code snippets
-- [ ] Standard error output format in JSON (match `docs/DIAGNOSTICS.md`)
-
-Add tests:
-- [ ] VM + WASM parity tests for error propagation
-- [ ] Diagnostics tests for stack trace format stability
-
-Acceptance:
-- Runtime errors provide actionable traces and can be handled in user code
 
 ---
 
@@ -384,7 +382,7 @@ Implement:
 - [ ] Optimization passes (const fold, dead code, inlining)
 - [ ] GC tuning + performance metrics
 - [ ] Concurrency model decision + minimal primitives
-- [ ] LSP: Go-to-definition across imported modules (multi-file symbol index)
+- [x] LSP: Go-to-definition across imported modules (multi-file symbol index)
 
 Add tests:
 - [ ] Cross-platform build checks
@@ -397,6 +395,8 @@ Acceptance:
 
 ## Future — Full eval suite
 - [ ] Expand `eval/` with mutations, report generation, and cross-language comparison
+- [ ] Expand `eval/` tasks to measure LLM-friendliness
+- [ ] Expand cross-language eval suite as the language matures (arrays/IO/OO/error cases)
 - [ ] Produce a comparison report template (LLM-friendliness + runtime performance)
 
 ## Future — Native-era features

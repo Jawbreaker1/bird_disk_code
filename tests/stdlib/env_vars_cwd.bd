@@ -1,0 +1,22 @@
+import std::env.
+import std::path.
+import std::string.
+
+rule main() -> i64:
+  set prev: string = std::env::cwd().
+  set ignored1: i64 = std::env::set_cwd("tests/stdlib").
+  set cwd: string = std::env::cwd().
+  set base: string = std::path::basename(cwd).
+  set ignored2: i64 = std::env::set_cwd(prev).
+
+  set ignored3: i64 = std::env::set_var("BIRD_TEST", "hi").
+  set value: string = std::env::get("BIRD_TEST").
+  set ok1: bool = std::string::eq(value, "hi").
+  set ok2: bool = std::string::eq(base, "stdlib").
+
+  when ok1 && ok2:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

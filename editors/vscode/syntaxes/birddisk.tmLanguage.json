@@ -82,7 +82,7 @@
       "patterns": [
         {
           "name": "keyword.control.birddisk",
-          "match": "\\b(rule|set|put|yield|when|otherwise|repeat|while|end|import|book|field|new)\\b"
+          "match": "\\b(rule|set|put|yield|throw|try|catch|when|otherwise|repeat|while|end|import|book|field|new)\\b"
         }
       ]
     },

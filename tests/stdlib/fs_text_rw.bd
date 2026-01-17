@@ -1,0 +1,13 @@
+import std::fs.
+import std::string.
+
+rule main() -> i64:
+  set path: string = "tests/stdlib/fs_text.txt".
+  set ignored: i64 = std::fs::write_text(path, "BirdDisk").
+  set text: string = std::fs::read_text(path).
+  when std::string::eq(text, "BirdDisk"):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

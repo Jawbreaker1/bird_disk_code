@@ -7,6 +7,9 @@ pub enum TokenKind {
     Set,
     Put,
     Yield,
+    Throw,
+    Try,
+    Catch,
     When,
     Otherwise,
     Repeat,
@@ -287,6 +290,9 @@ impl Lexer {
             "set" => TokenKind::Set,
             "put" => TokenKind::Put,
             "yield" => TokenKind::Yield,
+            "throw" => TokenKind::Throw,
+            "try" => TokenKind::Try,
+            "catch" => TokenKind::Catch,
             "when" => TokenKind::When,
             "otherwise" => TokenKind::Otherwise,
             "repeat" => TokenKind::Repeat,
@@ -461,5 +467,14 @@ mod tests {
         assert_eq!(tokens[2].kind, TokenKind::DoubleColon);
         assert_eq!(tokens[3].kind, TokenKind::TypeString);
         assert_eq!(tokens[4].kind, TokenKind::Dot);
+    }
+
+    #[test]
+    fn lex_try_catch_throw_keywords() {
+        let source = "rule main() -> i64:\n  try:\n    throw \"oops\".\n  catch err:\n    yield 0.\n  end\nend\n";
+        let tokens = lex(source).unwrap();
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Try));
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Catch));
+        assert!(tokens.iter().any(|token| token.kind == TokenKind::Throw));
     }
 }

@@ -204,14 +204,14 @@ Implementation sketch:
 
 ## 6) Runtime errors and exception model
 status: decided
-date: 2026-01-07
-decision: v0.x uses runtime traps with stable error codes plus a minimal JSON stack trace (function + line/col). Exceptions are deferred to a later sprint. Implemented in VM/WASM and exposed in JSON diagnostics.
-rationale: Keeps runtime simple and deterministic for VM/WASM/native while still giving LLMs actionable traces.
-impact: diagnostics schema, VM/WASM/native runtime, CLI JSON output, tests
+date: 2026-01-15
+decision: v0.x adds explicit `throw` + `try`/`catch` for recoverable errors. Only explicit `throw` (string message) is catchable; runtime traps (OOM/null deref/etc) remain non-catchable and surface as diagnostics with stable error codes and stack traces.
+rationale: Gives LLMs a clear recovery mechanism without turning every runtime trap into control flow.
+impact: diagnostics schema, VM/WASM/native runtime, CLI JSON output, tests, grammar/spec
 
 Questions:
-- Do we add exceptions or keep explicit error returns?
-- Standardize runtime error codes for OOM/null deref/etc?
+- Do we catch only explicit throws or all runtime traps?
+- Should `throw` be string-only in v0.x?
 
 Options:
 1) No exceptions (errors are runtime traps with stable error codes)
@@ -220,9 +220,14 @@ Options:
 2) Checked result types (explicit `Result<T, E>`-style)
    - Pros: explicit, LLM-friendly, no hidden control flow.
    - Cons: more syntax; type system complexity.
-3) Exceptions (try/catch)
+3) Exceptions (try/catch) with explicit `throw` (chosen)
    - Pros: ergonomic recovery, familiar to OO users.
-   - Cons: complex codegen and stack unwinding; higher ambiguity risk.
+   - Cons: control-flow complexity; needs explicit semantics.
+
+Notes:
+- `throw` takes a `string` expression; the message is bound in `catch`.
+- `catch` handles only `throw`; other runtime errors still abort with diagnostics.
+- Alternative keywords (e.g., `attempt`/`recover`, `guard`/`recover`) were considered and rejected in favor of `try`/`catch` for LLM familiarity; changing keywords later would be high churn across parser/formatter/LSP/docs.
 
 ---
 
@@ -240,6 +245,19 @@ Questions:
 - `import` syntax and module resolution rules?
 - Stdlib scope for v0.x (strings, io, collections, math, time)?
 - Packaging format (toml/json) and versioning?
+
+---
+
+## 7.1 Namespacing and qualified name resolution
+status: decided
+date: 2026-01-13
+decision: Module paths namespace rules only. Qualified names resolve as follows: if the fully qualified rule name exists (stdlib or imported module), that rule is called; otherwise, if `name` is a local binding of a book type, then `name::member` is a field access or method call (if followed by `()`); otherwise it is unresolved. Book/type names are global across modules; duplicate book names are compile-time errors. Import aliases and wildcard imports are not supported in v0.1.
+rationale: Deterministic and LLM-friendly resolution that avoids accidental shadowing when module prefixes overlap local names.
+impact: name resolution, typechecker, spec, docs, examples
+
+Notes:
+- Avoid reusing module prefixes as local bindings to keep code obvious.
+- Modules do not create type namespaces; books are global in v0.1.
 
 ---
 

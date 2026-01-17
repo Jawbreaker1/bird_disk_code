@@ -1,0 +1,17 @@
+import std::path.
+import std::string.
+
+rule main() -> i64:
+  set joined: string = std::path::join("alpha", "beta").
+  set base: string = std::path::basename(joined).
+  set dir: string = std::path::dirname(joined).
+  when std::string::eq(base, "beta"):
+    when std::string::eq(dir, "alpha"):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

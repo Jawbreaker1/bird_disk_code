@@ -44,42 +44,10 @@ impl<'a> FuncCompiler<'a> {
                         ));
                     }
                 }
-                if let Some((base, method)) = name.split_once("::") {
-                    if let Some(info) = self.lookup(base) {
-                        if let Type::Book(book_name) = &info.ty {
-                            let full_name = format!("{book_name}::{method}");
-                            let sig = self.functions.get(&full_name).ok_or_else(|| {
-                                wasm_error("E0400", format!("Unknown function '{full_name}'"))
-                            })?;
-                            if sig.params.len() < 1 {
-                                return Err(wasm_error(
-                                    "E0400",
-                                    format!("Method '{full_name}' must take self."),
-                                ));
-                            }
-                            if sig.params.len() - 1 != args.len() {
-                                return Err(wasm_error(
-                                    "E0400",
-                                    format!(
-                                        "Wrong number of arguments for '{full_name}': expected {}, got {}.",
-                                        sig.params.len() - 1,
-                                        args.len()
-                                    ),
-                                ));
-                            }
-                            self.emit_null_check(info.idx);
-                            self.emit_kind_check(info.idx, HEAP_KIND_OBJECT, TRAP_KIND_OBJECT);
-                            let arg_locals = self.emit_call_args(args, &sig.params[1..])?;
-                            self.push_line(format!("local.get {}", info.idx));
-                            for local in arg_locals {
-                                self.push_line(format!("local.get {local}"));
-                            }
-                            self.push_line(format!("call ${full_name}"));
-                            return Ok(());
-                        }
-                    }
-                }
                 if self.emit_string_call(name, args)? {
+                    return Ok(());
+                }
+                if self.emit_json_call(name, args)? {
                     return Ok(());
                 }
                 if self.emit_bytes_call(name, args)? {
@@ -100,24 +68,78 @@ impl<'a> FuncCompiler<'a> {
                 if self.emit_path_call(name, args)? {
                     return Ok(());
                 }
-                let sig = self.functions.get(name).ok_or_else(|| {
-                    wasm_error("E0400", format!("Unknown function '{name}'"))
-                })?;
-                if sig.params.len() != args.len() {
-                    return Err(wasm_error(
-                        "E0400",
-                        format!(
-                            "Wrong number of arguments for '{name}': expected {}, got {}.",
-                            sig.params.len(),
-                            args.len()
-                        ),
-                    ));
+                if let Some(sig) = self.functions.get(name) {
+                    if sig.params.len() != args.len() {
+                        return Err(wasm_error(
+                            "E0400",
+                            format!(
+                                "Wrong number of arguments for '{name}': expected {}, got {}.",
+                                sig.params.len(),
+                                args.len()
+                            ),
+                        ));
+                    }
+                    let arg_locals = self.emit_call_args(args, &sig.params)?;
+                    for local in arg_locals {
+                        self.push_line(format!("local.get {local}"));
+                    }
+                    self.push_line(format!("call ${name}"));
+                    if matches!(sig.return_type, Type::Void) {
+                        self.emit_error_check();
+                        return Ok(());
+                    }
+                    let ret_local = self.temp_local(sig.return_type.clone());
+                    self.emit_local_set(ret_local, &sig.return_type);
+                    self.emit_error_check();
+                    self.push_line(format!("local.get {ret_local}"));
+                    return Ok(());
                 }
-                let arg_locals = self.emit_call_args(args, &sig.params)?;
-                for local in arg_locals {
-                    self.push_line(format!("local.get {local}"));
+                if let Some((base, method)) = name.split_once("::") {
+                    if base != "std" {
+                        if let Some(info) = self.lookup(base) {
+                            if let Type::Book(book_name) = &info.ty {
+                                let full_name = format!("{book_name}::{method}");
+                                let sig = self.functions.get(&full_name).ok_or_else(|| {
+                                    wasm_error("E0400", format!("Unknown function '{full_name}'"))
+                                })?;
+                                if sig.params.len() < 1 {
+                                    return Err(wasm_error(
+                                        "E0400",
+                                        format!("Method '{full_name}' must take self."),
+                                    ));
+                                }
+                                if sig.params.len() - 1 != args.len() {
+                                    return Err(wasm_error(
+                                        "E0400",
+                                        format!(
+                                            "Wrong number of arguments for '{full_name}': expected {}, got {}.",
+                                            sig.params.len() - 1,
+                                            args.len()
+                                        ),
+                                    ));
+                                }
+                                self.emit_null_check(info.idx);
+                                self.emit_kind_check(info.idx, HEAP_KIND_OBJECT, TRAP_KIND_OBJECT);
+                                let arg_locals = self.emit_call_args(args, &sig.params[1..])?;
+                                self.push_line(format!("local.get {}", info.idx));
+                                for local in arg_locals {
+                                    self.push_line(format!("local.get {local}"));
+                                }
+                                self.push_line(format!("call ${full_name}"));
+                                if matches!(sig.return_type, Type::Void) {
+                                    self.emit_error_check();
+                                    return Ok(());
+                                }
+                                let ret_local = self.temp_local(sig.return_type.clone());
+                                self.emit_local_set(ret_local, &sig.return_type);
+                                self.emit_error_check();
+                                self.push_line(format!("local.get {ret_local}"));
+                                return Ok(());
+                            }
+                        }
+                    }
                 }
-                self.push_line(format!("call ${name}"));
+                return Err(wasm_error("E0400", format!("Unknown function '{name}'")));
             }
             ExprKind::New { book, args } => {
                 let layout = self.books.get(book).ok_or_else(|| {
@@ -495,6 +517,90 @@ impl<'a> FuncCompiler<'a> {
         }
     }
 
+    fn emit_json_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::json::encode_i64" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::json::encode_i64 expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_json_encode_i64");
+                Ok(true)
+            }
+            "std::json::encode_bool" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::json::encode_bool expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::Bool];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_json_encode_bool");
+                Ok(true)
+            }
+            "std::json::encode_string" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::json::encode_string expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_json_encode_string");
+                Ok(true)
+            }
+            "std::json::decode_i64" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::json::decode_i64 expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_json_decode_i64");
+                Ok(true)
+            }
+            "std::json::decode_bool" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::json::decode_bool expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_json_decode_bool");
+                Ok(true)
+            }
+            "std::json::decode_string" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::json::decode_string expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_json_decode_string");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn emit_bytes_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
             "std::bytes::len" => {
@@ -848,18 +954,22 @@ impl<'a> FuncCompiler<'a> {
                 }
             }
             ExprKind::Call { name, .. } => {
+                if let Some(return_ty) = self.infer_call_type(name) {
+                    return Ok(return_ty);
+                }
                 if let Some((base, method)) = name.split_once("::") {
-                    if let Some(info) = self.lookup(base) {
-                        if let Type::Book(book_name) = &info.ty {
-                            let full_name = format!("{book_name}::{method}");
-                            return self.infer_call_type(&full_name).ok_or_else(|| {
-                                wasm_error("E0400", format!("Unknown function '{full_name}'"))
-                            });
+                    if base != "std" {
+                        if let Some(info) = self.lookup(base) {
+                            if let Type::Book(book_name) = &info.ty {
+                                let full_name = format!("{book_name}::{method}");
+                                return self.infer_call_type(&full_name).ok_or_else(|| {
+                                    wasm_error("E0400", format!("Unknown function '{full_name}'"))
+                                });
+                            }
                         }
                     }
                 }
-                self.infer_call_type(name)
-                    .ok_or_else(|| wasm_error("E0400", format!("Unknown function '{name}'")))
+                Err(wasm_error("E0400", format!("Unknown function '{name}'")))
             }
             ExprKind::New { book, .. } => Ok(Type::Book(book.clone())),
             ExprKind::MemberAccess { base, field } => {
@@ -934,6 +1044,12 @@ impl<'a> FuncCompiler<'a> {
             "std::path::normalize" => Some(Type::String),
             "std::path::basename" => Some(Type::String),
             "std::path::dirname" => Some(Type::String),
+            "std::json::encode_i64" => Some(Type::String),
+            "std::json::encode_bool" => Some(Type::String),
+            "std::json::encode_string" => Some(Type::String),
+            "std::json::decode_i64" => Some(Type::I64),
+            "std::json::decode_bool" => Some(Type::Bool),
+            "std::json::decode_string" => Some(Type::String),
             _ => self.functions.get(name).map(|sig| sig.return_type.clone()),
         }
     }

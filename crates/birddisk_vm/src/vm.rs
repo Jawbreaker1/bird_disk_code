@@ -381,6 +381,44 @@ impl<'a> Vm<'a> {
                 Ok(None)
             }
             Stmt::Yield { expr, .. } => Ok(Some(self.eval_expr(expr)?)),
+            Stmt::Throw { expr, .. } => {
+                let value = self.eval_expr(expr)?;
+                let message = match value {
+                    Value::String(handle) => self.string_text(handle)?,
+                    _ => {
+                        return Err(runtime_error(
+                            "E0400",
+                            "throw expects a string message.",
+                        ))
+                    }
+                };
+                Err(runtime_error("E0404", message))
+            }
+            Stmt::Try {
+                try_body,
+                catch_name,
+                catch_body,
+                ..
+            } => {
+                self.push_scope();
+                let result = self.eval_block(try_body);
+                self.pop_scope();
+                match result {
+                    Ok(Some(value)) => Ok(Some(value)),
+                    Ok(None) => Ok(None),
+                    Err(err) => {
+                        if err.code != "E0404" {
+                            return Err(err);
+                        }
+                        self.push_scope();
+                        let msg_value = self.alloc_string(&err.message);
+                        self.bind_local(catch_name.clone(), msg_value);
+                        let result = self.eval_block(catch_body);
+                        self.pop_scope();
+                        result
+                    }
+                }
+            }
             Stmt::When {
                 cond,
                 then_body,
@@ -437,8 +475,15 @@ impl<'a> Vm<'a> {
                 let (values, arg_count) = self.eval_args_with_roots(args)?;
                 let result = if let Some(value) = self.eval_builtin_call(name, &values)? {
                     Ok(value)
+                } else if let Some(function) = self.functions.get(name).copied() {
+                    self.eval_function(function, &values)
                 } else if let Some((base, method)) = name.split_once("::") {
-                    if let Some(base_value) = self.lookup(base).cloned() {
+                    if base == "std" {
+                        Err(runtime_error(
+                            "E0400",
+                            format!("Unknown function '{name}' at runtime."),
+                        ))
+                    } else if let Some(base_value) = self.lookup(base).cloned() {
                         if let Value::Object { ref book, .. } = base_value {
                             let full_name = format!("{book}::{method}");
                             let function = *self.functions.get(&full_name).ok_or_else(|| {
@@ -452,22 +497,16 @@ impl<'a> Vm<'a> {
                             call_values.extend(values.iter().cloned());
                             self.eval_function(function, &call_values)
                         } else {
-                            let function = *self.functions.get(name).ok_or_else(|| {
-                                runtime_error(
-                                    "E0400",
-                                    format!("Unknown function '{name}' at runtime."),
-                                )
-                            })?;
-                            self.eval_function(function, &values)
-                        }
-                    } else {
-                        let function = *self.functions.get(name).ok_or_else(|| {
-                            runtime_error(
+                            Err(runtime_error(
                                 "E0400",
                                 format!("Unknown function '{name}' at runtime."),
-                            )
-                        })?;
-                        self.eval_function(function, &values)
+                            ))
+                        }
+                    } else {
+                        Err(runtime_error(
+                            "E0400",
+                            format!("Unknown function '{name}' at runtime."),
+                        ))
                     }
                 } else {
                     let function = *self.functions.get(name).ok_or_else(|| {

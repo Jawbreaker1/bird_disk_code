@@ -88,6 +88,16 @@ pub enum Stmt {
         expr: Expr,
         span: Span,
     },
+    Throw {
+        expr: Expr,
+        span: Span,
+    },
+    Try {
+        try_body: Vec<Stmt>,
+        catch_name: String,
+        catch_body: Vec<Stmt>,
+        span: Span,
+    },
     When {
         cond: Expr,
         span: Span,

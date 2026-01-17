@@ -90,6 +90,23 @@ mod tests {
     }
 
     #[test]
+    fn eval_throw_is_catchable() {
+        let result = eval_source(
+            "rule main() -> i64:\n  try:\n    throw \"boom\".\n  catch err:\n    yield 7.\n  end\nend\n",
+        );
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn eval_throw_uncaught_errors() {
+        let tokens = lexer::lex("rule main() -> i64:\n  throw \"boom\".\n  yield 0.\nend\n")
+            .unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0404");
+    }
+
+    #[test]
     fn eval_array_literal_index() {
         let result = eval_source(
             "rule main() -> i64:\n  set xs: i64[] = [1, 2, 3].\n  yield xs[1].\nend\n",

@@ -458,6 +458,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::End if terminator == Terminator::End => break,
                 TokenKind::Otherwise if terminator == Terminator::Otherwise => break,
+                TokenKind::Catch if terminator == Terminator::Catch => break,
                 TokenKind::End if terminator == Terminator::Otherwise => {
                     return Err(self.error_with_fixit(
                         "E0207",
@@ -469,8 +470,22 @@ impl<'a> Parser<'a> {
                         },
                     ));
                 }
+                TokenKind::End if terminator == Terminator::Catch => {
+                    return Err(self.error_with_fixit(
+                        "E0209",
+                        "Missing 'catch' block for try statement.",
+                        FixItHint {
+                            title: "Insert 'catch' block",
+                            span: self.tokens[self.index].span,
+                            replacement: "catch err:\n  yield 0.\n".to_string(),
+                        },
+                    ));
+                }
                 TokenKind::Otherwise => {
                     return Err(self.error("E0208", "Unexpected 'otherwise' here."));
+                }
+                TokenKind::Catch => {
+                    return Err(self.error("E0210", "Unexpected 'catch' here."));
                 }
                 _ => stmts.push(self.parse_statement()?),
             }
@@ -503,6 +518,7 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::End if terminator == Terminator::End => break,
                 TokenKind::Otherwise if terminator == Terminator::Otherwise => break,
+                TokenKind::Catch if terminator == Terminator::Catch => break,
                 TokenKind::End if terminator == Terminator::Otherwise => {
                     errors.push(self.error_with_fixit(
                         "E0207",
@@ -511,6 +527,18 @@ impl<'a> Parser<'a> {
                             title: "Insert 'otherwise' block",
                             span: self.tokens[self.index].span,
                             replacement: "otherwise:\n  yield 0.\n".to_string(),
+                        },
+                    ));
+                    break;
+                }
+                TokenKind::End if terminator == Terminator::Catch => {
+                    errors.push(self.error_with_fixit(
+                        "E0209",
+                        "Missing 'catch' block for try statement.",
+                        FixItHint {
+                            title: "Insert 'catch' block",
+                            span: self.tokens[self.index].span,
+                            replacement: "catch err:\n  yield 0.\n".to_string(),
                         },
                     ));
                     break;
@@ -530,6 +558,10 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Otherwise => {
                     errors.push(self.error("E0208", "Unexpected 'otherwise' here."));
+                    self.sync_to_statement_boundary(terminator);
+                }
+                TokenKind::Catch => {
+                    errors.push(self.error("E0210", "Unexpected 'catch' here."));
                     self.sync_to_statement_boundary(terminator);
                 }
                 _ => match self.parse_statement() {
@@ -558,6 +590,8 @@ impl<'a> Parser<'a> {
             TokenKind::Set => self.parse_set(),
             TokenKind::Put => self.parse_put(),
             TokenKind::Yield => self.parse_yield(),
+            TokenKind::Throw => self.parse_throw(),
+            TokenKind::Try => self.parse_try(),
             TokenKind::When => self.parse_when(),
             TokenKind::Repeat => self.parse_repeat(),
             TokenKind::Ident(_) => self.parse_call_stmt(),
@@ -652,6 +686,33 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_throw(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect_simple(TokenKind::Throw, "Expected 'throw'.")?;
+        let expr = self.parse_expr("Expected expression after 'throw'.")?;
+        let end = self.expect_dot(expr.span.end)?;
+        Ok(Stmt::Throw {
+            expr,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_try(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect_simple(TokenKind::Try, "Expected 'try'.")?;
+        self.expect_colon_with_fixit()?;
+        let try_body = self.parse_statements_until(Terminator::Catch)?;
+        self.expect_simple(TokenKind::Catch, "Expected 'catch'.")?;
+        let name = self.expect_ident("Expected binding name after 'catch'.")?;
+        self.expect_colon_with_fixit()?;
+        let catch_body = self.parse_statements_until(Terminator::End)?;
+        let end = self.expect_simple(TokenKind::End, "Expected 'end' to close try.")?;
+        Ok(Stmt::Try {
+            try_body,
+            catch_name: name,
+            catch_body,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
     fn parse_when(&mut self) -> Result<Stmt, ParseError> {
         let start = self.expect_simple(TokenKind::When, "Expected 'when'.")?;
         let cond = self.parse_expr("Expected condition after 'when'.")?;
@@ -691,6 +752,7 @@ impl<'a> Parser<'a> {
                 | TokenKind::Colon
                 | TokenKind::Comma
                 | TokenKind::Otherwise
+                | TokenKind::Catch
                 | TokenKind::End
                 | TokenKind::RParen
                 | TokenKind::RBracket
@@ -1255,6 +1317,8 @@ impl<'a> Parser<'a> {
                 TokenKind::End => break,
                 TokenKind::Otherwise if terminator == Terminator::Otherwise => break,
                 TokenKind::Otherwise => break,
+                TokenKind::Catch if terminator == Terminator::Catch => break,
+                TokenKind::Catch => break,
                 TokenKind::Rule => break,
                 _ => {
                     self.bump();
@@ -1392,6 +1456,7 @@ fn extract_ident(token: &Token) -> String {
 enum Terminator {
     End,
     Otherwise,
+    Catch,
 }
 
 #[cfg(test)]
@@ -1418,6 +1483,15 @@ mod tests {
     #[test]
     fn parse_repeat() {
         let source = "rule main() -> i64:\n  repeat while true:\n    yield 1.\n  end\n  yield 0.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        assert_eq!(program.functions.len(), 1);
+    }
+
+    #[test]
+    fn parse_try_catch() {
+        let source =
+            "rule main() -> i64:\n  try:\n    throw \"boom\".\n  catch err:\n    yield 1.\n  end\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = parse(&tokens).unwrap();
         assert_eq!(program.functions.len(), 1);

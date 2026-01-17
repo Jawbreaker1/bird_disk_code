@@ -101,6 +101,8 @@ E0205: Expected identifier
 E0206: Expected type
 E0207: Missing 'otherwise' block for when statement
 E0208: Unexpected 'otherwise'
+E0209: Missing 'catch' block for try statement
+E0210: Unexpected 'catch'
 
 E0300: Type mismatch
 E0301: Unknown name
@@ -120,11 +122,14 @@ E0400: Runtime error
 E0401: WASM backend error (reserved)
 E0402: Division or modulo by zero
 E0403: Array index out of bounds
+E0404: Uncaught throw
 
 Runtime error messages (E0400) include:
 - Null dereference
 - Out of memory during allocation
 - Invalid heap header
+
+E0404 uses the thrown message string as its diagnostic message.
 
 E0500: VM/WASM mismatch
 E0501: Test harness error

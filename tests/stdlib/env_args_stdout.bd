@@ -1,0 +1,12 @@
+import std::env.
+import std::io.
+
+rule main() -> i64:
+  set args: string[] = std::env::args().
+  set first: string = args[0].
+  set second: string = args[1].
+  std::io::print(first).
+  std::io::print("\n").
+  std::io::print(second).
+  yield 0.
+end

@@ -141,7 +141,23 @@ rule main() -> i64:
 end
 ```
 
-## 11) Bytes (u8[])
+## 11) JSON (std::json)
+```birddisk
+import std::json.
+import std::string.
+
+rule main() -> i64:
+  set encoded: string = std::json::encode_string("hi\n").
+  set decoded: string = std::json::decode_string(encoded).
+  when std::string::eq(decoded, "hi\n"):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+
+## 12) Bytes (u8[])
 ```birddisk
 import std::string.
 import std::bytes.
@@ -152,7 +168,7 @@ rule main() -> i64:
 end
 ```
 
-## 12) Bytes to string
+## 13) Bytes to string
 ```birddisk
 import std::string.
 
@@ -163,7 +179,7 @@ rule main() -> i64:
 end
 ```
 
-## 13) IO (read + print)
+## 14) IO (read + print)
 ```birddisk
 import std::io.
 import std::string.
@@ -176,7 +192,7 @@ rule main() -> i64:
 end
 ```
 
-## 14) Time (std::time)
+## 15) Time (std::time)
 ```birddisk
 import std::time.
 
@@ -196,7 +212,7 @@ rule main() -> i64:
 end
 ```
 
-## 15) Files (std::fs)
+## 16) Files (std::fs)
 ```birddisk
 import std::fs.
 import std::string.
@@ -207,7 +223,7 @@ rule main() -> i64:
 end
 ```
 
-## 16) Paths (std::path)
+## 17) Paths (std::path)
 ```birddisk
 import std::path.
 import std::string.
@@ -223,7 +239,7 @@ rule main() -> i64:
 end
 ```
 
-## 17) Environment (std::env)
+## 18) Environment (std::env)
 ```birddisk
 import std::env.
 import std::string.
@@ -242,7 +258,34 @@ Pass program args after `--`:
 ./target/debug/birddiskc run examples/main.bd --json -- alpha beta
 ```
 
-## 18) Native AOT (emit exe)
+## 19) Error handling (try/catch/throw)
+```birddisk
+import std::io.
+import std::string.
+
+rule safe_div(divisor: i64) -> i64:
+  when divisor == 0:
+    throw "division by zero".
+  otherwise:
+    yield 100 / divisor.
+  end
+end
+
+rule main() -> i64:
+  try:
+    set value: i64 = safe_div(0).
+    std::io::print(std::string::concat("value=", std::string::from_i64(value))).
+    std::io::print("\n").
+    yield 0.
+  catch message:
+    std::io::print(std::string::concat("error: ", message)).
+    std::io::print("\n").
+    yield 1.
+  end
+end
+```
+
+## 20) Native AOT (emit exe)
 ```birddisk
 rule main() -> i64:
   yield 0.
@@ -277,7 +320,7 @@ Test note (optional):
 BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddiskc native_aot_json_trace_smoke
 ```
 
-## 19) Large example (Yahtzee)
+## 21) Large example (Yahtzee)
 See `examples/yahtzee/` for a multi-file terminal demo.
 ```sh
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.input

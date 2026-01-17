@@ -4,11 +4,12 @@ use crate::analysis::{
     program_uses_strings, program_uses_time,
 };
 use crate::emit::{
-    emit_wat, wasm_error, WasmError, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET,
-    TRACE_STACK_SLOTS, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_KIND_ARRAY,
-    TRAP_ENV, TRAP_FS_IO, TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING,
+    emit_wat, wasm_error, WasmError, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
+    STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
+    TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER,
+    TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING,
     TRAP_NULL_DEREF, TRAP_PATH, TRAP_STRING_PARSE, TRAP_TIME_NEG, TRAP_TRACE_OOM,
-    TRAP_UTF8_INVALID, TRAP_HEAP_HEADER,
+    TRAP_UTF8_INVALID,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -126,11 +127,19 @@ pub fn run_with_io(
     let result = match func.call(&mut store, ()) {
         Ok(result) => result,
         Err(err) => {
-            let trace = read_trace(&mut store, &instance, &trace_table.frames);
+            let trace = read_trace(&mut store, &instance, &trace_table.frames, None);
             return Err(map_trap(err, "WASM runtime error", trace));
         }
     };
     let output = store.data().output.clone();
+    if let Some((message, trace_depth)) =
+        read_error_state(&mut store, &instance, &trace_table.frames)
+    {
+        let trace = read_trace(&mut store, &instance, &trace_table.frames, trace_depth);
+        let mut err = wasm_error("E0404", message);
+        err.trace = trace;
+        return Err(err);
+    }
     Ok((result, output))
 }
 
@@ -163,6 +172,9 @@ pub fn run_wasm_bytes_with_io(
         Err(err) => return Err(map_trap(err, "WASM runtime error", Vec::new())),
     };
     let output = store.data().output.clone();
+    if let Some((message, _)) = read_error_state(&mut store, &instance, &[]) {
+        return Err(wasm_error("E0404", message));
+    }
     Ok((result, output))
 }
 
@@ -850,6 +862,7 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
             TRAP_FS_IO => wasm_error("E0400", "std::fs operation failed."),
             TRAP_PATH => wasm_error("E0400", "std::path operation failed."),
             TRAP_ENV => wasm_error("E0400", "std::env operation failed."),
+            TRAP_JSON_PARSE => wasm_error("E0400", "Invalid JSON input."),
             _ => wasm_error("E0400", format!("{default_message}: {err}")),
         }
     } else if let Some(trap) = err.downcast_ref::<wasmtime::Trap>() {
@@ -867,16 +880,79 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
     mapped
 }
 
+fn read_error_state(
+    store: &mut wasmtime::Store<IoState>,
+    instance: &wasmtime::Instance,
+    frames: &[TraceFrame],
+) -> Option<(String, Option<i32>)> {
+    let has_error = instance
+        .get_typed_func::<(), i32>(&mut *store, "__bd_has_error")
+        .ok()?;
+    let flag = has_error.call(&mut *store, ()).ok()?;
+    if flag == 0 {
+        return None;
+    }
+    let msg_func = instance
+        .get_typed_func::<(), i32>(&mut *store, "__bd_error_message")
+        .ok()?;
+    let trace_func = instance
+        .get_typed_func::<(), i32>(&mut *store, "__bd_error_trace")
+        .ok();
+    let handle = msg_func.call(&mut *store, ()).ok()?;
+    let message = read_string(store, instance, handle)
+        .unwrap_or_else(|| "Uncaught throw.".to_string());
+    let depth = trace_func.and_then(|func| func.call(&mut *store, ()).ok());
+    let depth = match depth {
+        Some(value) if value > 0 => Some(value.min(frames.len() as i32)),
+        _ => None,
+    };
+    Some((message, depth))
+}
+
+fn read_string(
+    store: &mut wasmtime::Store<IoState>,
+    instance: &wasmtime::Instance,
+    handle: i32,
+) -> Option<String> {
+    if handle <= 0 {
+        return None;
+    }
+    let memory = instance.get_memory(&mut *store, "memory")?;
+    let data = memory.data(store);
+    let base = handle as usize;
+    if base >= data.len() {
+        return None;
+    }
+    let tag = read_i32(data, base);
+    if tag == 0 {
+        return None;
+    }
+    let kind = (tag >> HEAP_KIND_SHIFT) as i32;
+    if kind != HEAP_KIND_STRING {
+        return None;
+    }
+    let len = read_i32(data, base + HEAP_LEN_OFFSET as usize) as usize;
+    let start = base + STRING_HEADER_SIZE as usize;
+    let end = start.saturating_add(len);
+    if end > data.len() {
+        return None;
+    }
+    std::str::from_utf8(&data[start..end])
+        .ok()
+        .map(|value| value.to_string())
+}
+
 fn read_trace(
     store: &mut wasmtime::Store<IoState>,
     instance: &wasmtime::Instance,
     frames: &[TraceFrame],
+    depth_override: Option<i32>,
 ) -> Vec<TraceFrame> {
     let Some(memory) = instance.get_memory(&mut *store, "memory") else {
         return Vec::new();
     };
     let data = memory.data(store);
-    let sp = read_i32(data, TRACE_STACK_PTR_OFFSET as usize);
+    let sp = depth_override.unwrap_or_else(|| read_i32(data, TRACE_STACK_PTR_OFFSET as usize));
     if sp <= 0 {
         return Vec::new();
     }

@@ -1,0 +1,23 @@
+import std::io.
+import std::string.
+
+rule safe_div(divisor: i64) -> i64:
+  when divisor == 0:
+    throw "division by zero".
+  otherwise:
+    yield 100 / divisor.
+  end
+end
+
+rule main() -> i64:
+  try:
+    set value: i64 = safe_div(0).
+    std::io::print(std::string::concat("value=", std::string::from_i64(value))).
+    std::io::print("\n").
+    yield 0.
+  catch message:
+    std::io::print(std::string::concat("error: ", message)).
+    std::io::print("\n").
+    yield 1.
+  end
+end

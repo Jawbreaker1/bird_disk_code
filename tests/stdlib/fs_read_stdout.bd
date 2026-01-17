@@ -1,0 +1,8 @@
+import std::fs.
+import std::io.
+
+rule main() -> i64:
+  set text: string = std::fs::read_text("tests/stdlib/fs_text.txt").
+  std::io::print(text).
+  yield 0.
+end

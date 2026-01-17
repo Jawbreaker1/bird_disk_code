@@ -25,6 +25,11 @@ Imported modules do not need a `main` rule and may contain only books or helper 
 - Imported functions are namespaced under their module path
   (e.g. `import app::util.` defines `app::util::foo`).
 - Book/type names are global in v0.1; avoid collisions across modules.
+- Qualified names resolve as:
+  - If the fully qualified rule name exists (stdlib or imported module), that rule is called.
+  - Otherwise, if `name` is a local binding of a book type, `name::member` is a field access or method call (if followed by `()`).
+  - Otherwise `name::member` is unresolved.
+- Import aliases and wildcard imports are not supported in v0.1.
 
 ## 2. Types
 Built-in types:
@@ -120,6 +125,22 @@ Rules:
 - `cond` must be `bool`.
 - Body is a lexical scope.
 - `yield` is allowed inside loops.
+
+### 5.7 Error handling (`try/catch/throw`)
+Syntax:
+try:
+…
+catch name:
+…
+end
+
+throw expr.
+
+Rules:
+- `throw` requires a `string` expression and raises a runtime error (E0404).
+- `try` executes the try-body; if a `throw` occurs, control jumps to `catch`.
+- `catch` binds the thrown message as `string` in a new lexical scope.
+- Only explicit `throw` is catchable in v0.x; runtime traps still abort.
 
 ## 6. Expressions
 ### 6.1 Literals
@@ -245,6 +266,23 @@ Functions:
 - `std::string::from_bytes(bytes: u8[]) -> string` (validates UTF-8; invalid bytes are runtime errors)
 - `std::string::to_i64(s: string) -> i64` (decimal, optional leading `-`; invalid or out-of-range input is a runtime error)
 - `std::string::from_i64(value: i64) -> string`
+
+### 9.3 std::json module
+To use JSON helpers, import the module:
+- `import std::json.`
+
+Functions:
+- `std::json::encode_i64(value: i64) -> string` (returns a JSON number)
+- `std::json::encode_bool(value: bool) -> string` (returns `"true"` or `"false"`)
+- `std::json::encode_string(text: string) -> string` (returns a JSON string literal)
+- `std::json::decode_i64(text: string) -> i64` (trims ASCII whitespace)
+- `std::json::decode_bool(text: string) -> bool` (trims ASCII whitespace)
+- `std::json::decode_string(text: string) -> string` (trims ASCII whitespace)
+
+Notes:
+- `decode_string` supports escapes `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, and `\t`.
+- `\u` escapes are not supported yet (runtime error).
+- `encode_string` errors on control characters other than `\n`, `\r`, `\t`, `\b`, and `\f`.
 
 ## 10. Bytes (v0.1)
 BirdDisk treats `u8[]` as a byte array.

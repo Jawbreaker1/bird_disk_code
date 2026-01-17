@@ -17,14 +17,17 @@
 - Native backend (JIT + AOT via Cranelift)
 - Arrays + indexing (VM + WASM + native)
 - Strings + std::string (VM + WASM + native)
+- try/catch/throw error handling (VM + WASM + native)
 - u8 + std::bytes + std::string::bytes (VM + WASM + native)
 - std::io (VM + WASM + native)
 - std::time (VM + WASM + native)
 - std::fs (VM + WASM + native)
 - std::path (VM + WASM + native)
 - std::env (VM + WASM + native)
+- std::json (VM + WASM + native)
 - stdlib module loading + std::math (BirdDisk)
 - OO core (book + fields + methods, VM + WASM + native)
+- VSCode extension: LSP hover, go-to def/type, references (imports + open docs), signature help (rules + constructors + stdlib), document/workspace symbols, type-aware member + module completions
 
 ## Upcoming (planned)
 - VSCode extension maintenance (syntax/LSP updates)

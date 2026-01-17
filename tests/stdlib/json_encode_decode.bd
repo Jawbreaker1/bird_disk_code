@@ -1,0 +1,23 @@
+import std::json.
+import std::string.
+
+rule main() -> i64:
+  set encoded_num: string = std::json::encode_i64(-12).
+  set encoded_bool: string = std::json::encode_bool(true).
+  set encoded_str: string = std::json::encode_string("hi\n").
+  set ok_num: bool = std::string::eq(encoded_num, "-12").
+  set ok_bool: bool = std::string::eq(encoded_bool, "true").
+  set ok_str: bool = std::string::eq(encoded_str, "\"hi\\n\"").
+  when ok_num && ok_bool && ok_str:
+    set parsed_num: i64 = std::json::decode_i64(" 42 ").
+    set parsed_bool: bool = std::json::decode_bool(" false ").
+    set parsed_str: string = std::json::decode_string(" \"hi\\n\" ").
+    when parsed_num == 42 && !parsed_bool && std::string::eq(parsed_str, "hi\n"):
+      yield 1.
+    otherwise:
+      yield 0.
+    end
+  otherwise:
+    yield 0.
+  end
+end

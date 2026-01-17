@@ -1,0 +1,12 @@
+import testlib::util.
+
+book Dummy:
+  rule init(self: Dummy) -> Dummy:
+    yield self.
+  end
+end
+
+rule main() -> i64:
+  set testlib: Dummy = new Dummy().
+  yield testlib::util::double(3).
+end

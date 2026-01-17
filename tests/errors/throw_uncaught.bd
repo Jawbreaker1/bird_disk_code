@@ -1,0 +1,4 @@
+rule main() -> i64:
+  throw "boom".
+  yield 0.
+end

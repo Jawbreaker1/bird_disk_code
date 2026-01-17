@@ -1,0 +1,6 @@
+import std::json.
+
+rule main() -> i64:
+  set value: i64 = std::json::decode_i64("12x").
+  yield value.
+end

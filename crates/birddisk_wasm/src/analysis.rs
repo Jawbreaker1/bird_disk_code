@@ -143,6 +143,17 @@ pub(crate) fn program_uses_env(program: &Program) -> bool {
     false
 }
 
+pub(crate) fn program_uses_json(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_json(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn type_has_array(ty: &Type) -> bool {
     match ty {
         Type::Array(_) => true,
@@ -169,6 +180,12 @@ fn stmt_has_array(stmt: &Stmt) -> bool {
         Stmt::PutIndex { .. } => true,
         Stmt::PutField { expr, .. } => expr_has_array(expr),
         Stmt::Yield { expr, .. } => expr_has_array(expr),
+        Stmt::Throw { expr, .. } => expr_has_array(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_array) || catch_body.iter().any(stmt_has_array),
         Stmt::When {
             cond,
             then_body,
@@ -212,6 +229,12 @@ fn stmt_has_string(stmt: &Stmt) -> bool {
         }
         Stmt::PutField { expr, .. } => expr_has_string(expr),
         Stmt::Yield { expr, .. } => expr_has_string(expr),
+        Stmt::Throw { expr, .. } => expr_has_string(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_string) || catch_body.iter().any(stmt_has_string),
         Stmt::When {
             cond,
             then_body,
@@ -232,7 +255,9 @@ fn expr_has_string(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::String(_) => true,
         ExprKind::Call { name, args } => {
-            name.starts_with("std::string::") || args.iter().any(expr_has_string)
+            name.starts_with("std::string::")
+                || name.starts_with("std::json::")
+                || args.iter().any(expr_has_string)
         }
         ExprKind::New { args, .. } => args.iter().any(expr_has_string),
         ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_string),
@@ -242,6 +267,51 @@ fn expr_has_string(expr: &Expr) -> bool {
         ExprKind::Binary { left, right, .. } => {
             expr_has_string(left) || expr_has_string(right)
         }
+        _ => false,
+    }
+}
+
+fn stmt_has_json(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_json(expr),
+        Stmt::Expr { expr, .. } => expr_has_json(expr),
+        Stmt::Put { expr, .. } => expr_has_json(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_json(index) || expr_has_json(expr),
+        Stmt::PutField { expr, .. } => expr_has_json(expr),
+        Stmt::Yield { expr, .. } => expr_has_json(expr),
+        Stmt::Throw { expr, .. } => expr_has_json(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_json) || catch_body.iter().any(stmt_has_json),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_json(cond)
+                || then_body.iter().any(stmt_has_json)
+                || else_body.iter().any(stmt_has_json)
+        }
+        Stmt::Repeat { cond, body, .. } => {
+            expr_has_json(cond) || body.iter().any(stmt_has_json)
+        }
+    }
+}
+
+fn expr_has_json(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::json::") || args.iter().any(expr_has_json)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_json),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_json),
+        ExprKind::ArrayNew { len } => expr_has_json(len),
+        ExprKind::Index { base, index } => expr_has_json(base) || expr_has_json(index),
+        ExprKind::Unary { expr, .. } => expr_has_json(expr),
+        ExprKind::Binary { left, right, .. } => expr_has_json(left) || expr_has_json(right),
         _ => false,
     }
 }
@@ -256,6 +326,15 @@ fn stmt_has_string_from_bytes(stmt: &Stmt) -> bool {
         }
         Stmt::PutField { expr, .. } => expr_has_string_from_bytes(expr),
         Stmt::Yield { expr, .. } => expr_has_string_from_bytes(expr),
+        Stmt::Throw { expr, .. } => expr_has_string_from_bytes(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => {
+            try_body.iter().any(stmt_has_string_from_bytes)
+                || catch_body.iter().any(stmt_has_string_from_bytes)
+        }
         Stmt::When {
             cond,
             then_body,
@@ -299,6 +378,12 @@ fn stmt_has_bytes(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_bytes(index) || expr_has_bytes(expr),
         Stmt::PutField { expr, .. } => expr_has_bytes(expr),
         Stmt::Yield { expr, .. } => expr_has_bytes(expr),
+        Stmt::Throw { expr, .. } => expr_has_bytes(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_bytes) || catch_body.iter().any(stmt_has_bytes),
         Stmt::When {
             cond,
             then_body,
@@ -340,6 +425,12 @@ fn stmt_has_io(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_io(index) || expr_has_io(expr),
         Stmt::PutField { expr, .. } => expr_has_io(expr),
         Stmt::Yield { expr, .. } => expr_has_io(expr),
+        Stmt::Throw { expr, .. } => expr_has_io(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_io) || catch_body.iter().any(stmt_has_io),
         Stmt::When {
             cond,
             then_body,
@@ -375,6 +466,12 @@ fn stmt_has_time(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_time(index) || expr_has_time(expr),
         Stmt::PutField { expr, .. } => expr_has_time(expr),
         Stmt::Yield { expr, .. } => expr_has_time(expr),
+        Stmt::Throw { expr, .. } => expr_has_time(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_time) || catch_body.iter().any(stmt_has_time),
         Stmt::When {
             cond,
             then_body,
@@ -414,6 +511,12 @@ fn stmt_has_fs(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_fs(index) || expr_has_fs(expr),
         Stmt::PutField { expr, .. } => expr_has_fs(expr),
         Stmt::Yield { expr, .. } => expr_has_fs(expr),
+        Stmt::Throw { expr, .. } => expr_has_fs(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_fs) || catch_body.iter().any(stmt_has_fs),
         Stmt::When {
             cond,
             then_body,
@@ -451,6 +554,12 @@ fn stmt_has_path(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_path(index) || expr_has_path(expr),
         Stmt::PutField { expr, .. } => expr_has_path(expr),
         Stmt::Yield { expr, .. } => expr_has_path(expr),
+        Stmt::Throw { expr, .. } => expr_has_path(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_path) || catch_body.iter().any(stmt_has_path),
         Stmt::When {
             cond,
             then_body,
@@ -488,6 +597,12 @@ fn stmt_has_env(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_env(index) || expr_has_env(expr),
         Stmt::PutField { expr, .. } => expr_has_env(expr),
         Stmt::Yield { expr, .. } => expr_has_env(expr),
+        Stmt::Throw { expr, .. } => expr_has_env(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_env) || catch_body.iter().any(stmt_has_env),
         Stmt::When {
             cond,
             then_body,
@@ -530,6 +645,12 @@ fn stmt_has_object(stmt: &Stmt) -> bool {
         Stmt::PutIndex { index, expr, .. } => expr_has_object(index) || expr_has_object(expr),
         Stmt::PutField { .. } => true,
         Stmt::Yield { expr, .. } => expr_has_object(expr),
+        Stmt::Throw { expr, .. } => expr_has_object(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_object) || catch_body.iter().any(stmt_has_object),
         Stmt::When {
             cond,
             then_body,

@@ -89,6 +89,7 @@ struct FuncCompiler<'a> {
     root_count_local: u32,
     locals: Vec<Type>,
     scopes: Vec<HashMap<String, LocalInfo>>,
+    error_labels: Vec<String>,
     code: Vec<String>,
     indent: usize,
     label_counter: usize,
@@ -110,6 +111,7 @@ impl<'a> FuncCompiler<'a> {
             root_count_local: 0,
             locals: Vec::new(),
             scopes: Vec::new(),
+            error_labels: Vec::new(),
             code: Vec::new(),
             indent: 0,
             label_counter: 0,
@@ -130,11 +132,19 @@ impl<'a> FuncCompiler<'a> {
     }
 
     fn emit_body(&mut self) -> Result<(), WasmError> {
+        let error_label = self.fresh_label("error");
+        self.error_labels.push(error_label.clone());
+        self.push_line(format!("block ${error_label}"));
+        self.indent += 1;
         self.emit_trace_push();
         for stmt in &self.func.body {
             self.emit_stmt(stmt)?;
         }
         self.emit_default_return();
+        self.indent -= 1;
+        self.push_line("end");
+        self.error_labels.pop();
+        self.emit_error_return();
         Ok(())
     }
 
@@ -145,6 +155,15 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_trace_pop(&mut self) {
         self.push_line("call $bd_trace_pop");
+    }
+
+    fn emit_error_check(&mut self) {
+        let label = match self.error_labels.last() {
+            Some(label) => label.clone(),
+            None => return,
+        };
+        self.push_line("call $bd_has_error");
+        self.push_line(format!("br_if ${label}"));
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt) -> Result<(), WasmError> {
@@ -251,6 +270,56 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line(format!("local.get {ret_local}"));
                 self.push_line("return");
             }
+            Stmt::Throw { expr, .. } => {
+                self.emit_expr(expr, Some(&Type::String))?;
+                self.push_line("call $bd_throw");
+                self.emit_error_check();
+            }
+            Stmt::Try {
+                try_body,
+                catch_name,
+                catch_body,
+                ..
+            } => {
+                let catch_label = self.fresh_label("catch");
+                let done_label = self.fresh_label("try_done");
+                let outer_label = self
+                    .error_labels
+                    .last()
+                    .cloned()
+                    .ok_or_else(|| wasm_error("E0400", "missing error label"))?;
+
+                self.push_line(format!("block ${done_label}"));
+                self.indent += 1;
+                self.push_line(format!("block ${catch_label}"));
+                self.indent += 1;
+                self.error_labels.push(catch_label.clone());
+                self.push_scope();
+                for stmt in try_body {
+                    self.emit_stmt(stmt)?;
+                }
+                self.pop_scope();
+                self.error_labels.pop();
+                self.push_line(format!("br ${done_label}"));
+                self.indent -= 1;
+                self.push_line("end");
+
+                self.push_scope();
+                self.push_line("call $bd_error_is_throw");
+                self.push_line("i32.eqz");
+                self.push_line(format!("br_if ${outer_label}"));
+                self.push_line("call $bd_error_message");
+                let idx = self.reserve_local(Type::String);
+                self.emit_local_set(idx, &Type::String);
+                self.push_line("call $bd_clear_error");
+                self.bind_local(catch_name, idx, Type::String);
+                for stmt in catch_body {
+                    self.emit_stmt(stmt)?;
+                }
+                self.pop_scope();
+                self.indent -= 1;
+                self.push_line("end");
+            }
             Stmt::When {
                 cond,
                 then_body,
@@ -321,6 +390,10 @@ impl<'a> FuncCompiler<'a> {
         self.emit_trace_pop();
         self.push_line(format!("local.get {ret_local}"));
         self.push_line("return");
+    }
+
+    fn emit_error_return(&mut self) {
+        self.emit_default_return();
     }
 
     fn temp_local(&mut self, ty: Type) -> u32 {

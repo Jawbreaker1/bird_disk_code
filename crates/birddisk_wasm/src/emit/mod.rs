@@ -4,7 +4,7 @@ mod types;
 
 use crate::analysis::{
     program_uses_arrays, program_uses_bytes, program_uses_env, program_uses_fs,
-    program_uses_io, program_uses_objects, program_uses_path,
+    program_uses_io, program_uses_json, program_uses_objects, program_uses_path,
     program_uses_string_from_bytes, program_uses_strings, program_uses_time,
 };
 use crate::trace::build_trace_table;
@@ -62,6 +62,7 @@ pub(crate) const TRAP_TIME_NEG: i32 = 415;
 pub(crate) const TRAP_FS_IO: i32 = 416;
 pub(crate) const TRAP_PATH: i32 = 417;
 pub(crate) const TRAP_ENV: i32 = 418;
+pub(crate) const TRAP_JSON_PARSE: i32 = 419;
 
 pub(crate) const TRACE_STACK_PTR_OFFSET: i32 = 0;
 pub(crate) const TRACE_STACK_DATA_OFFSET: i32 = 4;
@@ -96,6 +97,7 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
     let uses_fs = program_uses_fs(program);
     let uses_path = program_uses_path(program);
     let uses_env = program_uses_env(program);
+    let uses_json = program_uses_json(program);
     let uses_trace = true;
     let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace;
     let needs_validate_utf8 = uses_from_bytes || uses_fs || uses_path || uses_env;
@@ -198,6 +200,9 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
     }
     if uses_strings {
         runtime::emit_string_runtime(&mut emitter, uses_from_bytes);
+    }
+    if uses_json {
+        runtime::emit_json_runtime(&mut emitter);
     }
     if uses_bytes {
         runtime::emit_bytes_runtime(&mut emitter);

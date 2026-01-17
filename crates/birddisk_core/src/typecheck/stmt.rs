@@ -334,6 +334,37 @@ impl<'a> Checker<'a> {
                     ));
                 }
             }
+            Stmt::Throw { expr, span } => {
+                let expr_ty = self.check_expr(expr);
+                if expr_ty != Ty::Unknown && expr_ty != Ty::String {
+                    self.diagnostics.push(type_mismatch(
+                        self.file,
+                        *span,
+                        Ty::String,
+                        expr_ty.clone(),
+                    ));
+                }
+            }
+            Stmt::Try {
+                try_body,
+                catch_name,
+                catch_body,
+                ..
+            } => {
+                self.push_scope();
+                for stmt in try_body {
+                    self.check_stmt(stmt);
+                }
+                self.pop_scope();
+
+                self.push_scope();
+                self.current_scope_mut()
+                    .insert(catch_name.clone(), Ty::String);
+                for stmt in catch_body {
+                    self.check_stmt(stmt);
+                }
+                self.pop_scope();
+            }
             Stmt::When {
                 cond,
                 span,

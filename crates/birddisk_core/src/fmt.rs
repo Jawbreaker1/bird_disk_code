@@ -189,6 +189,30 @@ impl Formatter {
                 let line = format!("yield {}.", format_expr(expr, 0));
                 self.push_line(&line);
             }
+            Stmt::Throw { expr, .. } => {
+                let line = format!("throw {}.", format_expr(expr, 0));
+                self.push_line(&line);
+            }
+            Stmt::Try {
+                try_body,
+                catch_name,
+                catch_body,
+                ..
+            } => {
+                self.push_line("try:");
+                self.indent += 1;
+                for stmt in try_body {
+                    self.format_stmt(stmt);
+                }
+                self.indent -= 1;
+                self.push_line(&format!("catch {catch_name}:"));
+                self.indent += 1;
+                for stmt in catch_body {
+                    self.format_stmt(stmt);
+                }
+                self.indent -= 1;
+                self.push_line("end");
+            }
             Stmt::When {
                 cond,
                 then_body,

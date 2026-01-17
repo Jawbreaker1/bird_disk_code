@@ -190,7 +190,8 @@ fn is_builtin_std_module(path: &[String]) -> bool {
                     || module == "time"
                     || module == "fs"
                     || module == "path"
-                    || module == "env")
+                    || module == "env"
+                    || module == "json")
     )
 }
 
@@ -427,6 +428,19 @@ fn qualify_stmt(stmt: &mut ast::Stmt, local_names: &HashSet<String>, prefix: &st
         }
         ast::Stmt::PutField { expr, .. } => qualify_expr(expr, local_names, prefix),
         ast::Stmt::Yield { expr, .. } => qualify_expr(expr, local_names, prefix),
+        ast::Stmt::Throw { expr, .. } => qualify_expr(expr, local_names, prefix),
+        ast::Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => {
+            for stmt in try_body {
+                qualify_stmt(stmt, local_names, prefix);
+            }
+            for stmt in catch_body {
+                qualify_stmt(stmt, local_names, prefix);
+            }
+        }
         ast::Stmt::When {
             cond,
             then_body,

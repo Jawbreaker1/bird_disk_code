@@ -1571,7 +1571,7 @@ fn main() {
     let result = unsafe { __ENTRY__(&mut runtime) };
     if let Some(err) = runtime.take_error() {
         if json {
-            emit_json_error(err.code, err.message, &err.trace);
+            emit_json_error(err.code, &err.message, &err.trace);
         }
         eprintln!("runtime error {}: {}", err.code, err.message);
         std::process::exit(1);
@@ -1838,6 +1838,7 @@ fn runtime_spec_refs(code: &str) -> Vec<String> {
     match code {
         "E0402" => vec!["SPEC.md#6-4-binary-operators".to_string()],
         "E0403" => vec!["SPEC.md#8-4-indexing".to_string()],
+        "E0404" => vec!["SPEC.md#5-7-error-handling-try-catch-throw".to_string()],
         _ => Vec::new(),
     }
 }
@@ -2108,6 +2109,49 @@ mod tests {
         assert_eq!(parsed["diagnostics"][0]["code"], "E0403");
         assert_eq!(parsed["diagnostics"][0]["trace"][0]["function"], "boom");
         assert_eq!(parsed["diagnostics"][0]["trace"][1]["function"], "main");
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn native_aot_try_catch_smoke() {
+        if env::var("BIRDDISK_RUN_NATIVE_AOT_TEST").is_err() {
+            return;
+        }
+        let source = "import std::io.\nimport std::string.\n\nrule safe_div(divisor: i64) -> i64:\n  when divisor == 0:\n    throw \"division by zero\".\n  otherwise:\n    yield 100 / divisor.\n  end\nend\n\nrule main() -> i64:\n  try:\n    set value: i64 = safe_div(0).\n    std::io::print(std::string::concat(\"value=\", std::string::from_i64(value))).\n    std::io::print(\"\\n\").\n    yield 0.\n  catch message:\n    std::io::print(std::string::concat(\"error: \", message)).\n    std::io::print(\"\\n\").\n    yield 1.\n  end\nend\n";
+        let mut path = env::temp_dir();
+        path.push(format!(
+            "birddisk_native_try_catch_{}.bd",
+            std::process::id()
+        ));
+        fs::write(&path, source).expect("write temp source");
+        let path_str = path.to_string_lossy().to_string();
+
+        let program = birddisk_core::parse_and_typecheck(&path_str).expect("parse program");
+        let obj = birddisk_native::emit_object(&program).expect("emit object");
+        let layout = birddisk_native::layout_for_program(&program).expect("layout");
+        let trace = birddisk_native::trace_for_program(&program).expect("trace");
+
+        let mut exe_path = env::temp_dir();
+        exe_path.push(format!(
+            "birddisk_native_try_catch_{}.exe",
+            std::process::id()
+        ));
+        let exe_str = exe_path.to_string_lossy().to_string();
+        build_native_executable(&obj, &path_str, &exe_str, &layout, &trace)
+            .expect("build native exe");
+
+        let output = process::Command::new(&exe_path)
+            .env("BIRDDISK_JSON", "1")
+            .output()
+            .expect("run native exe");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let parsed: serde_json::Value =
+            serde_json::from_str(stdout.trim()).expect("parse json");
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["result"], 1);
+        assert_eq!(parsed["stdout"], "error: division by zero\n");
 
         let _ = fs::remove_file(&path);
         let _ = fs::remove_file(&exe_path);

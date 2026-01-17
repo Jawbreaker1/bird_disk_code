@@ -20,6 +20,8 @@ stmt          = set_stmt
               | call_stmt
               | put_stmt
               | yield_stmt
+              | throw_stmt
+              | try_stmt
               | when_stmt
               | repeat_stmt
               ;
@@ -28,10 +30,13 @@ set_stmt      = "set" ident [ ":" type ] "=" expr "." ;
 call_stmt     = qualified_ident "(" [ args ] ")" "." ;
 put_stmt      = "put" ( ident [ "[" expr "]" ] | member_access ) "=" expr "." ;
 yield_stmt    = "yield" expr "." ;
+throw_stmt    = "throw" expr "." ;
 
 when_stmt     = "when" expr ":" { stmt } "otherwise" ":" { stmt } "end" ;
 
 repeat_stmt   = "repeat" "while" expr ":" { stmt } "end" ;
+
+try_stmt      = "try" ":" { stmt } "catch" ident ":" { stmt } "end" ;
 
 expr          = logic_or ;
 

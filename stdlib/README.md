@@ -52,9 +52,16 @@ Runtime modules (implemented in Rust)
   - set_var(name: string, value: string) -> i64
   - cwd() -> string
   - set_cwd(path: string) -> i64
+- std::json
+  - encode_i64(value: i64) -> string
+  - encode_bool(value: bool) -> string
+  - encode_string(text: string) -> string
+  - decode_i64(text: string) -> i64
+  - decode_bool(text: string) -> bool
+  - decode_string(text: string) -> string
 
 Notes
-- std::string, std::bytes, std::io, std::time, std::fs, std::path, and std::env are still implemented in Rust.
+- std::string, std::bytes, std::io, std::time, std::fs, std::path, std::env, and std::json are still implemented in Rust.
 - BirdDisk stdlib modules are currently self-contained and should not
   import other modules yet.
 - Stdlib versioning is tied to the compiler version during v0.x.

@@ -1,0 +1,15 @@
+import std::fs.
+import std::bytes.
+import std::string.
+
+rule main() -> i64:
+  set path: string = "tests/stdlib/fs_bytes.bin".
+  set bytes: u8[] = std::string::bytes("abc").
+  set ignored: i64 = std::fs::write_bytes(path, bytes).
+  set loaded: u8[] = std::fs::read_bytes(path).
+  when std::bytes::eq(bytes, loaded):
+    yield std::bytes::len(loaded).
+  otherwise:
+    yield 0.
+  end
+end

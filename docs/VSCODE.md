@@ -19,8 +19,9 @@ Notes:
 
 ## LSP (optional)
 BirdDisk ships with a minimal LSP server (`birddisk-lsp`) that adds hover, go-to definition,
-rename, LSP-driven completions/diagnostics, semantic tokens, and inlay hints.
-Completions and definitions are file-local and best-effort in v0.x.
+go-to type definition, rename, references, signature help, document/workspace symbols, LSP-driven
+completions/diagnostics, semantic tokens, and inlay hints. Completions are file-local; go-to-definition
+and references follow imported modules when available (open files are included too).
 
 Build the server:
 ```sh

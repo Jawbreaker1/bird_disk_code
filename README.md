@@ -60,6 +60,7 @@ More commands and flags live in `docs/CLI.md`.
 
 Examples
 - `examples/minimal_main.bd` (smallest runnable program)
+- `examples/try_catch.bd` (error handling with try/catch/throw)
 - `examples/book_account.bd` (book with methods and constructor)
 - `examples/book_point.bd` (field access + method calls)
 - `examples/terminal_calculator.bd` (terminal IO + operator dispatch)

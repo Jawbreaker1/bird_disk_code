@@ -415,9 +415,10 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_call(&mut self, span: Span, name: &str, args: &[Expr]) -> Ty {
-        if let Some((base, method)) = name.split_once("::") {
-            if base != "std" {
-                if let Some(Ty::Book(book_name)) = self.lookup(base) {
+        if !self.functions.contains_key(name) {
+            if let Some((base, method)) = name.split_once("::") {
+                if base != "std" {
+                    if let Some(Ty::Book(book_name)) = self.lookup(base) {
                         let full_name = format!("{book_name}::{method}");
                         let Some(sig) = self.functions.get(&full_name).cloned() else {
                             self.diagnostics.push(diagnostic(
@@ -486,6 +487,7 @@ impl<'a> Checker<'a> {
                             }
                         }
                         return sig.return_type;
+                    }
                 }
             }
         }
