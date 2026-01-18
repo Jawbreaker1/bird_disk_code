@@ -16,6 +16,7 @@ Notes:
 - Configure the compiler path via the `birddisk.compilerPath` setting if needed.
 - Use `birddisk.entryFile` to suppress missing-main diagnostics in module files.
 - Formatting uses `birddiskc fmt` on the current document.
+- The extension sets BirdDisk minimap defaults to reduce garbled glyphs (you can override them in user settings).
 
 ## LSP (optional)
 BirdDisk ships with a minimal LSP server (`birddisk-lsp`) that adds hover, go-to definition,

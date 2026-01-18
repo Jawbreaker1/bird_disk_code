@@ -364,6 +364,8 @@ Acceptance:
 Implement:
 - [ ] Linter with opinionated rules for LLM-friendly code
 - [ ] Doc generator (`birddiskc doc` from source)
+- [ ] Reference manual (LLM-friendly semantics lookup)
+- [ ] `std::rand` (basic RNG with seed + uniform range)
 - [ ] Profiler hooks (GC stats, runtime timers)
 - [ ] Enhanced test runner (parallel, filters, snapshots)
 
