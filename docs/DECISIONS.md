@@ -261,6 +261,32 @@ Notes:
 
 ---
 
+## 8) Naming conventions (snake_case vs camelCase)
+status: open
+decision: _
+rationale: _
+impact: docs/STYLES.md, examples, formatter (optional)
+
+Questions:
+- Should BirdDisk recommend or enforce a naming style for rules, books, and variables?
+- If enforced, is it snake_case, camelCase, or allow both?
+
+---
+
+## 9) Mandatory testing model (separate from production code)
+status: open
+decision: _
+rationale: _
+impact: language spec, parser/typechecker, test runner, docs, examples
+
+Questions:
+- Should BirdDisk require tests for user-defined rules by default?
+- If mandatory, how do we keep tests out of production code (separate files/modules, naming conventions)?
+- Which rules are exempt (`main`, `init`, stdlib)?
+- What is the minimum test syntax and runner workflow that stays LLM-friendly?
+
+---
+
 ## 8) Extensions and FFI
 status: open
 decision: _

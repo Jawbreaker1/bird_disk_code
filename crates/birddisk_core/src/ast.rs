@@ -35,6 +35,8 @@ pub struct Function {
     pub return_type: Type,
     pub body: Vec<Stmt>,
     pub span: Span,
+    pub file: String,
+    pub source: String,
 }
 
 #[derive(Debug, Clone)]

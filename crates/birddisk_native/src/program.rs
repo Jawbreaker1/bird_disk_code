@@ -281,18 +281,33 @@ pub(crate) fn collect_functions(program: &Program) -> Vec<(&birddisk_core::ast::
 pub(crate) fn build_trace_table(program: &Program) -> TraceTable {
     let mut frames = Vec::new();
     let mut ids = HashMap::new();
-    let mut insert = |name: String, span| {
+    let mut insert = |name: String, file: String, source: String, span| {
         let id = frames.len() as i64;
-        frames.push(TraceFrame { function: name.clone(), span });
+        frames.push(TraceFrame {
+            function: name.clone(),
+            file,
+            span,
+            source,
+        });
         ids.insert(name, id);
     };
     for func in &program.functions {
-        insert(func.name.clone(), func.span);
+        insert(
+            func.name.clone(),
+            func.file.clone(),
+            func.source.clone(),
+            func.span,
+        );
     }
     for book in &program.books {
         for method in &book.methods {
             let name = format!("{}::{}", book.name, method.name);
-            insert(name, method.span);
+            insert(
+                name,
+                method.file.clone(),
+                method.source.clone(),
+                method.span,
+            );
         }
     }
     TraceTable { frames, ids }

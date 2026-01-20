@@ -12,12 +12,18 @@ pub use vm::{eval, eval_with_io, eval_with_io_streaming};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use birddisk_core::{lexer, parser, parse_and_typecheck};
+    use birddisk_core::{attach_sources, lexer, parser, parse_and_typecheck};
     use std::path::PathBuf;
 
-    fn eval_source(source: &str) -> i64 {
+    fn parse_program(source: &str) -> birddisk_core::ast::Program {
         let tokens = lexer::lex(source).unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let mut program = parser::parse(&tokens).unwrap();
+        attach_sources(&mut program, "<memory>", source);
+        program
+    }
+
+    fn eval_source(source: &str) -> i64 {
+        let program = parse_program(source);
         eval(&program).unwrap()
     }
 
@@ -61,8 +67,7 @@ mod tests {
 
     #[test]
     fn eval_div_by_zero_errors() {
-        let tokens = lexer::lex("rule main() -> i64:\n  yield 1 / 0.\nend\n").unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let program = parse_program("rule main() -> i64:\n  yield 1 / 0.\nend\n");
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0402");
     }
@@ -70,8 +75,7 @@ mod tests {
     #[test]
     fn eval_rejects_wrong_arity() {
         let source = "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n\nrule main() -> i64:\n  yield add(1).\nend\n";
-        let tokens = lexer::lex(source).unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let program = parse_program(source);
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0400");
         assert!(err.message.contains("expected 2"));
@@ -80,13 +84,14 @@ mod tests {
     #[test]
     fn eval_trace_includes_call_stack() {
         let source = "rule boom() -> i64:\n  yield 1 / 0.\nend\n\nrule main() -> i64:\n  yield boom().\nend\n";
-        let tokens = lexer::lex(source).unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let program = parse_program(source);
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0402");
         assert!(err.trace.len() >= 2);
         assert_eq!(err.trace[0].function, "boom");
         assert_eq!(err.trace[1].function, "main");
+        assert_eq!(err.trace[0].file, "<memory>");
+        assert!(err.trace[0].source.contains("rule boom"));
     }
 
     #[test]
@@ -99,9 +104,7 @@ mod tests {
 
     #[test]
     fn eval_throw_uncaught_errors() {
-        let tokens = lexer::lex("rule main() -> i64:\n  throw \"boom\".\n  yield 0.\nend\n")
-            .unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let program = parse_program("rule main() -> i64:\n  throw \"boom\".\n  yield 0.\nend\n");
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0404");
     }
@@ -124,10 +127,8 @@ mod tests {
 
     #[test]
     fn eval_array_index_out_of_bounds() {
-        let tokens =
-            lexer::lex("rule main() -> i64:\n  set xs: i64[] = [1].\n  yield xs[2].\nend\n")
-                .unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let program =
+            parse_program("rule main() -> i64:\n  set xs: i64[] = [1].\n  yield xs[2].\nend\n");
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0403");
     }

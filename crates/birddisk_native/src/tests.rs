@@ -1,27 +1,30 @@
 use crate::{emit_object, run, run_with_io};
-use birddisk_core::{lexer, parser};
+use birddisk_core::{attach_sources, lexer, parser};
+
+fn parse_program(source: &str) -> birddisk_core::ast::Program {
+    let tokens = lexer::lex(source).unwrap();
+    let mut program = parser::parse(&tokens).unwrap();
+    attach_sources(&mut program, "<memory>", source);
+    program
+}
 
 fn run_source(source: &str) -> i64 {
-    let tokens = lexer::lex(source).unwrap();
-    let program = parser::parse(&tokens).unwrap();
+    let program = parse_program(source);
     run(&program).unwrap()
 }
 
 fn run_source_with_io(source: &str, input: &str) -> (i64, String) {
-    let tokens = lexer::lex(source).unwrap();
-    let program = parser::parse(&tokens).unwrap();
+    let program = parse_program(source);
     run_with_io(&program, input, &[]).unwrap()
 }
 
 fn run_source_error(source: &str) -> crate::NativeError {
-    let tokens = lexer::lex(source).unwrap();
-    let program = parser::parse(&tokens).unwrap();
+    let program = parse_program(source);
     run_with_io(&program, "", &[]).unwrap_err()
 }
 
 fn emit_source(source: &str) -> Vec<u8> {
-    let tokens = lexer::lex(source).unwrap();
-    let program = parser::parse(&tokens).unwrap();
+    let program = parse_program(source);
     emit_object(&program).unwrap()
 }
 
@@ -157,6 +160,8 @@ fn native_runtime_error_includes_trace() {
     assert!(err.trace.len() >= 2);
     assert_eq!(err.trace[0].function, "boom");
     assert_eq!(err.trace[1].function, "main");
+    assert_eq!(err.trace[0].file, "<memory>");
+    assert!(err.trace[0].source.contains("rule boom"));
 }
 
 #[test]

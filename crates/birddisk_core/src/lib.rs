@@ -271,6 +271,33 @@ fn resolve_user_module_path(entry_path: &Path, module_path: &[String]) -> Option
     None
 }
 
+fn line_snippet(lines: &[&str], line: u32) -> String {
+    if line == 0 {
+        return String::new();
+    }
+    let idx = (line - 1) as usize;
+    lines
+        .get(idx)
+        .map(|value| value.trim_end().to_string())
+        .unwrap_or_default()
+}
+
+pub fn attach_sources(program: &mut ast::Program, file: &str, source: &str) {
+    let lines: Vec<&str> = source.lines().collect();
+    let apply = |func: &mut ast::Function| {
+        func.file = file.to_string();
+        func.source = line_snippet(&lines, func.span.start.line);
+    };
+    for func in &mut program.functions {
+        apply(func);
+    }
+    for book in &mut program.books {
+        for method in &mut book.methods {
+            apply(method);
+        }
+    }
+}
+
 enum ModuleKind {
     Stdlib,
     User,
@@ -388,6 +415,7 @@ impl<'a> ModuleLoader<'a> {
                 return;
             }
         };
+        attach_sources(&mut module_program, path_str.as_ref(), &source);
         self.load_imports(&module_program.imports);
         qualify_module_program(&mut module_program, module_path);
         self.functions.extend(module_program.functions);
@@ -507,6 +535,7 @@ pub fn parse_and_typecheck(path: &str) -> Result<ast::Program, Vec<Diagnostic>> 
             .map(|err| diagnostic_from_parse_error(path, err))
             .collect::<Vec<_>>()
     })?;
+    attach_sources(&mut program, path, &source);
     let entry_path = PathBuf::from(path);
     let entry_path = entry_path.canonicalize().unwrap_or(entry_path);
     let mut loader = ModuleLoader::new(path, &entry_path);

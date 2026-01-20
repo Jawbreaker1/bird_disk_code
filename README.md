@@ -58,7 +58,7 @@ See `docs/VSCODE.md`.
 
 More commands and flags live in `docs/CLI.md`.
 
-Examples
+Examples (start here)
 - `examples/minimal_main.bd` (smallest runnable program)
 - `examples/try_catch.bd` (error handling with try/catch/throw)
 - `examples/book_account.bd` (book with methods and constructor)
@@ -79,15 +79,18 @@ Note: this is the first fully LLM-generated Yahtzee game written in native BirdD
 and it exists to test whether an LLM can build a complete, multi-file program in a brand-new language.
 See `docs/CLI.md` for scripted run commands.
 
-Docs
+Docs (start here)
+- `docs/LLM.md` (LLM onboarding + safe workflow)
 - `docs/QUICKREF.md` (syntax + typing snapshot)
 - `docs/COOKBOOK.md` (runnable examples)
 - `docs/SPEC.md` (language spec)
 - `GRAMMAR.md` (full grammar)
+
+Docs (tooling + internals)
 - `docs/CLI.md` (CLI commands + runtime notes)
-- `docs/RUNTIME.md` (GC + runtime layout)
-- `docs/DIAGNOSTICS.md` (error codes)
+- `docs/DIAGNOSTICS.md` (error codes + JSON schema)
 - `docs/VSCODE.md` (editor extension)
+- `docs/RUNTIME.md` (GC + runtime layout)
 - `docs/PROJECT.md` (repo layout + development principles)
 - `docs/STATUS.md` (targets + status)
 - `docs/DECISIONS.md` (design decisions)

@@ -161,6 +161,8 @@ impl<'a> Parser<'a> {
             return_type,
             body,
             span,
+            file: String::new(),
+            source: String::new(),
         })
     }
 
@@ -292,6 +294,8 @@ impl<'a> Parser<'a> {
             return_type,
             body,
             span: Span::new(start.span.start, span_end),
+            file: String::new(),
+            source: String::new(),
         })
     }
 

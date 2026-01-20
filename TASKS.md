@@ -298,12 +298,12 @@ Acceptance:
 Implement:
 - [x] Decide error model (exceptions vs result types)
 - [x] Runtime error propagation (`try`/`catch` or `Result` helpers)
-- [ ] Stack trace frames enriched with source spans + code snippets
+- [x] Stack trace frames enriched with source spans + code snippets
 - [x] Standard error output format in JSON (match `docs/DIAGNOSTICS.md`)
 
 Add tests:
 - [x] VM + WASM parity tests for error propagation
-- [ ] Diagnostics tests for stack trace format stability
+- [x] Diagnostics tests for stack trace format stability
 
 Acceptance:
 - Runtime errors provide actionable traces and can be handled in user code
@@ -366,6 +366,7 @@ Implement:
 - [ ] Doc generator (`birddiskc doc` from source)
 - [ ] Reference manual (LLM-friendly semantics lookup)
 - [ ] `std::rand` (basic RNG with seed + uniform range)
+- [ ] Decide on mandatory testing model (separate test files, exemptions like `main`/`init`, minimal syntax + runner)
 - [ ] Profiler hooks (GC stats, runtime timers)
 - [ ] Enhanced test runner (parallel, filters, snapshots)
 

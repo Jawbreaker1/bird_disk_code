@@ -348,7 +348,7 @@ pub fn emit_wasm(program: &Program) -> Result<Vec<u8>, WasmError> {
 #[cfg(test)]
 mod tests {
     use crate::{emit_wasm, run, run_with_io, WasmError};
-    use birddisk_core::{lexer, parser};
+    use birddisk_core::{attach_sources, lexer, parser};
     use wasmtime::{Caller, Engine, Linker, Module, Store};
 
     #[derive(Default)]
@@ -358,7 +358,8 @@ mod tests {
 
     fn compile_and_run(source: &str) -> Result<i64, WasmError> {
         let tokens = lexer::lex(source).unwrap();
-        let program = parser::parse(&tokens).unwrap();
+        let mut program = parser::parse(&tokens).unwrap();
+        attach_sources(&mut program, "<memory>", source);
         run(&program)
     }
 
@@ -440,6 +441,8 @@ mod tests {
         assert!(err.trace.len() >= 2);
         assert_eq!(err.trace[0].function, "boom");
         assert_eq!(err.trace[1].function, "main");
+        assert_eq!(err.trace[0].file, "<memory>");
+        assert!(err.trace[0].source.contains("rule boom"));
     }
 
     #[test]

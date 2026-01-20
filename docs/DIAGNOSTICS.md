@@ -156,4 +156,6 @@ Trace format (runtime errors)
 - `trace` is an array of frames, most recent call first.
 - Each frame includes:
   - `function`: function or method name
+  - `file`: source file path for the function
   - `span`: line/col of the function declaration
+  - `source`: source line snippet for the function declaration

@@ -40,7 +40,9 @@ pub struct FixIt {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TraceFrame {
     pub function: String,
+    pub file: String,
     pub span: Span,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

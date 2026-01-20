@@ -215,7 +215,9 @@ impl<'a> Vm<'a> {
     fn push_trace(&mut self, function: &birddisk_core::ast::Function) {
         self.trace.push(TraceFrame {
             function: function.name.clone(),
+            file: function.file.clone(),
             span: function.span,
+            source: function.source.clone(),
         });
     }
 

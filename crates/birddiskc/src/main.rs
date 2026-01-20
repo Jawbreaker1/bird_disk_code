@@ -1513,6 +1513,8 @@ fn push_trace_json(out: &mut String, trace: &[birddisk_native_runtime::TraceFram
         }
         out.push_str("{\"function\":\"");
         out.push_str(&json_escape(&frame.function));
+        out.push_str("\",\"file\":\"");
+        out.push_str(&json_escape(&frame.file));
         out.push_str("\",\"span\":{\"start\":{\"line\":");
         out.push_str(&frame.span.start.line.to_string());
         out.push_str(",\"col\":");
@@ -1521,7 +1523,9 @@ fn push_trace_json(out: &mut String, trace: &[birddisk_native_runtime::TraceFram
         out.push_str(&frame.span.end.line.to_string());
         out.push_str(",\"col\":");
         out.push_str(&frame.span.end.col.to_string());
-        out.push_str("}}}");
+        out.push_str("}},\"source\":\"");
+        out.push_str(&json_escape(&frame.source));
+        out.push_str("\"}");
     }
     out.push_str("]");
 }
@@ -1618,8 +1622,13 @@ fn format_trace_literal(frames: &[birddisk_core::TraceFrame]) -> String {
             output.push_str(", ");
         }
         let function = format!("{:?}", frame.function);
+        let file = format!("{:?}", frame.file);
+        let source = format!("{:?}", frame.source);
         output.push_str("birddisk_native_runtime::TraceFrame { function: ");
         output.push_str(&function);
+        output.push_str(".to_string()");
+        output.push_str(", file: ");
+        output.push_str(&file);
         output.push_str(".to_string()");
         output.push_str(", span: birddisk_native_runtime::Span { start: birddisk_native_runtime::Position { line: ");
         output.push_str(&frame.span.start.line.to_string());
@@ -1629,7 +1638,10 @@ fn format_trace_literal(frames: &[birddisk_core::TraceFrame]) -> String {
         output.push_str(&frame.span.end.line.to_string());
         output.push_str(", col: ");
         output.push_str(&frame.span.end.col.to_string());
-        output.push_str(" } } }");
+        output.push_str(" } }");
+        output.push_str(", source: ");
+        output.push_str(&source);
+        output.push_str(".to_string() }");
     }
     output.push(']');
     output
@@ -2109,6 +2121,13 @@ mod tests {
         assert_eq!(parsed["diagnostics"][0]["code"], "E0403");
         assert_eq!(parsed["diagnostics"][0]["trace"][0]["function"], "boom");
         assert_eq!(parsed["diagnostics"][0]["trace"][1]["function"], "main");
+        assert_eq!(parsed["diagnostics"][0]["trace"][0]["file"], path_str);
+        assert!(
+            parsed["diagnostics"][0]["trace"][0]["source"]
+                .as_str()
+                .unwrap_or("")
+                .contains("rule boom")
+        );
 
         let _ = fs::remove_file(&path);
         let _ = fs::remove_file(&exe_path);
