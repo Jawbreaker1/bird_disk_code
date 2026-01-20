@@ -54,17 +54,17 @@ end
 ./bird_hello
 ```
 5) Optional: install the VSCode extension (syntax + LSP).
-See `docs/VSCODE.md`.
+See [docs/VSCODE.md](docs/VSCODE.md).
 
-More commands and flags live in `docs/CLI.md`.
+More commands and flags live in [docs/CLI.md](docs/CLI.md).
 
 Examples (start here)
-- `examples/minimal_main.bd` (smallest runnable program)
-- `examples/try_catch.bd` (error handling with try/catch/throw)
-- `examples/book_account.bd` (book with methods and constructor)
-- `examples/book_point.bd` (field access + method calls)
-- `examples/terminal_calculator.bd` (terminal IO + operator dispatch)
-- `examples/yahtzee/` (multi-file ASCII Yahtzee demo; VM/WASM/native)
+- [examples/minimal_main.bd](examples/minimal_main.bd) (smallest runnable program)
+- [examples/try_catch.bd](examples/try_catch.bd) (error handling with try/catch/throw)
+- [examples/book_account.bd](examples/book_account.bd) (book with methods and constructor)
+- [examples/book_point.bd](examples/book_point.bd) (field access + method calls)
+- [examples/terminal_calculator.bd](examples/terminal_calculator.bd) (terminal IO + operator dispatch)
+- [examples/yahtzee/](examples/yahtzee/) (multi-file ASCII Yahtzee demo; VM/WASM/native)
 
 Yahtzee demo (interactive):
 ```sh
@@ -77,26 +77,26 @@ Or build a native executable and run it:
 ```
 Note: this is the first fully LLM-generated Yahtzee game written in native BirdDisk,
 and it exists to test whether an LLM can build a complete, multi-file program in a brand-new language.
-See `docs/CLI.md` for scripted run commands.
+See [docs/CLI.md](docs/CLI.md) for scripted run commands.
 
 Docs (start here)
-- `docs/LLM.md` (LLM onboarding + safe workflow)
-- `docs/QUICKREF.md` (syntax + typing snapshot)
-- `docs/COOKBOOK.md` (runnable examples)
-- `docs/SPEC.md` (language spec)
-- `GRAMMAR.md` (full grammar)
+- [docs/LLM.md](docs/LLM.md) (LLM onboarding + safe workflow)
+- [docs/QUICKREF.md](docs/QUICKREF.md) (syntax + typing snapshot)
+- [docs/COOKBOOK.md](docs/COOKBOOK.md) (runnable examples)
+- [docs/SPEC.md](docs/SPEC.md) (language spec)
+- [GRAMMAR.md](GRAMMAR.md) (full grammar)
 
 Docs (tooling + internals)
-- `docs/CLI.md` (CLI commands + runtime notes)
-- `docs/DIAGNOSTICS.md` (error codes + JSON schema)
-- `docs/VSCODE.md` (editor extension)
-- `docs/RUNTIME.md` (GC + runtime layout)
-- `docs/PROJECT.md` (repo layout + development principles)
-- `docs/STATUS.md` (targets + status)
-- `docs/DECISIONS.md` (design decisions)
+- [docs/CLI.md](docs/CLI.md) (CLI commands + runtime notes)
+- [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) (error codes + JSON schema)
+- [docs/VSCODE.md](docs/VSCODE.md) (editor extension)
+- [docs/RUNTIME.md](docs/RUNTIME.md) (GC + runtime layout)
+- [docs/PROJECT.md](docs/PROJECT.md) (repo layout + development principles)
+- [docs/STATUS.md](docs/STATUS.md) (targets + status)
+- [docs/DECISIONS.md](docs/DECISIONS.md) (design decisions)
 
 Roadmap
-See `TASKS.md` and `AGENT.md`.
+See [TASKS.md](TASKS.md) and [AGENT.md](AGENT.md).
 
 Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.
 
