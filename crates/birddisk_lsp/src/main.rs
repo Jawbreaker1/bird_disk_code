@@ -1533,6 +1533,29 @@ fn collect_inlay_hints_in_stmt(
             loop_env.push();
             collect_inlay_hints_in_stmts(body, &mut loop_env, index, stdlib, range, hints);
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            collect_inlay_hints_in_expr(expr, env, index, stdlib, range, hints);
+            for case in cases {
+                let mut case_env = env.clone();
+                case_env.push();
+                collect_inlay_hints_in_stmts(
+                    &case.body,
+                    &mut case_env,
+                    index,
+                    stdlib,
+                    range,
+                    hints,
+                );
+            }
+            let mut else_env = env.clone();
+            else_env.push();
+            collect_inlay_hints_in_stmts(otherwise, &mut else_env, index, stdlib, range, hints);
+        }
     }
 }
 
@@ -1986,6 +2009,18 @@ fn find_call_in_stmt(stmt: &Stmt, pos: Position) -> Option<CallInfo> {
         Stmt::Repeat { cond, body, .. } => {
             find_call_in_expr(cond, pos).or_else(|| find_call_in_stmts(body, pos))
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => find_call_in_expr(expr, pos)
+            .or_else(|| {
+                cases
+                    .iter()
+                    .find_map(|case| find_call_in_stmts(&case.body, pos))
+            })
+            .or_else(|| find_call_in_stmts(otherwise, pos)),
     }
 }
 
@@ -2167,6 +2202,26 @@ fn update_env_from_stmt(
             loop_env.push();
             for stmt in body {
                 update_env_from_stmt(stmt, &mut loop_env, index, stdlib);
+            }
+        }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            infer_expr_type(expr, env, index, stdlib);
+            for case in cases {
+                let mut case_env = env.clone();
+                case_env.push();
+                for stmt in &case.body {
+                    update_env_from_stmt(stmt, &mut case_env, index, stdlib);
+                }
+            }
+            let mut else_env = env.clone();
+            else_env.push();
+            for stmt in otherwise {
+                update_env_from_stmt(stmt, &mut else_env, index, stdlib);
             }
         }
     }

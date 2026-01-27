@@ -63,6 +63,7 @@ Examples (start here)
 - [examples/try_catch.bd](examples/try_catch.bd) (error handling with try/catch/throw)
 - [examples/book_account.bd](examples/book_account.bd) (book with methods and constructor)
 - [examples/book_point.bd](examples/book_point.bd) (field access + method calls)
+- [examples/enum_result.bd](examples/enum_result.bd) (enum variants + match)
 - [examples/terminal_calculator.bd](examples/terminal_calculator.bd) (terminal IO + operator dispatch)
 - [examples/yahtzee/](examples/yahtzee/) (multi-file ASCII Yahtzee demo; VM/WASM/native)
 

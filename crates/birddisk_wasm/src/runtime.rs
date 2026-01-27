@@ -7,9 +7,9 @@ use crate::emit::{
     emit_wat, wasm_error, WasmError, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
     STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
     TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER,
-    TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_OBJECT, TRAP_KIND_STRING,
-    TRAP_NULL_DEREF, TRAP_PATH, TRAP_STRING_PARSE, TRAP_TIME_NEG, TRAP_TRACE_OOM,
-    TRAP_UTF8_INVALID,
+    TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_ENUM, TRAP_KIND_OBJECT,
+    TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_PATH, TRAP_STRING_PARSE, TRAP_TIME_NEG,
+    TRAP_TRACE_OOM, TRAP_UTF8_INVALID,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -857,6 +857,7 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
             TRAP_KIND_ARRAY => wasm_error("E0400", "Expected array handle."),
             TRAP_KIND_OBJECT => wasm_error("E0400", "Expected book handle."),
             TRAP_KIND_BYTES => wasm_error("E0400", "std::bytes expects u8 array."),
+            TRAP_KIND_ENUM => wasm_error("E0400", "Expected enum handle."),
             TRAP_HEAP_HEADER => wasm_error("E0400", "Invalid heap header."),
             TRAP_TIME_NEG => wasm_error("E0400", "Sleep duration must be >= 0."),
             TRAP_FS_IO => wasm_error("E0400", "std::fs operation failed."),

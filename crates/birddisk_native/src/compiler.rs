@@ -1,8 +1,8 @@
 use crate::analysis::{elem_kind_for_type, elem_size_for_kind};
 use crate::error::{native_error, NativeError};
-use crate::program::{type_name, BookLayout, FunctionSig, stdlib_signature};
+use crate::program::{type_name, BookLayout, EnumInfo, FunctionSig, stdlib_signature};
 use crate::rt::RuntimeFuncs;
-use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Stmt, Type, UnaryOp};
+use birddisk_core::ast::{BinaryOp, Expr, ExprKind, MatchCase, Stmt, Type, UnaryOp};
 use birddisk_core::runtime as abi;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{types, InstBuilder, Value};
@@ -28,6 +28,7 @@ pub(crate) struct NativeCompiler<'a, 'b, M: Module> {
     root_slots: HashMap<String, u32>,
     locals: HashMap<String, Type>,
     books: &'a HashMap<String, BookLayout>,
+    enums: &'a HashMap<String, EnumInfo>,
     functions: &'a HashMap<String, FunctionSig>,
     func_ids: &'a HashMap<String, FuncId>,
     vars: HashMap<String, VarInfo>,
@@ -47,6 +48,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         locals: HashMap<String, Type>,
         root_slots: HashMap<String, u32>,
         books: &'a HashMap<String, BookLayout>,
+        enums: &'a HashMap<String, EnumInfo>,
         functions: &'a HashMap<String, FunctionSig>,
         func_ids: &'a HashMap<String, FuncId>,
         string_data: &'a mut HashMap<String, DataId>,
@@ -64,6 +66,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             root_slots,
             locals,
             books,
+            enums,
             functions,
             func_ids,
             vars: HashMap::new(),
@@ -370,6 +373,12 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.builder.seal_block(exit_block);
                 Ok(false)
             }
+            Stmt::Match {
+                expr,
+                cases,
+                otherwise,
+                ..
+            } => self.emit_match(expr, cases, otherwise),
         }
     }
 
@@ -534,6 +543,120 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         Ok(self.builder.block_params(merge_block)[0])
     }
 
+    fn emit_match(
+        &mut self,
+        expr: &Expr,
+        cases: &[MatchCase],
+        otherwise: &[Stmt],
+    ) -> Result<bool, NativeError> {
+        let expr_ty = self
+            .infer_expr_type(expr)
+            .ok_or_else(|| native_error("match requires enum value."))?;
+        let enum_name = match &expr_ty {
+            Type::Book(name) if self.enums.contains_key(name) => name.clone(),
+            _ => return Err(native_error("match requires enum value.")),
+        };
+        let enum_info = self
+            .enums
+            .get(&enum_name)
+            .ok_or_else(|| native_error(format!("unknown enum '{enum_name}'.")))?;
+
+        for case in cases {
+            if case.enum_name != enum_name {
+                return Err(native_error(format!(
+                    "case enum '{}' does not match '{}'.",
+                    case.enum_name, enum_name
+                )));
+            }
+            let variant = enum_info.variants.get(&case.variant_name).ok_or_else(|| {
+                native_error(format!(
+                    "unknown enum variant '{}::{}'.",
+                    case.enum_name, case.variant_name
+                ))
+            })?;
+            if case.binding.is_some() && variant.payload.is_none() {
+                return Err(native_error(format!(
+                    "variant '{}::{}' has no payload.",
+                    case.enum_name, case.variant_name
+                )));
+            }
+        }
+
+        let value = self.emit_expr(expr, Some(&expr_ty))?;
+        let enum_id = self.builder.ins().iconst(types::I64, enum_info.id as i64);
+        let variant_val = self.call_runtime_value(
+            self.runtime.enum_variant,
+            &[self.rt_ptr, value, enum_id],
+        );
+
+        let merge_block = self.builder.create_block();
+        let otherwise_block = self.builder.create_block();
+        let mut needs_merge = false;
+
+        let mut current_check = self.builder.create_block();
+        self.builder.ins().jump(current_check, &[]);
+        self.builder.switch_to_block(current_check);
+
+        if cases.is_empty() {
+            self.builder.ins().jump(otherwise_block, &[]);
+            self.builder.seal_block(current_check);
+        } else {
+            for (idx, case) in cases.iter().enumerate() {
+                let variant = enum_info
+                    .variants
+                    .get(&case.variant_name)
+                    .expect("variant already checked");
+                let case_block = self.builder.create_block();
+                let next_check = if idx + 1 == cases.len() {
+                    otherwise_block
+                } else {
+                    self.builder.create_block()
+                };
+                let cond = self
+                    .builder
+                    .ins()
+                    .icmp_imm(IntCC::Equal, variant_val, variant.id as i64);
+                self.builder
+                    .ins()
+                    .brif(cond, case_block, &[], next_check, &[]);
+                self.builder.seal_block(current_check);
+
+                self.builder.switch_to_block(case_block);
+                if let (Some(binding), Some(payload_ty)) =
+                    (case.binding.as_ref(), variant.payload.as_ref())
+                {
+                    let payload_val = self.emit_enum_payload(payload_ty, value)?;
+                    self.bind_or_assign_local(binding, payload_ty.clone(), payload_val)?;
+                }
+                let case_returned = self.emit_block(&case.body)?;
+                if !case_returned {
+                    self.builder.ins().jump(merge_block, &[]);
+                    needs_merge = true;
+                }
+                self.builder.seal_block(case_block);
+
+                self.builder.switch_to_block(next_check);
+                current_check = next_check;
+            }
+        }
+
+        self.builder.switch_to_block(otherwise_block);
+        let otherwise_returned = self.emit_block(otherwise)?;
+        if !otherwise_returned {
+            self.builder.ins().jump(merge_block, &[]);
+            needs_merge = true;
+        }
+        self.builder.seal_block(otherwise_block);
+
+        if needs_merge {
+            self.builder.switch_to_block(merge_block);
+            self.builder.seal_block(merge_block);
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
     fn emit_string_literal(&mut self, value: &str) -> Result<Value, NativeError> {
         let data_id = self.string_data.get(value).cloned().map(Ok).unwrap_or_else(|| {
             let mut data_ctx = DataDescription::new();
@@ -613,6 +736,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             if let Some(Type::Book(book_name)) = self.lookup_local_type(base) {
                 return self.emit_method_call(base, &book_name, method, args, expected);
             }
+        }
+        if let Some(value) = self.emit_enum_constructor(name, args, expected)? {
+            return Ok(Some(value));
         }
         Err(native_error(format!("unknown function '{name}'.")))
     }
@@ -1117,6 +1243,86 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         Ok(handle)
     }
 
+    fn emit_enum_constructor(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        expected: Option<&Type>,
+    ) -> Result<Option<Value>, NativeError> {
+        let Some((enum_name, variant_name)) = name.split_once("::") else {
+            return Ok(None);
+        };
+        if enum_name == "std" || variant_name.contains("::") {
+            return Ok(None);
+        }
+        if self.functions.contains_key(name) {
+            return Ok(None);
+        }
+        if self.lookup_local_type(enum_name).is_some() {
+            return Ok(None);
+        }
+        let Some(enum_info) = self.enums.get(enum_name) else {
+            return Ok(None);
+        };
+        let variant = enum_info.variants.get(variant_name).ok_or_else(|| {
+            native_error(format!("unknown enum variant '{name}'."))
+        })?;
+        let expected_args = if variant.payload.is_some() { 1 } else { 0 };
+        if args.len() != expected_args {
+            return Err(native_error(format!(
+                "wrong number of arguments for '{name}': expected {}, got {}.",
+                expected_args,
+                args.len()
+            )));
+        }
+        if let Some(expected) = expected {
+            let enum_ty = Type::Book(enum_name.to_string());
+            if &enum_ty != expected {
+                return Err(native_error(format!(
+                    "type mismatch: expected {}, got {}.",
+                    type_name(expected),
+                    type_name(&enum_ty)
+                )));
+            }
+        }
+
+        let payload_ty = variant.payload.as_ref();
+        let payload_val = if let Some(payload_ty) = payload_ty {
+            let Some(arg) = args.first() else {
+                return Err(native_error("missing enum payload value."));
+            };
+            Some(self.emit_expr(arg, Some(payload_ty))?)
+        } else {
+            None
+        };
+
+        let enum_id = self.builder.ins().iconst(types::I64, enum_info.id as i64);
+        let variant_id = self.builder.ins().iconst(types::I64, variant.id as i64);
+        let (kind_val, len_val) = if let Some(payload_ty) = payload_ty {
+            let kind = elem_kind_for_type(payload_ty)?;
+            (
+                self.builder.ins().iconst(types::I64, kind as i64),
+                self.builder
+                    .ins()
+                    .iconst(types::I64, abi::OBJECT_FIELD_SIZE as i64),
+            )
+        } else {
+            (
+                self.builder.ins().iconst(types::I64, 0),
+                self.builder.ins().iconst(types::I64, 0),
+            )
+        };
+        let handle = self.call_runtime_value(
+            self.runtime.alloc_enum,
+            &[self.rt_ptr, enum_id, variant_id, kind_val, len_val],
+        );
+
+        if let (Some(payload_ty), Some(payload_val)) = (payload_ty, payload_val) {
+            self.emit_enum_set_payload(payload_ty, handle, payload_val)?;
+        }
+        Ok(Some(handle))
+    }
+
     fn emit_member_access(&mut self, base: &str, field: &str) -> Result<Value, NativeError> {
         let base_info = self
             .vars
@@ -1142,6 +1348,57 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         let handle = self.builder.use_var(base_info.var);
         let index_val = self.builder.ins().iconst(types::I64, index as i64);
         self.emit_object_get(field_ty, handle, index_val)
+    }
+
+    fn emit_enum_payload(&mut self, payload_ty: &Type, handle: Value) -> Result<Value, NativeError> {
+        let value = match payload_ty {
+            Type::I64 => self.call_runtime_value(
+                self.runtime.enum_payload_i64,
+                &[self.rt_ptr, handle],
+            ),
+            Type::Bool => self.call_runtime_value(
+                self.runtime.enum_payload_bool,
+                &[self.rt_ptr, handle],
+            ),
+            Type::U8 => self.call_runtime_value(
+                self.runtime.enum_payload_u8,
+                &[self.rt_ptr, handle],
+            ),
+            Type::String | Type::Array(_) | Type::Book(_) => self.call_runtime_value(
+                self.runtime.enum_payload_ref,
+                &[self.rt_ptr, handle],
+            ),
+            Type::Void => return Err(native_error("enum payload cannot be void.")),
+        };
+        Ok(value)
+    }
+
+    fn emit_enum_set_payload(
+        &mut self,
+        payload_ty: &Type,
+        handle: Value,
+        value: Value,
+    ) -> Result<(), NativeError> {
+        match payload_ty {
+            Type::I64 => self.call_runtime_void(
+                self.runtime.enum_set_payload_i64,
+                &[self.rt_ptr, handle, value],
+            ),
+            Type::Bool => self.call_runtime_void(
+                self.runtime.enum_set_payload_bool,
+                &[self.rt_ptr, handle, value],
+            ),
+            Type::U8 => self.call_runtime_void(
+                self.runtime.enum_set_payload_u8,
+                &[self.rt_ptr, handle, value],
+            ),
+            Type::String | Type::Array(_) | Type::Book(_) => self.call_runtime_void(
+                self.runtime.enum_set_payload_ref,
+                &[self.rt_ptr, handle, value],
+            ),
+            Type::Void => return Err(native_error("enum payload cannot be void.")),
+        }
+        Ok(())
     }
 
     fn emit_object_get(
@@ -1337,6 +1594,19 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .or_else(|| self.functions.get(name).map(|sig| sig.return_type.clone()))
                 {
                     return Some(return_type);
+                }
+                if let Some((enum_name, variant_name)) = name.split_once("::") {
+                    if enum_name != "std"
+                        && !variant_name.contains("::")
+                        && self.lookup_local_type(enum_name).is_none()
+                    {
+                        if let Some(enum_info) = self.enums.get(enum_name) {
+                            if enum_info.variants.contains_key(variant_name) {
+                                return Some(Type::Book(enum_name.to_string()));
+                            }
+                            return None;
+                        }
+                    }
                 }
                 if let Some((base, method)) = name.split_once("::") {
                     if base != "std" {

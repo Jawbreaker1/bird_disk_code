@@ -1,0 +1,18 @@
+import std::string.
+
+enum Status:
+  case Ok(msg: string).
+  case Fail.
+end
+
+rule main() -> i64:
+  set value: Status = Status::Ok("hi").
+  match value:
+    case Status::Ok(text):
+      yield std::string::len(text).
+    case Status::Fail:
+      yield 0.
+    otherwise:
+      yield 0.
+  end
+end

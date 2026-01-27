@@ -3,6 +3,7 @@ use crate::diagnostics::Span;
 #[derive(Debug, Clone)]
 pub struct Program {
     pub imports: Vec<Import>,
+    pub enums: Vec<EnumDecl>,
     pub books: Vec<Book>,
     pub functions: Vec<Function>,
 }
@@ -10,6 +11,27 @@ pub struct Program {
 #[derive(Debug, Clone)]
 pub struct Import {
     pub path: Vec<String>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumDecl {
+    pub name: String,
+    pub variants: Vec<EnumVariant>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumVariant {
+    pub name: String,
+    pub payload: Option<EnumPayload>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumPayload {
+    pub name: String,
+    pub ty: Type,
     pub span: Span,
 }
 
@@ -111,6 +133,21 @@ pub enum Stmt {
         span: Span,
         body: Vec<Stmt>,
     },
+    Match {
+        expr: Expr,
+        cases: Vec<MatchCase>,
+        otherwise: Vec<Stmt>,
+        span: Span,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchCase {
+    pub enum_name: String,
+    pub variant_name: String,
+    pub binding: Option<String>,
+    pub body: Vec<Stmt>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

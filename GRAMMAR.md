@@ -1,12 +1,14 @@
 (* BirdDisk v0.1 EBNF *)
 (* Runtime errors (e.g., division by zero) are specified in SPEC.md. *)
 
-program       = { import } { book | function } ;
+program       = { import } { enum | book | function } ;
 
 import        = "import" module_path "." ;
 module_path   = ident { "::" ident } ;
 
 function      = "rule" ident "(" [ params ] ")" "->" type ":" { stmt } "end" ;
+enum          = "enum" ident ":" { enum_case } "end" ;
+enum_case     = "case" ident [ "(" ident ":" type ")" ] "." ;
 book          = "book" ident ":" { field | function } "end" ;
 field         = "field" ident ":" type "." ;
 
@@ -23,6 +25,7 @@ stmt          = set_stmt
               | throw_stmt
               | try_stmt
               | when_stmt
+              | match_stmt
               | repeat_stmt
               ;
 
@@ -37,6 +40,10 @@ when_stmt     = "when" expr ":" { stmt } "otherwise" ":" { stmt } "end" ;
 repeat_stmt   = "repeat" "while" expr ":" { stmt } "end" ;
 
 try_stmt      = "try" ":" { stmt } "catch" ident ":" { stmt } "end" ;
+
+match_stmt    = "match" expr ":" { match_case } "otherwise" ":" { stmt } "end" ;
+match_case    = "case" enum_variant [ "(" ident ")" ] ":" { stmt } ;
+enum_variant  = ident "::" ident ;
 
 expr          = logic_or ;
 

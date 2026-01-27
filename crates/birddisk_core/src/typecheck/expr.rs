@@ -275,6 +275,20 @@ impl<'a> Checker<'a> {
             return Ty::Unknown;
         };
         let Ty::Book(book_name) = base_ty else {
+            if let Ty::Enum(enum_name) = base_ty {
+                self.diagnostics.push(diagnostic(
+                    "E0300",
+                    "error",
+                    format!("Enums do not have fields ('{enum_name}')."),
+                    self.file,
+                    span,
+                    vec!["Access enum data via match.".to_string()],
+                    vec!["SPEC.md#5-8-match-match-case-otherwise-end".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+                return Ty::Unknown;
+            }
             self.diagnostics.push(diagnostic(
                 "E0300",
                 "error",
@@ -320,6 +334,20 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_new(&mut self, span: Span, book: &str, args: &[Expr]) -> Ty {
+        if self.enums.contains_key(book) {
+            self.diagnostics.push(diagnostic(
+                "E0300",
+                "error",
+                format!("Cannot construct enum '{book}' with new."),
+                self.file,
+                span,
+                vec!["Use `Enum::Variant(...)` constructors.".to_string()],
+                vec!["SPEC.md#2-1-enums".to_string()],
+                Vec::new(),
+                None,
+            ));
+            return Ty::Unknown;
+        }
         let Some(book_info) = self.books.get(book) else {
             let suggestion = self.suggest_book(book);
             let notes = notes_with_suggestion(
@@ -416,6 +444,15 @@ impl<'a> Checker<'a> {
 
     pub(super) fn check_call(&mut self, span: Span, name: &str, args: &[Expr]) -> Ty {
         if !self.functions.contains_key(name) {
+            if let Some((enum_name, variant_name)) = name.split_once("::") {
+                if !variant_name.contains("::")
+                    && self.enums.contains_key(enum_name)
+                    && self.lookup(enum_name).is_none()
+                {
+                    return self.check_enum_constructor(span, enum_name, variant_name, args);
+                }
+            }
+
             if let Some((base, method)) = name.split_once("::") {
                 if base != "std" {
                     if let Some(Ty::Book(book_name)) = self.lookup(base) {
@@ -551,6 +588,81 @@ impl<'a> Checker<'a> {
         }
 
         sig.return_type
+    }
+
+    fn check_enum_constructor(
+        &mut self,
+        span: Span,
+        enum_name: &str,
+        variant_name: &str,
+        args: &[Expr],
+    ) -> Ty {
+        let payload = match self
+            .enums
+            .get(enum_name)
+            .and_then(|info| info.variants.get(variant_name))
+        {
+            Some(variant) => variant.payload.clone(),
+            None => {
+                if !self.enums.contains_key(enum_name) {
+                    return Ty::Unknown;
+                }
+            self.diagnostics.push(diagnostic(
+                "E0314",
+                "error",
+                format!("Unknown enum variant '{enum_name}::{variant_name}'."),
+                self.file,
+                span,
+                vec!["Check the variant name.".to_string()],
+                vec!["SPEC.md#2-1-enums".to_string()],
+                Vec::new(),
+                None,
+            ));
+            return Ty::Unknown;
+            }
+        };
+
+        let expected_args = if payload.is_some() { 1 } else { 0 };
+        if args.len() != expected_args {
+            self.diagnostics.push(diagnostic(
+                "E0302",
+                "error",
+                format!(
+                    "Wrong number of arguments: expected {}, got {}.",
+                    expected_args,
+                    args.len()
+                ),
+                self.file,
+                span,
+                vec!["Argument count must match the variant payload.".to_string()],
+                vec!["SPEC.md#2-1-enums".to_string()],
+                Vec::new(),
+                None,
+            ));
+            return Ty::Enum(enum_name.to_string());
+        }
+
+        if let (Some(expected), Some(arg)) = (&payload, args.first()) {
+            let actual = match (&arg.kind, expected) {
+                (ExprKind::Int(value), Ty::U8) => {
+                    self.check_int_literal_expected(*value, arg.span, expected)
+                }
+                (ExprKind::ArrayLit(elements), Ty::Array(_)) => {
+                    self.check_array_literal_expected(elements, arg.span, expected)
+                }
+                _ => self.check_expr(arg),
+            };
+            if actual != Ty::Unknown && expected != &actual {
+                self.diagnostics.push(type_mismatch(
+                    self.file,
+                    arg.span,
+                    expected.clone(),
+                    actual,
+                ));
+            }
+        }
+
+        Ty::Enum(enum_name.to_string())
     }
 
     pub(super) fn check_binary(&mut self, _span: Span, op: BinaryOp, left: &Expr, right: &Expr) -> Ty {

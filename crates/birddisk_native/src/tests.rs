@@ -144,6 +144,20 @@ fn native_runs_books_and_methods() {
 }
 
 #[test]
+fn native_runs_enum_match() {
+    let source = "enum Choice:\n  case One.\n  case Two(value: i64).\nend\n\nrule main() -> i64:\n  set value: Choice = Choice::Two(9).\n  match value:\n    case Choice::One:\n      yield 1.\n    case Choice::Two(v):\n      yield v + 1.\n    otherwise:\n      yield 0.\n  end\nend\n";
+    let result = run_source(source);
+    assert_eq!(result, 10);
+}
+
+#[test]
+fn native_runs_enum_match_payload_string() {
+    let source = "import std::string.\nenum Status:\n  case Ok(msg: string).\n  case Fail.\nend\n\nrule main() -> i64:\n  set value: Status = Status::Ok(\"hi\").\n  match value:\n    case Status::Ok(text):\n      yield std::string::len(text).\n    case Status::Fail:\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n";
+    let result = run_source(source);
+    assert_eq!(result, 2);
+}
+
+#[test]
 fn native_reports_array_oob() {
     let err = run_source_error(
         "rule main() -> i64:\n  set xs: i64[] = [1].\n  yield xs[2].\nend\n",

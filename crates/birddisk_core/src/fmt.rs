@@ -1,5 +1,6 @@
 use crate::ast::{
-    BinaryOp, Book, Expr, ExprKind, Field, Function, Program, Stmt, Type, UnaryOp,
+    BinaryOp, Book, EnumDecl, Expr, ExprKind, Field, Function, MatchCase, Program, Stmt, Type,
+    UnaryOp,
 };
 use crate::{lexer, parser};
 use std::fs;
@@ -50,8 +51,18 @@ fn format_program(program: &Program) -> String {
         let path = import.path.join("::");
         fmt.push_line(&format!("import {path}."));
     }
-    if !program.imports.is_empty() && (!program.books.is_empty() || !program.functions.is_empty())
+    if !program.imports.is_empty()
+        && (!program.enums.is_empty() || !program.books.is_empty() || !program.functions.is_empty())
     {
+        fmt.push_line("");
+    }
+    for (idx, enum_decl) in program.enums.iter().enumerate() {
+        if idx > 0 {
+            fmt.push_line("");
+        }
+        fmt.format_enum(enum_decl);
+    }
+    if !program.enums.is_empty() && (!program.books.is_empty() || !program.functions.is_empty()) {
         fmt.push_line("");
     }
     for (idx, book) in program.books.iter().enumerate() {
@@ -63,12 +74,12 @@ fn format_program(program: &Program) -> String {
     if !program.books.is_empty() && !program.functions.is_empty() {
         fmt.push_line("");
     }
-    for (idx, func) in program.functions.iter().enumerate() {
-        if idx > 0 {
-            fmt.push_line("");
+        for (idx, func) in program.functions.iter().enumerate() {
+            if idx > 0 {
+                fmt.push_line("");
+            }
+            fmt.format_function(func);
         }
-        fmt.format_function(func);
-    }
     fmt.finish()
 }
 
@@ -138,6 +149,29 @@ impl Formatter {
         }
         self.indent -= 1;
         self.push_line("end");
+    }
+
+    fn format_enum(&mut self, enum_decl: &EnumDecl) {
+        self.push_line(&format!("enum {}:", enum_decl.name));
+        self.indent += 1;
+        for variant in &enum_decl.variants {
+            self.format_enum_variant(variant);
+        }
+        self.indent -= 1;
+        self.push_line("end");
+    }
+
+    fn format_enum_variant(&mut self, variant: &crate::ast::EnumVariant) {
+        let mut line = format!("case {}", variant.name);
+        if let Some(payload) = &variant.payload {
+            line.push('(');
+            line.push_str(&payload.name);
+            line.push_str(": ");
+            line.push_str(&format_type(&payload.ty));
+            line.push(')');
+        }
+        line.push('.');
+        self.push_line(&line);
     }
 
     fn format_field(&mut self, field: &Field) {
@@ -242,7 +276,43 @@ impl Formatter {
                 self.indent -= 1;
                 self.push_line("end");
             }
+            Stmt::Match {
+                expr,
+                cases,
+                otherwise,
+                ..
+            } => {
+                self.push_line(&format!("match {}:", format_expr(expr, 0)));
+                self.indent += 1;
+                for case in cases {
+                    self.format_match_case(case);
+                }
+                self.push_line("otherwise:");
+                self.indent += 1;
+                for stmt in otherwise {
+                    self.format_stmt(stmt);
+                }
+                self.indent -= 1;
+                self.indent -= 1;
+                self.push_line("end");
+            }
         }
+    }
+
+    fn format_match_case(&mut self, case: &MatchCase) {
+        let mut line = format!("case {}::{}", case.enum_name, case.variant_name);
+        if let Some(binding) = &case.binding {
+            line.push('(');
+            line.push_str(binding);
+            line.push(')');
+        }
+        line.push(':');
+        self.push_line(&line);
+        self.indent += 1;
+        for stmt in &case.body {
+            self.format_stmt(stmt);
+        }
+        self.indent -= 1;
     }
 }
 

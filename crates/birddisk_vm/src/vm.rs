@@ -38,6 +38,7 @@ pub fn eval_with_io_streaming(
 pub(crate) struct Vm<'a> {
     functions: HashMap<String, &'a birddisk_core::ast::Function>,
     books: HashMap<String, BookInfo>,
+    enums: HashMap<String, EnumInfo>,
     scopes: Vec<Scope>,
     args: Vec<String>,
     input: VecDeque<String>,
@@ -56,6 +57,18 @@ pub(crate) struct BookInfo {
     id: u32,
     field_types: Vec<Type>,
     field_index: HashMap<String, usize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EnumInfo {
+    id: u32,
+    variants: HashMap<String, EnumVariantInfo>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EnumVariantInfo {
+    id: u32,
+    payload: Option<Type>,
 }
 
 #[derive(Debug)]
@@ -122,9 +135,28 @@ impl<'a> Vm<'a> {
             );
             ref_fields.push(book_ref_fields);
         }
+        let mut enums = HashMap::new();
+        for (enum_id, enum_decl) in program.enums.iter().enumerate() {
+            let mut variants = HashMap::new();
+            for (variant_id, variant) in enum_decl.variants.iter().enumerate() {
+                let info = EnumVariantInfo {
+                    id: variant_id as u32,
+                    payload: variant.payload.as_ref().map(|payload| payload.ty.clone()),
+                };
+                variants.insert(variant.name.clone(), info);
+            }
+            enums.insert(
+                enum_decl.name.clone(),
+                EnumInfo {
+                    id: enum_id as u32,
+                    variants,
+                },
+            );
+        }
         Self {
             functions,
             books,
+            enums,
             scopes: Vec::new(),
             args: args.to_vec(),
             input: split_lines(input),
@@ -156,7 +188,8 @@ impl<'a> Vm<'a> {
             | Value::U8(_)
             | Value::Void
             | Value::Array { .. }
-            | Value::Object { .. } => Err(runtime_error("E0400", "main must return i64")),
+            | Value::Object { .. }
+            | Value::Enum { .. } => Err(runtime_error("E0400", "main must return i64")),
         }
     }
 
@@ -450,10 +483,12 @@ impl<'a> Vm<'a> {
                     match cond_value {
                         Value::Bool(true) => {
                             self.push_scope();
-                            let result = self.eval_block(body)?;
+                            let result = self.eval_block(body);
                             self.pop_scope();
-                            if result.is_some() {
-                                return Ok(result);
+                            match result {
+                                Ok(Some(value)) => return Ok(Some(value)),
+                                Ok(None) => {}
+                                Err(err) => return Err(err),
                             }
                         }
                         Value::Bool(false) => break,
@@ -461,6 +496,55 @@ impl<'a> Vm<'a> {
                     }
                 }
                 Ok(None)
+            }
+            Stmt::Match {
+                expr,
+                cases,
+                otherwise,
+                ..
+            } => {
+                let value = self.eval_expr(expr)?;
+                let Value::Enum { handle, name } = value else {
+                    return Err(runtime_error("E0400", "match requires enum value"));
+                };
+                let enum_info = self
+                    .enums
+                    .get(&name)
+                    .cloned()
+                    .ok_or_else(|| runtime_error("E0400", "Unknown enum at runtime"))?;
+                let header = self.heap.header(handle);
+                if header.kind() != HeapKind::Enum {
+                    return Err(runtime_error("E0400", "Expected enum value"));
+                }
+                if header.type_id() != enum_info.id {
+                    return Err(runtime_error("E0400", "Enum type mismatch at runtime"));
+                }
+                let variant_id = header.len_or_size;
+                for case in cases {
+                    if case.enum_name != name {
+                        continue;
+                    }
+                    let Some(variant) = enum_info.variants.get(&case.variant_name) else {
+                        continue;
+                    };
+                    if variant.id != variant_id {
+                        continue;
+                    }
+                    self.push_scope();
+                    if let (Some(binding), Some(payload_ty)) =
+                        (&case.binding, variant.payload.as_ref())
+                    {
+                        let payload = self.read_enum_payload(handle, payload_ty)?;
+                        self.bind_local(binding.clone(), payload);
+                    }
+                    let result = self.eval_block(&case.body);
+                    self.pop_scope();
+                    return result;
+                }
+                self.push_scope();
+                let result = self.eval_block(otherwise);
+                self.pop_scope();
+                result
             }
         }
     }
@@ -475,17 +559,29 @@ impl<'a> Vm<'a> {
             }),
             ExprKind::Call { name, args } => {
                 let (values, arg_count) = self.eval_args_with_roots(args)?;
-                let result = if let Some(value) = self.eval_builtin_call(name, &values)? {
-                    Ok(value)
-                } else if let Some(function) = self.functions.get(name).copied() {
-                    self.eval_function(function, &values)
-                } else if let Some((base, method)) = name.split_once("::") {
-                    if base == "std" {
-                        Err(runtime_error(
-                            "E0400",
-                            format!("Unknown function '{name}' at runtime."),
-                        ))
-                    } else if let Some(base_value) = self.lookup(base).cloned() {
+                let result = (|| -> Result<Value, RuntimeError> {
+                    if let Some(value) = self.eval_enum_constructor(name, &values)? {
+                        return Ok(value);
+                    }
+                    if let Some(value) = self.eval_builtin_call(name, &values)? {
+                        return Ok(value);
+                    }
+                    if let Some(function) = self.functions.get(name).copied() {
+                        return self.eval_function(function, &values);
+                    }
+                    if let Some((base, method)) = name.split_once("::") {
+                        if base == "std" {
+                            return Err(runtime_error(
+                                "E0400",
+                                format!("Unknown function '{name}' at runtime."),
+                            ));
+                        }
+                        let Some(base_value) = self.lookup(base).cloned() else {
+                            return Err(runtime_error(
+                                "E0400",
+                                format!("Unknown function '{name}' at runtime."),
+                            ));
+                        };
                         if let Value::Object { ref book, .. } = base_value {
                             let full_name = format!("{book}::{method}");
                             let function = *self.functions.get(&full_name).ok_or_else(|| {
@@ -497,25 +593,18 @@ impl<'a> Vm<'a> {
                             let mut call_values = Vec::with_capacity(values.len() + 1);
                             call_values.push(base_value);
                             call_values.extend(values.iter().cloned());
-                            self.eval_function(function, &call_values)
-                        } else {
-                            Err(runtime_error(
-                                "E0400",
-                                format!("Unknown function '{name}' at runtime."),
-                            ))
+                            return self.eval_function(function, &call_values);
                         }
-                    } else {
-                        Err(runtime_error(
+                        return Err(runtime_error(
                             "E0400",
                             format!("Unknown function '{name}' at runtime."),
-                        ))
+                        ));
                     }
-                } else {
                     let function = *self.functions.get(name).ok_or_else(|| {
                         runtime_error("E0400", format!("Unknown function '{name}' at runtime."))
                     })?;
                     self.eval_function(function, &values)
-                };
+                })();
                 if arg_count > 0 {
                     self.roots.pop_frame(arg_count);
                 }
@@ -609,6 +698,138 @@ impl<'a> Vm<'a> {
             self.update_root_slot(base + index, &value);
         }
         Ok((values, args.len()))
+    }
+
+    fn eval_enum_constructor(
+        &mut self,
+        name: &str,
+        args: &[Value],
+    ) -> Result<Option<Value>, RuntimeError> {
+        let Some((enum_name, variant_name)) = name.split_once("::") else {
+            return Ok(None);
+        };
+        if self.functions.contains_key(name) {
+            return Ok(None);
+        }
+        if variant_name.contains("::") {
+            return Ok(None);
+        }
+        if self.lookup(enum_name).is_some() {
+            return Ok(None);
+        }
+        let Some(enum_info) = self.enums.get(enum_name) else {
+            return Ok(None);
+        };
+        let Some(variant) = enum_info.variants.get(variant_name) else {
+            return Err(runtime_error(
+                "E0400",
+                format!("Unknown enum variant '{name}' at runtime."),
+            ));
+        };
+
+        let expected_args = if variant.payload.is_some() { 1 } else { 0 };
+        if args.len() != expected_args {
+            return Err(runtime_error(
+                "E0400",
+                format!(
+                    "Wrong number of arguments for '{name}': expected {}, got {}.",
+                    expected_args,
+                    args.len()
+                ),
+            ));
+        }
+
+        let (payload_kind, payload_len, payload_bytes) = if let Some(payload_ty) = &variant.payload
+        {
+            let Some(arg) = args.first() else {
+                return Err(runtime_error("E0400", "Missing enum payload value."));
+            };
+            let value = coerce_value(arg.clone(), payload_ty)?;
+            let kind = elem_kind_for_type(payload_ty)?;
+            let bytes = self.encode_enum_payload(&value, payload_ty)?;
+            (kind as u32, 8usize, bytes)
+        } else {
+            (0u32, 0usize, Vec::new())
+        };
+
+        let handle = self.heap.alloc_enum(
+            enum_info.id,
+            variant.id,
+            payload_kind,
+            payload_len,
+        );
+        if !payload_bytes.is_empty() {
+            let payload = self.heap.payload_mut(handle);
+            payload[..payload_bytes.len()].copy_from_slice(&payload_bytes);
+        }
+        Ok(Some(Value::Enum {
+            handle,
+            name: enum_name.to_string(),
+        }))
+    }
+
+    fn encode_enum_payload(
+        &self,
+        value: &Value,
+        ty: &Type,
+    ) -> Result<Vec<u8>, RuntimeError> {
+        match (ty, value) {
+            (Type::I64, Value::I64(value)) => Ok(value.to_le_bytes().to_vec()),
+            (Type::Bool, Value::Bool(value)) => Ok(vec![*value as u8]),
+            (Type::U8, Value::U8(value)) => Ok(vec![*value]),
+            (Type::String, Value::String(handle)) => {
+                Ok((handle.as_u32() as u64).to_le_bytes().to_vec())
+            }
+            (Type::Array(_), Value::Array { handle, .. }) => {
+                Ok((handle.as_u32() as u64).to_le_bytes().to_vec())
+            }
+            (Type::Book(name), Value::Object { handle, book }) => {
+                if name != book {
+                    return Err(runtime_error("E0400", "Enum payload type mismatch."));
+                }
+                Ok((handle.as_u32() as u64).to_le_bytes().to_vec())
+            }
+            (Type::Book(name), Value::Enum { handle, name: enum_name }) => {
+                if name != enum_name {
+                    return Err(runtime_error("E0400", "Enum payload type mismatch."));
+                }
+                Ok((handle.as_u32() as u64).to_le_bytes().to_vec())
+            }
+            _ => Err(runtime_error("E0400", "Enum payload type mismatch.")),
+        }
+    }
+
+    fn read_enum_payload(&self, handle: HeapHandle, ty: &Type) -> Result<Value, RuntimeError> {
+        let payload = self.heap.payload(handle);
+        match ty {
+            Type::I64 => {
+                let bytes = payload
+                    .get(0..8)
+                    .ok_or_else(|| runtime_error("E0400", "Enum payload missing."))?;
+                Ok(Value::I64(i64::from_le_bytes(
+                    bytes.try_into().unwrap(),
+                )))
+            }
+            Type::Bool => {
+                let byte = *payload.get(0).unwrap_or(&0);
+                Ok(Value::Bool(byte != 0))
+            }
+            Type::U8 => {
+                let byte = *payload.get(0).unwrap_or(&0);
+                Ok(Value::U8(byte))
+            }
+            Type::String | Type::Array(_) | Type::Book(_) => {
+                let bytes = payload
+                    .get(0..8)
+                    .ok_or_else(|| runtime_error("E0400", "Enum payload missing."))?;
+                let raw = u64::from_le_bytes(bytes.try_into().unwrap());
+                self.value_from_handle(HeapHandle::from_u32(raw as u32), ty)
+            }
+            Type::Void => Err(runtime_error(
+                "E0400",
+                "Enum payload cannot be void.",
+            )),
+        }
     }
 
     fn eval_array_literal(
@@ -1159,7 +1380,9 @@ impl<'a> Vm<'a> {
                 })?;
                 target.copy_from_slice(&(handle.as_u32() as u64).to_le_bytes());
             }
-            Value::Array { handle, .. } | Value::Object { handle, .. } => {
+            Value::Array { handle, .. }
+            | Value::Object { handle, .. }
+            | Value::Enum { handle, .. } => {
                 let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
                     runtime_error("E0400", "Object payload out of bounds.")
                 })?;
@@ -1179,10 +1402,23 @@ impl<'a> Vm<'a> {
                 handle,
                 elem_type: (*inner.clone()),
             }),
-            Type::Book(book) => Ok(Value::Object {
-                handle,
-                book: book.clone(),
-            }),
+            Type::Book(book) => {
+                if self.enums.contains_key(book) {
+                    let header = self.heap.header(handle);
+                    if header.kind() != HeapKind::Enum {
+                        return Err(runtime_error("E0400", "Expected enum value."));
+                    }
+                    Ok(Value::Enum {
+                        handle,
+                        name: book.clone(),
+                    })
+                } else {
+                    Ok(Value::Object {
+                        handle,
+                        book: book.clone(),
+                    })
+                }
+            }
             _ => Err(runtime_error("E0400", "Expected reference type.")),
         }
     }

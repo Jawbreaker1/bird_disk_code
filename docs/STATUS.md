@@ -26,13 +26,14 @@
 - std::env (VM + WASM + native)
 - std::json (VM + WASM + native)
 - stdlib module loading + std::math (BirdDisk)
+- Project manifest + build workflow (`birddisk.json`, `birddiskc build`)
 - OO core (book + fields + methods, VM + WASM + native)
+- Enums + match (VM + WASM + native implemented)
 - VSCode extension: LSP hover, go-to def/type, references (imports + open docs), signature help (rules + constructors + stdlib), document/workspace symbols, type-aware member + module completions
 
 ## Upcoming (planned)
 - VSCode extension maintenance (syntax/LSP updates)
 - GC improvements (free-list coalescing + reuse)
-- Multi-file project manifests + build workflow
 - Native backend expansion (more targets + AOT polish)
 
 ## Longer-term

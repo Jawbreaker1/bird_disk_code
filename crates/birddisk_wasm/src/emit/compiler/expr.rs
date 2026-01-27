@@ -2,8 +2,8 @@ use super::FuncCompiler;
 use super::super::types::array_elem_size;
 use super::super::{
     wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY,
-    HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, OBJECT_FIELD_SIZE,
-    OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_KIND_OBJECT,
+    HEAP_KIND_ENUM, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
+    HEAP_HEADER_SIZE, OBJECT_FIELD_SIZE, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_KIND_OBJECT,
 };
 use super::super::types::array_elem_kind;
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Type, UnaryOp};
@@ -66,6 +66,9 @@ impl<'a> FuncCompiler<'a> {
                     return Ok(());
                 }
                 if self.emit_path_call(name, args)? {
+                    return Ok(());
+                }
+                if self.emit_enum_constructor(name, args)? {
                     return Ok(());
                 }
                 if let Some(sig) = self.functions.get(name) {
@@ -164,6 +167,11 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line(format!("local.get {ptr_local}"));
                 self.push_line("i32.const 0");
                 self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+                for (index, _field_ty) in layout.fields.iter().enumerate() {
+                    self.emit_field_address(ptr_local, index);
+                    self.push_line("i64.const 0");
+                    self.push_line("i64.store");
+                }
                 for (index, field_ty) in layout.fields.iter().enumerate() {
                     self.emit_field_address(ptr_local, index);
                     self.emit_default_value(field_ty)?;
@@ -327,6 +335,13 @@ impl<'a> FuncCompiler<'a> {
         self.push_line(format!("local.get {ptr_local}"));
         self.push_line(format!("i32.const {}", array_elem_kind(&elem_ty)));
         self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+        if super::is_ref_type(&elem_ty) {
+            for idx in 0..elements.len() {
+                self.emit_array_address_const(ptr_local, idx as i64, elem_size);
+                self.push_line("i32.const 0");
+                self.emit_store(&elem_ty);
+            }
+        }
 
         for (idx, elem) in elements.iter().enumerate() {
             self.emit_array_address_const(ptr_local, idx as i64, elem_size);
@@ -383,6 +398,103 @@ impl<'a> FuncCompiler<'a> {
         self.emit_array_init(ptr_local, len_local, &elem_ty, elem_size)?;
         self.push_line(format!("local.get {ptr_local}"));
         Ok(())
+    }
+
+    fn emit_enum_constructor(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        let Some((enum_name, variant_name)) = name.split_once("::") else {
+            return Ok(false);
+        };
+        if enum_name == "std" || variant_name.contains("::") {
+            return Ok(false);
+        }
+        if self.functions.contains_key(name) {
+            return Ok(false);
+        }
+        if self.lookup(enum_name).is_some() {
+            return Ok(false);
+        }
+        let Some(enum_info) = self.enums.get(enum_name) else {
+            return Ok(false);
+        };
+        let variant = enum_info.variants.get(variant_name).ok_or_else(|| {
+            wasm_error("E0400", format!("Unknown enum variant '{name}'."))
+        })?;
+        let expected_args = if variant.payload.is_some() { 1 } else { 0 };
+        if args.len() != expected_args {
+            return Err(wasm_error(
+                "E0400",
+                format!(
+                    "Wrong number of arguments for '{name}': expected {}, got {}.",
+                    expected_args,
+                    args.len()
+                ),
+            ));
+        }
+
+        let payload_ty = variant.payload.as_ref();
+        let payload_local = if let Some(payload_ty) = payload_ty {
+            let local = self.temp_local(payload_ty.clone());
+            let Some(arg) = args.first() else {
+                return Err(wasm_error("E0400", "Missing enum payload value."));
+            };
+            self.emit_expr(arg, Some(payload_ty))?;
+            self.emit_local_set(local, payload_ty);
+            Some(local)
+        } else {
+            None
+        };
+
+        let ptr_local = self.temp_local(Type::Book(enum_name.to_string()));
+        let size = HEAP_HEADER_SIZE + if payload_ty.is_some() { 8 } else { 0 };
+        self.push_line(format!("i32.const {size}"));
+        self.push_line("call $bd_alloc");
+        self.emit_local_set(ptr_local, &Type::Book(enum_name.to_string()));
+        let tag = (HEAP_KIND_ENUM << HEAP_KIND_SHIFT) | enum_info.id as i32;
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line(format!("i32.const {tag}"));
+        self.push_line("i32.store");
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line("i32.const 0");
+        self.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+        self.push_line(format!("local.get {ptr_local}"));
+        self.push_line(format!("i32.const {}", variant.id));
+        self.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+        self.push_line(format!("local.get {ptr_local}"));
+        if let Some(payload_ty) = payload_ty {
+            let kind = array_elem_kind(payload_ty);
+            self.push_line(format!("i32.const {kind}"));
+        } else {
+            self.push_line("i32.const 0");
+        }
+        self.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+
+        if let (Some(payload_ty), Some(payload_local)) = (payload_ty, payload_local) {
+            self.push_line(format!("local.get {ptr_local}"));
+            self.push_line(format!("i32.const {HEAP_HEADER_SIZE}"));
+            self.push_line("i32.add");
+            self.push_line(format!("local.get {payload_local}"));
+            match payload_ty {
+                Type::I64 => {
+                    self.push_line("i64.store");
+                }
+                Type::U8 | Type::Bool => {
+                    self.push_line("i32.store8");
+                }
+                Type::String | Type::Array(_) | Type::Book(_) => {
+                    self.push_line("i64.extend_i32_u");
+                    self.push_line("i64.store");
+                }
+                Type::Void => {
+                    return Err(wasm_error(
+                        "E0400",
+                        "Enum payload cannot be void.",
+                    ));
+                }
+            }
+        }
+
+        self.push_line(format!("local.get {ptr_local}"));
+        Ok(true)
     }
 
     fn emit_index_expr(&mut self, base: &Expr, index: &Expr) -> Result<(), WasmError> {
@@ -956,6 +1068,22 @@ impl<'a> FuncCompiler<'a> {
             ExprKind::Call { name, .. } => {
                 if let Some(return_ty) = self.infer_call_type(name) {
                     return Ok(return_ty);
+                }
+                if let Some((enum_name, variant_name)) = name.split_once("::") {
+                    if enum_name != "std"
+                        && !variant_name.contains("::")
+                        && self.lookup(enum_name).is_none()
+                    {
+                        if let Some(enum_info) = self.enums.get(enum_name) {
+                            if enum_info.variants.contains_key(variant_name) {
+                                return Ok(Type::Book(enum_name.to_string()));
+                            }
+                            return Err(wasm_error(
+                                "E0400",
+                                format!("Unknown enum variant '{name}'."),
+                            ));
+                        }
+                    }
                 }
                 if let Some((base, method)) = name.split_once("::") {
                     if base != "std" {

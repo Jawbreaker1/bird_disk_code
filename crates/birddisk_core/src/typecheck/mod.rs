@@ -1,4 +1,5 @@
 mod books;
+mod enums;
 mod expr;
 mod stmt;
 mod stdlib;
@@ -16,6 +17,7 @@ enum Ty {
     Void,
     Array(Box<Ty>),
     Book(String),
+    Enum(String),
     Unknown,
 }
 
@@ -41,6 +43,7 @@ impl Ty {
             Ty::Void => "void".to_string(),
             Ty::Array(inner) => format!("{}[]", inner.name()),
             Ty::Book(name) => name.clone(),
+            Ty::Enum(name) => name.clone(),
             Ty::Unknown => "unknown".to_string(),
         }
     }
@@ -57,6 +60,16 @@ struct BookInfo {
     fields: HashMap<String, Ty>,
 }
 
+#[derive(Clone)]
+struct EnumVariantInfo {
+    payload: Option<Ty>,
+}
+
+#[derive(Clone)]
+struct EnumInfo {
+    variants: HashMap<String, EnumVariantInfo>,
+}
+
 pub fn typecheck(program: &Program, file: &str) -> Vec<Diagnostic> {
     let mut checker = Checker::new(file);
     checker.collect_signatures(program);
@@ -69,6 +82,7 @@ struct Checker<'a> {
     diagnostics: Vec<Diagnostic>,
     functions: HashMap<String, FunctionSig>,
     books: HashMap<String, BookInfo>,
+    enums: HashMap<String, EnumInfo>,
     scopes: Vec<HashMap<String, Ty>>,
     current_return: Ty,
 }
@@ -80,12 +94,14 @@ impl<'a> Checker<'a> {
             diagnostics: Vec::new(),
             functions: HashMap::new(),
             books: HashMap::new(),
+            enums: HashMap::new(),
             scopes: Vec::new(),
             current_return: Ty::Unknown,
         }
     }
 
     fn collect_signatures(&mut self, program: &Program) {
+        self.collect_enums(program);
         self.collect_books(program);
         for function in &program.functions {
             if self.functions.contains_key(&function.name) {
@@ -106,7 +122,7 @@ impl<'a> Checker<'a> {
                 .params
                 .iter()
                 .map(|p| {
-                    let ty = Ty::from_ast(p.ty.clone());
+                    let ty = self.type_from_ast(p.ty.clone());
                     self.validate_value_type(&ty, p.span);
                     ty
                 })
@@ -114,7 +130,7 @@ impl<'a> Checker<'a> {
             let sig = FunctionSig {
                 params,
                 return_type: {
-                    let ty = Ty::from_ast(function.return_type.clone());
+                    let ty = self.type_from_ast(function.return_type.clone());
                     self.validate_return_type(&ty, function.span);
                     ty
                 },
@@ -168,7 +184,7 @@ impl<'a> Checker<'a> {
     fn check_function(&mut self, function: &crate::ast::Function) {
         self.scopes.clear();
         self.push_scope();
-        self.current_return = Ty::from_ast(function.return_type.clone());
+        self.current_return = self.type_from_ast(function.return_type.clone());
 
         for param in &function.params {
             if self.scopes[0].contains_key(&param.name) {
@@ -184,7 +200,8 @@ impl<'a> Checker<'a> {
                     None,
                 ));
             } else {
-                self.scopes[0].insert(param.name.clone(), Ty::from_ast(param.ty.clone()));
+                let ty = self.type_from_ast(param.ty.clone());
+                self.scopes[0].insert(param.name.clone(), ty);
             }
         }
 
@@ -250,6 +267,24 @@ impl<'a> Checker<'a> {
         best_suggestion(name, self.books.keys().map(|key| key.as_str()))
     }
 
+    fn suggest_enum(&self, name: &str) -> Option<String> {
+        best_suggestion(name, self.enums.keys().map(|key| key.as_str()))
+    }
+
+    fn type_from_ast(&self, ty: Type) -> Ty {
+        match ty {
+            Type::Array(inner) => Ty::Array(Box::new(self.type_from_ast(*inner))),
+            Type::Book(name) => {
+                if self.enums.contains_key(&name) {
+                    Ty::Enum(name)
+                } else {
+                    Ty::Book(name)
+                }
+            }
+            _ => Ty::from_ast(ty),
+        }
+    }
+
     fn validate_value_type(&mut self, ty: &Ty, span: Span) {
         match ty {
             Ty::Void => {
@@ -283,6 +318,27 @@ impl<'a> Checker<'a> {
                     span,
                     notes,
                     vec!["SPEC.md#15-objects".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+            }
+            Ty::Enum(name) => {
+                if self.enums.contains_key(name) {
+                    return;
+                }
+                let suggestion = self.suggest_enum(name);
+                let notes = notes_with_suggestion(
+                    vec!["Define the enum before using it as a type.".to_string()],
+                    suggestion,
+                );
+                self.diagnostics.push(diagnostic(
+                    "E0313",
+                    "error",
+                    format!("Unknown enum type '{name}'."),
+                    self.file,
+                    span,
+                    notes,
+                    vec!["SPEC.md#2-1-enums".to_string()],
                     Vec::new(),
                     None,
                 ));
@@ -396,6 +452,12 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
             catch_body,
             ..
         } => block_always_yields(try_body) && block_always_yields(catch_body),
+        Stmt::Match {
+            cases, otherwise, ..
+        } => cases
+            .iter()
+            .all(|case| block_always_yields(&case.body))
+            && block_always_yields(otherwise),
         Stmt::Repeat { .. } => false,
         Stmt::Set { .. }
         | Stmt::Expr { .. }
@@ -678,5 +740,37 @@ mod tests {
             "book Thing:\n  field x: i64.\nend\n\nrule main() -> i64:\n  set t: Thing = new Thing(1).\n  yield 0.\nend\n",
         );
         assert!(diags.iter().any(|d| d.code == "E0303"));
+    }
+
+    #[test]
+    fn typecheck_accepts_enum_match() {
+        let diags = check(
+            "enum Result:\n  case Ok(value: i64).\n  case Err(message: string).\nend\n\nrule main() -> i64:\n  set r: Result = Result::Ok(1).\n  match r:\n    case Result::Ok(value):\n      yield value.\n    case Result::Err(message):\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_rejects_match_non_enum() {
+        let diags = check(
+            "rule main() -> i64:\n  match 1:\n    case Foo::Bar:\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0300"));
+    }
+
+    #[test]
+    fn typecheck_rejects_unknown_enum_variant() {
+        let diags = check(
+            "enum Result:\n  case Ok(value: i64).\nend\n\nrule main() -> i64:\n  set r: Result = Result::Ok(1).\n  match r:\n    case Result::Err(value):\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0314"));
+    }
+
+    #[test]
+    fn typecheck_rejects_payload_binding_on_unit_variant() {
+        let diags = check(
+            "enum Flag:\n  case On.\nend\n\nrule main() -> i64:\n  set f: Flag = Flag::On().\n  match f:\n    case Flag::On(value):\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0315"));
     }
 }

@@ -46,7 +46,7 @@ impl<'a> Checker<'a> {
                     ));
                     continue;
                 }
-                let ty = Ty::from_ast(field.ty.clone());
+                let ty = self.type_from_ast(field.ty.clone());
                 self.validate_value_type(&ty, field.span);
                 if matches!(ty, Ty::Book(_)) {
                     self.diagnostics.push(diagnostic(
@@ -101,7 +101,7 @@ impl<'a> Checker<'a> {
                         ));
                     }
                     let expected = Ty::Book(book.name.clone());
-                    let actual = Ty::from_ast(first.ty.clone());
+                    let actual = self.type_from_ast(first.ty.clone());
                     if actual != expected {
                         self.diagnostics.push(type_mismatch(
                             self.file,
@@ -130,7 +130,7 @@ impl<'a> Checker<'a> {
                     .params
                     .iter()
                     .map(|p| {
-                        let ty = Ty::from_ast(p.ty.clone());
+                        let ty = self.type_from_ast(p.ty.clone());
                         self.validate_value_type(&ty, p.span);
                         ty
                     })
@@ -138,7 +138,7 @@ impl<'a> Checker<'a> {
                 let sig = FunctionSig {
                     params,
                     return_type: {
-                        let ty = Ty::from_ast(method.return_type.clone());
+                        let ty = self.type_from_ast(method.return_type.clone());
                         self.validate_return_type(&ty, method.span);
                         ty
                     },

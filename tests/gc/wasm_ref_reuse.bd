@@ -1,0 +1,38 @@
+import std::string.
+
+book Bad:
+  field a: i64.
+  field b: i64.
+
+  rule init(self: Bad, a: i64, b: i64) -> Bad:
+    put self::a = a.
+    put self::b = b.
+    yield self.
+  end
+end
+
+book Good:
+  field a: string.
+  field b: string.
+
+  rule init(self: Good) -> Good:
+    yield self.
+  end
+end
+
+rule make_bad() -> i64:
+  set bad: Bad = new Bad(2000000000, 2000000000).
+  yield 0.
+end
+
+rule make_good() -> Good:
+  set good: Good = new Good().
+  yield good.
+end
+
+rule main() -> i64:
+  set unused: i64 = make_bad().
+  set good: Good = make_good().
+  set value: string = good::a.
+  yield std::string::len(value).
+end

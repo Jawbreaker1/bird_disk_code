@@ -32,9 +32,11 @@ pub(crate) fn wasm_error(code: &'static str, message: impl Into<String>) -> Wasm
 pub(crate) const HEAP_KIND_STRING: i32 = abi::HEAP_KIND_STRING as i32;
 pub(crate) const HEAP_KIND_ARRAY: i32 = abi::HEAP_KIND_ARRAY as i32;
 pub(crate) const HEAP_KIND_OBJECT: i32 = abi::HEAP_KIND_OBJECT as i32;
+pub(crate) const HEAP_KIND_ENUM: i32 = abi::HEAP_KIND_ENUM as i32;
 pub(crate) const HEAP_KIND_FREE: i32 = abi::HEAP_KIND_FREE as i32;
 pub(crate) const HEAP_KIND_SHIFT: i32 = abi::HEAP_KIND_SHIFT as i32;
 pub(crate) const HEAP_TYPE_ID_MASK: i32 = abi::HEAP_TYPE_ID_MASK as i32;
+pub(crate) const HEAP_HEADER_SIZE: i32 = abi::HEAP_HEADER_SIZE as i32;
 pub(crate) const HEAP_FLAGS_OFFSET: i32 = abi::HEAP_FLAGS_OFFSET as i32;
 pub(crate) const HEAP_LEN_OFFSET: i32 = abi::HEAP_LEN_OFFSET as i32;
 pub(crate) const HEAP_AUX_OFFSET: i32 = abi::HEAP_AUX_OFFSET as i32;
@@ -57,6 +59,7 @@ pub(crate) const TRAP_KIND_STRING: i32 = 410;
 pub(crate) const TRAP_KIND_ARRAY: i32 = 411;
 pub(crate) const TRAP_KIND_OBJECT: i32 = 412;
 pub(crate) const TRAP_KIND_BYTES: i32 = 413;
+pub(crate) const TRAP_KIND_ENUM: i32 = 420;
 pub(crate) const TRAP_HEAP_HEADER: i32 = 414;
 pub(crate) const TRAP_TIME_NEG: i32 = 415;
 pub(crate) const TRAP_FS_IO: i32 = 416;
@@ -84,6 +87,18 @@ pub(crate) struct BookLayout {
     id: u32,
     fields: Vec<Type>,
     field_index: HashMap<String, usize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EnumVariantInfo {
+    id: u32,
+    payload: Option<Type>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EnumInfo {
+    id: u32,
+    variants: HashMap<String, EnumVariantInfo>,
 }
 
 pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
@@ -148,6 +163,26 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
             },
         );
         ref_fields.push(book_refs);
+    }
+    let mut enums = HashMap::new();
+    for (enum_id, enum_decl) in program.enums.iter().enumerate() {
+        let mut variants = HashMap::new();
+        for (variant_id, variant) in enum_decl.variants.iter().enumerate() {
+            variants.insert(
+                variant.name.clone(),
+                EnumVariantInfo {
+                    id: variant_id as u32,
+                    payload: variant.payload.as_ref().map(|payload| payload.ty.clone()),
+                },
+            );
+        }
+        enums.insert(
+            enum_decl.name.clone(),
+            EnumInfo {
+                id: enum_id as u32,
+                variants,
+            },
+        );
     }
 
     let layout = build_layout_data(&ref_fields);
@@ -242,6 +277,7 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
             func,
             &functions,
             &books,
+            &enums,
             frame_id_for(&func.name)?,
             None,
         )?;
@@ -254,6 +290,7 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
                 method,
                 &functions,
                 &books,
+                &enums,
                 frame_id_for(&name)?,
                 Some(&name),
             )?;
@@ -452,6 +489,24 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn wasm_runs_enum_match() {
+        let result = compile_and_run(
+            "enum Choice:\n  case One.\n  case Two(value: i64).\nend\n\nrule main() -> i64:\n  set value: Choice = Choice::Two(9).\n  match value:\n    case Choice::One:\n      yield 1.\n    case Choice::Two(v):\n      yield v + 1.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        )
+        .unwrap();
+        assert_eq!(result, 10);
+    }
+
+    #[test]
+    fn wasm_runs_enum_match_payload_string() {
+        let result = compile_and_run(
+            "import std::string.\nenum Status:\n  case Ok(msg: string).\n  case Fail.\nend\n\nrule main() -> i64:\n  set value: Status = Status::Ok(\"hi\").\n  match value:\n    case Status::Ok(text):\n      yield std::string::len(text).\n    case Status::Fail:\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        )
+        .unwrap();
+        assert_eq!(result, 2);
     }
 
     #[test]

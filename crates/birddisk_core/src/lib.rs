@@ -11,7 +11,7 @@ mod typecheck;
 use diagnostics::diagnostic;
 use lexer::LexError;
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +23,12 @@ pub enum Engine {
     Vm,
     Wasm,
     Native,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ModuleConfig {
+    pub project_root: Option<PathBuf>,
+    pub dep_roots: HashMap<String, PathBuf>,
 }
 
 #[derive(Serialize)]
@@ -195,8 +201,12 @@ fn is_builtin_std_module(path: &[String]) -> bool {
     )
 }
 
-fn stdlib_root(entry_path: &Path) -> Option<PathBuf> {
-    let mut current = entry_path.parent();
+fn stdlib_root_from(start: &Path) -> Option<PathBuf> {
+    let mut current = if start.is_dir() {
+        Some(start)
+    } else {
+        start.parent()
+    };
     while let Some(dir) = current {
         let candidate = dir.join("stdlib");
         if candidate.is_dir() && candidate.join("std").is_dir() {
@@ -244,16 +254,20 @@ fn module_path_from_base(base: &Path, module_path: &[String]) -> PathBuf {
     path
 }
 
-fn project_root(entry_path: &Path) -> Option<PathBuf> {
-    stdlib_root(entry_path).and_then(|root| root.parent().map(|dir| dir.to_path_buf()))
+fn project_root_from_entry(entry_path: &Path) -> Option<PathBuf> {
+    stdlib_root_from(entry_path).and_then(|root| root.parent().map(|dir| dir.to_path_buf()))
 }
 
-fn user_module_candidates(entry_path: &Path, module_path: &[String]) -> Vec<PathBuf> {
+fn user_module_candidates(
+    entry_path: &Path,
+    project_root: Option<&Path>,
+    module_path: &[String],
+) -> Vec<PathBuf> {
     let mut candidates = Vec::new();
     if let Some(entry_dir) = entry_path.parent() {
         candidates.push(module_path_from_base(entry_dir, module_path));
     }
-    if let Some(root) = project_root(entry_path) {
+    if let Some(root) = project_root {
         let candidate = module_path_from_base(&root, module_path);
         if !candidates.iter().any(|existing| *existing == candidate) {
             candidates.push(candidate);
@@ -262,13 +276,32 @@ fn user_module_candidates(entry_path: &Path, module_path: &[String]) -> Vec<Path
     candidates
 }
 
-fn resolve_user_module_path(entry_path: &Path, module_path: &[String]) -> Option<PathBuf> {
-    for candidate in user_module_candidates(entry_path, module_path) {
+fn resolve_user_module_path(
+    entry_path: &Path,
+    project_root: Option<&Path>,
+    module_path: &[String],
+) -> Option<PathBuf> {
+    for candidate in user_module_candidates(entry_path, project_root, module_path) {
         if candidate.exists() {
             return Some(candidate);
         }
     }
     None
+}
+
+fn dep_module_candidates(dep_root: &Path, module_path: &[String]) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    if module_path.len() <= 1 {
+        if dep_root.is_file() {
+            candidates.push(dep_root.to_path_buf());
+        }
+        if dep_root.is_dir() {
+            candidates.push(dep_root.join("mod.bd"));
+        }
+    } else if dep_root.is_dir() {
+        candidates.push(module_path_from_base(dep_root, &module_path[1..]));
+    }
+    candidates
 }
 
 fn line_snippet(lines: &[&str], line: u32) -> String {
@@ -306,20 +339,33 @@ enum ModuleKind {
 struct ModuleLoader<'a> {
     entry_file: &'a str,
     entry_path: &'a Path,
+    project_root: Option<PathBuf>,
     stdlib_root: Option<PathBuf>,
+    dep_roots: HashMap<String, PathBuf>,
     loaded: HashSet<PathBuf>,
+    enums: Vec<ast::EnumDecl>,
     books: Vec<ast::Book>,
     functions: Vec<ast::Function>,
     diagnostics: Vec<Diagnostic>,
 }
 
 impl<'a> ModuleLoader<'a> {
-    fn new(entry_file: &'a str, entry_path: &'a Path) -> Self {
+    fn new(entry_file: &'a str, entry_path: &'a Path, config: &ModuleConfig) -> Self {
+        let project_root = config
+            .project_root
+            .clone()
+            .or_else(|| project_root_from_entry(entry_path));
         Self {
             entry_file,
             entry_path,
-            stdlib_root: stdlib_root(entry_path),
+            project_root: project_root.clone(),
+            stdlib_root: project_root
+                .as_deref()
+                .and_then(stdlib_root_from)
+                .or_else(|| stdlib_root_from(entry_path)),
+            dep_roots: config.dep_roots.clone(),
             loaded: HashSet::new(),
+            enums: Vec::new(),
             books: Vec::new(),
             functions: Vec::new(),
             diagnostics: Vec::new(),
@@ -359,12 +405,44 @@ impl<'a> ModuleLoader<'a> {
                 continue;
             }
 
+            if let Some(candidates) = import
+                .path
+                .first()
+                .and_then(|name| self.dep_roots.get(name))
+                .map(|root| dep_module_candidates(root, &import.path))
+            {
+                if let Some(module_path) = candidates.iter().find(|path| path.exists()) {
+                    self.load_module(module_path.clone(), &import.path, ModuleKind::User);
+                } else {
+                    let key = import.path.join("::");
+                    let expected: Vec<String> = candidates
+                        .iter()
+                        .map(|path| path.display().to_string())
+                        .collect();
+                    self.diagnostics.push(module_import_diagnostic(
+                        self.entry_file,
+                        import.span,
+                        format!(
+                            "Unable to resolve module '{key}' from dependency (expected {}).",
+                            expected.join(" or ")
+                        ),
+                    ));
+                }
+                continue;
+            }
+
             let key = import.path.join("::");
-            let Some(module_path) = resolve_user_module_path(self.entry_path, &import.path) else {
-                let expected: Vec<String> = user_module_candidates(self.entry_path, &import.path)
-                    .into_iter()
-                    .map(|path| path.display().to_string())
-                    .collect();
+            let Some(module_path) =
+                resolve_user_module_path(self.entry_path, self.project_root.as_deref(), &import.path)
+            else {
+                let expected: Vec<String> = user_module_candidates(
+                    self.entry_path,
+                    self.project_root.as_deref(),
+                    &import.path,
+                )
+                .into_iter()
+                .map(|path| path.display().to_string())
+                .collect();
                 self.diagnostics.push(module_import_diagnostic(
                     self.entry_file,
                     import.span,
@@ -420,6 +498,7 @@ impl<'a> ModuleLoader<'a> {
         qualify_module_program(&mut module_program, module_path);
         self.functions.extend(module_program.functions);
         self.books.extend(module_program.books);
+        self.enums.extend(module_program.enums);
     }
 }
 
@@ -489,6 +568,22 @@ fn qualify_stmt(stmt: &mut ast::Stmt, local_names: &HashSet<String>, prefix: &st
                 qualify_stmt(stmt, local_names, prefix);
             }
         }
+        ast::Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            qualify_expr(expr, local_names, prefix);
+            for case in cases {
+                for stmt in &mut case.body {
+                    qualify_stmt(stmt, local_names, prefix);
+                }
+            }
+            for stmt in otherwise {
+                qualify_stmt(stmt, local_names, prefix);
+            }
+        }
     }
 }
 
@@ -528,6 +623,13 @@ fn qualify_expr(expr: &mut ast::Expr, local_names: &HashSet<String>, prefix: &st
 }
 
 pub fn parse_and_typecheck(path: &str) -> Result<ast::Program, Vec<Diagnostic>> {
+    parse_and_typecheck_with_config(path, &ModuleConfig::default())
+}
+
+pub fn parse_and_typecheck_with_config(
+    path: &str,
+    config: &ModuleConfig,
+) -> Result<ast::Program, Vec<Diagnostic>> {
     let source = load_source(path).map_err(|diag| vec![diag])?;
     let tokens = lexer::lex(&source).map_err(|err| vec![diagnostic_from_lex_error(path, err)])?;
     let mut program = parser::parse_with_recovery(&tokens).map_err(|errs| {
@@ -538,13 +640,14 @@ pub fn parse_and_typecheck(path: &str) -> Result<ast::Program, Vec<Diagnostic>> 
     attach_sources(&mut program, path, &source);
     let entry_path = PathBuf::from(path);
     let entry_path = entry_path.canonicalize().unwrap_or(entry_path);
-    let mut loader = ModuleLoader::new(path, &entry_path);
+    let mut loader = ModuleLoader::new(path, &entry_path, config);
     loader.load_imports(&program.imports);
     if !loader.diagnostics.is_empty() {
         return Err(loader.diagnostics);
     }
     program.functions.extend(loader.functions);
     program.books.extend(loader.books);
+    program.enums.extend(loader.enums);
     let diagnostics = typecheck::typecheck(&program, path);
     if diagnostics.is_empty() {
         Ok(program)
@@ -584,5 +687,40 @@ mod tests {
         let value: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(value["ok"], false);
         fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn parse_with_dep_roots_resolves_modules() {
+        let mut root = env::temp_dir();
+        root.push(format!("birddisk_dep_root_{}", std::process::id()));
+        let src_dir = root.join("src");
+        let dep_dir = root.join("deps").join("util");
+        fs::create_dir_all(&src_dir).expect("create src");
+        fs::create_dir_all(&dep_dir).expect("create dep");
+        fs::write(
+            src_dir.join("main.bd"),
+            "import util::math.\nrule main() -> i64:\n  yield util::math::add(1, 2).\nend\n",
+        )
+        .expect("write main");
+        fs::write(
+            dep_dir.join("math.bd"),
+            "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n",
+        )
+        .expect("write module");
+        let mut config = ModuleConfig::default();
+        config.project_root = Some(root.clone());
+        config
+            .dep_roots
+            .insert("util".to_string(), dep_dir.clone());
+
+        let entry = src_dir.join("main.bd");
+        let program =
+            parse_and_typecheck_with_config(entry.to_str().unwrap(), &config).unwrap();
+        assert!(program
+            .functions
+            .iter()
+            .any(|func| func.name == "util::math::add"));
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

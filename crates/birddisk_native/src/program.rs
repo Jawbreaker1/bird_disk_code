@@ -20,6 +20,18 @@ pub(crate) struct BookLayout {
     pub(crate) field_index: HashMap<String, usize>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct EnumVariantInfo {
+    pub(crate) id: u32,
+    pub(crate) payload: Option<Type>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EnumInfo {
+    pub(crate) id: u32,
+    pub(crate) variants: HashMap<String, EnumVariantInfo>,
+}
+
 pub(crate) struct TraceTable {
     pub(crate) frames: Vec<TraceFrame>,
     pub(crate) ids: HashMap<String, i64>,
@@ -346,4 +358,36 @@ pub(crate) fn build_book_layouts(
         );
     }
     Ok((books, ref_fields))
+}
+
+pub(crate) fn build_enum_layouts(
+    program: &Program,
+) -> Result<HashMap<String, EnumInfo>, NativeError> {
+    let mut enums = HashMap::new();
+    for (enum_id, enum_decl) in program.enums.iter().enumerate() {
+        if enums.contains_key(&enum_decl.name) {
+            return Err(native_error(format!(
+                "native backend does not support duplicate enum '{}'.",
+                enum_decl.name
+            )));
+        }
+        let mut variants = HashMap::new();
+        for (variant_id, variant) in enum_decl.variants.iter().enumerate() {
+            variants.insert(
+                variant.name.clone(),
+                EnumVariantInfo {
+                    id: variant_id as u32,
+                    payload: variant.payload.as_ref().map(|payload| payload.ty.clone()),
+                },
+            );
+        }
+        enums.insert(
+            enum_decl.name.clone(),
+            EnumInfo {
+                id: enum_id as u32,
+                variants,
+            },
+        );
+    }
+    Ok(enums)
 }

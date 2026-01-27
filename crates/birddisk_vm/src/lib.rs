@@ -58,6 +58,22 @@ mod tests {
     }
 
     #[test]
+    fn eval_enum_match() {
+        let result = eval_source(
+            "enum Result:\n  case Ok(value: i64).\n  case Err(message: string).\nend\n\nrule main() -> i64:\n  set r: Result = Result::Ok(7).\n  match r:\n    case Result::Ok(value):\n      yield value.\n    case Result::Err(message):\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n",
+        );
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn eval_enum_match_payload_string() {
+        let result = eval_source(
+            "enum Msg:\n  case Text(text: string).\nend\n\nrule main() -> i64:\n  set m: Msg = Msg::Text(\"hi\").\n  match m:\n    case Msg::Text(text):\n      yield std::string::len(text).\n    otherwise:\n      yield 0.\n  end\nend\n",
+        );
+        assert_eq!(result, 2);
+    }
+
+    #[test]
     fn eval_call() {
         let result = eval_source(
             "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n\nrule main() -> i64:\n  yield add(2, 3).\nend\n",

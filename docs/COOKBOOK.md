@@ -323,8 +323,29 @@ BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddiskc native_ao
 ## 21) Large example (Yahtzee)
 See `examples/yahtzee/` for a multi-file terminal demo.
 ```sh
-cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.input
+cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.stdin
 ```
+
+## 22) Enums and match
+```birddisk
+enum Result:
+  case Ok(value: i64).
+  case Err(message: string).
+end
+
+rule main() -> i64:
+  set r: Result = Result::Ok(7).
+  match r:
+    case Result::Ok(value):
+      yield value.
+    case Result::Err(message):
+      yield 0.
+    otherwise:
+      yield 0.
+  end
+end
+```
+See `examples/enum_result.bd` for a runnable file example.
 
 ---
 

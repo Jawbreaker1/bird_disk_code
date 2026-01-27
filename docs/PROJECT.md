@@ -24,6 +24,7 @@ tests/
 vm_tests/          # VM-only fixtures (reserved for future features)
 vm_error_tests/    # VM fixtures expected to fail (diagnostics/runtime errors)
 eval/              # LLM syntax evaluation tasks + scoring notes
+birddisk.json      # optional project manifest (entry + deps)
 
 ## Development principles
 - Keep the language core small and orthogonal.

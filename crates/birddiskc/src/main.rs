@@ -1,5 +1,5 @@
-use serde::Serialize;
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::io::{IsTerminal, Read};
 use std::path::{Path, PathBuf};
@@ -14,7 +14,8 @@ Usage:
 Commands:
   fmt <file|dir>
   check <file|dir> [--json]
-  run <file> [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
+  build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>]
+  run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
   test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
 
 Options:
@@ -41,7 +42,7 @@ Options:
 
 const RUN_HELP: &str = "\
 Usage:
-  birddiskc run <file> [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [-- <args>...]
+  birddiskc run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [-- <args>...]
 
 Options:
   --engine       Execution engine (vm, wasm, or native)
@@ -53,6 +54,21 @@ Options:
   --stdout       Write stdout to file (JSON still printed to stdout)
   --report       Write JSON report to file (stdout becomes program output unless --json is set)
   -h, --help     Show this help message
+Notes:
+  If <file|dir> is omitted, `birddiskc run` uses `birddisk.json` (manifest entry).
+";
+
+const BUILD_HELP: &str = "\
+Usage:
+  birddiskc build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>]
+
+Options:
+  --engine       Compilation engine (wasm or native)
+  --emit         Emit compiled output (wat, wasm, obj, or exe)
+  --out          Output file for --emit
+  -h, --help     Show this help message
+Notes:
+  If <file|dir> is omitted, `birddiskc build` uses `birddisk.json` (manifest entry).
 ";
 
 const TEST_HELP: &str = "\
@@ -67,12 +83,20 @@ Options:
   -h, --help     Show this help message
 ";
 
+const MANIFEST_FILE: &str = "birddisk.json";
+
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
     Fmt { path: String },
     Check { path: String, json: bool },
+    Build {
+        path: Option<String>,
+        engine: birddisk_core::Engine,
+        emit: Option<EmitFormat>,
+        out: Option<String>,
+    },
     Run {
-        path: String,
+        path: Option<String>,
         engine: birddisk_core::Engine,
         json: bool,
         emit: Option<EmitFormat>,
@@ -120,6 +144,31 @@ struct TestReport {
     diagnostics: Vec<birddisk_core::Diagnostic>,
 }
 
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct Manifest {
+    name: Option<String>,
+    version: Option<String>,
+    entry: Option<String>,
+    deps: Option<HashMap<String, ManifestDep>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ManifestDep {
+    Path(String),
+    Detailed {
+        path: String,
+        #[allow(dead_code)]
+        version: Option<String>,
+    },
+}
+
+struct ProjectContext {
+    entry: String,
+    config: birddisk_core::ModuleConfig,
+}
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
 
@@ -139,6 +188,10 @@ fn main() {
     }
     if args[0] == "check" && contains_help_flag(&args[1..]) {
         print!("{CHECK_HELP}");
+        return;
+    }
+    if args[0] == "build" && contains_help_flag(&args[1..]) {
+        print!("{BUILD_HELP}");
         return;
     }
     if args[0] == "run" && contains_help_flag(&args[1..]) {
@@ -174,6 +227,7 @@ fn parse_command(args: &[String]) -> Result<Command, String> {
     match args[0].as_str() {
         "fmt" => parse_fmt(&args[1..]),
         "check" => parse_check(&args[1..]),
+        "build" => parse_build(&args[1..]),
         "run" => parse_run(&args[1..]),
         "test" => parse_test(&args[1..]),
         other => Err(format!("unknown command '{other}'")),
@@ -211,15 +265,28 @@ fn parse_check(args: &[String]) -> Result<Command, String> {
     })
 }
 
+fn parse_build(args: &[String]) -> Result<Command, String> {
+    let parsed = parse_path_and_flags(
+        args,
+        ParseConfig::new(true, true, false, true, true, false, false, false, false, false, false),
+    )?;
+    if parsed.emit.is_none() && parsed.out.is_some() {
+        return Err("--out requires --emit".to_string());
+    }
+    Ok(Command::Build {
+        path: parsed.path,
+        engine: parsed.engine.unwrap_or(birddisk_core::Engine::Native),
+        emit: parsed.emit,
+        out: parsed.out,
+    })
+}
+
 fn parse_run(args: &[String]) -> Result<Command, String> {
     let parsed =
         parse_path_and_flags(
             args,
             ParseConfig::new(true, true, true, true, true, false, false, true, true, true, true),
         )?;
-    let path = parsed
-        .path
-        .ok_or_else(|| "missing path for run".to_string())?;
     if parsed.emit.is_some() && parsed.json {
         return Err("cannot combine --emit with --json".to_string());
     }
@@ -238,7 +305,7 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
         return Err("--stdin/--stdout require --json or --report".to_string());
     }
     Ok(Command::Run {
-        path,
+        path: parsed.path,
         engine: parsed.engine.unwrap_or(birddisk_core::Engine::Vm),
         json: parsed.json,
         emit: parsed.emit,
@@ -263,6 +330,137 @@ fn parse_test(args: &[String]) -> Result<Command, String> {
         engine: parsed.engine,
         dirs: parsed.dirs,
         tags: parsed.tags,
+    })
+}
+
+fn find_manifest(start: &Path) -> Option<PathBuf> {
+    let mut current = if start.is_dir() {
+        Some(start)
+    } else {
+        start.parent()
+    };
+    while let Some(dir) = current {
+        let candidate = dir.join(MANIFEST_FILE);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        current = dir.parent();
+    }
+    None
+}
+
+fn load_manifest(path: &Path) -> Result<Manifest, String> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|err| format!("unable to read manifest {}: {err}", path.display()))?;
+    serde_json::from_str(&contents)
+        .map_err(|err| format!("invalid manifest {}: {err}", path.display()))
+}
+
+fn manifest_entry_path(root: &Path, manifest: &Manifest) -> Result<PathBuf, String> {
+    let entry = manifest.entry.as_deref().unwrap_or("src/main.bd");
+    let entry_path = if Path::new(entry).is_absolute() {
+        PathBuf::from(entry)
+    } else {
+        root.join(entry)
+    };
+    if entry_path.exists() {
+        Ok(entry_path)
+    } else {
+        Err(format!(
+            "manifest entry not found: {}",
+            entry_path.display()
+        ))
+    }
+}
+
+fn module_config_from_manifest(
+    root: &Path,
+    manifest: &Manifest,
+) -> Result<birddisk_core::ModuleConfig, String> {
+    let mut config = birddisk_core::ModuleConfig::default();
+    config.project_root = Some(root.to_path_buf());
+    if let Some(deps) = manifest.deps.as_ref() {
+        for (name, dep) in deps {
+            if name == "std" {
+                return Err("manifest deps cannot be named 'std'".to_string());
+            }
+            let dep_path = PathBuf::from(dep_path(dep));
+            let mut full = if dep_path.is_absolute() {
+                dep_path
+            } else {
+                root.join(dep_path)
+            };
+            if full.exists() {
+                if !full.is_dir() {
+                    return Err(format!(
+                        "dependency '{name}' must be a directory (got {})",
+                        full.display()
+                    ));
+                }
+                if let Ok(canonical) = full.canonicalize() {
+                    full = canonical;
+                }
+                config.dep_roots.insert(name.clone(), full);
+            } else {
+                return Err(format!(
+                    "dependency '{name}' path not found: {}",
+                    full.display()
+                ));
+            }
+        }
+    }
+    Ok(config)
+}
+
+fn dep_path(dep: &ManifestDep) -> &str {
+    match dep {
+        ManifestDep::Path(path) => path.as_str(),
+        ManifestDep::Detailed { path, .. } => path.as_str(),
+    }
+}
+
+fn resolve_project_context(path: Option<&str>) -> Result<ProjectContext, String> {
+    let cwd = env::current_dir().map_err(|err| format!("unable to read cwd: {err}"))?;
+    if let Some(path) = path {
+        let path_buf = PathBuf::from(path);
+        let start = if path_buf.is_dir() {
+            path_buf.clone()
+        } else {
+            path_buf.parent().unwrap_or(&cwd).to_path_buf()
+        };
+        if let Some(manifest_path) = find_manifest(&start) {
+            let manifest = load_manifest(&manifest_path)?;
+            let root = manifest_path
+                .parent()
+                .ok_or_else(|| "manifest path missing parent directory".to_string())?;
+            let entry = if path_buf.is_dir() {
+                manifest_entry_path(root, &manifest)?
+            } else {
+                path_buf
+            };
+            let config = module_config_from_manifest(root, &manifest)?;
+            return Ok(ProjectContext {
+                entry: entry.to_string_lossy().to_string(),
+                config,
+            });
+        }
+        return Ok(ProjectContext {
+            entry: path.to_string(),
+            config: birddisk_core::ModuleConfig::default(),
+        });
+    }
+
+    let manifest_path = find_manifest(&cwd)
+        .ok_or_else(|| "missing path and no birddisk.json found".to_string())?;
+    let manifest = load_manifest(&manifest_path)?;
+    let root = manifest_path
+        .parent()
+        .ok_or_else(|| "manifest path missing parent directory".to_string())?;
+    let entry = manifest_entry_path(root, &manifest)?;
+    let config = module_config_from_manifest(root, &manifest)?;
+    Ok(ProjectContext {
+        entry: entry.to_string_lossy().to_string(),
+        config,
     })
 }
 
@@ -344,9 +542,6 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
             "--" => {
                 if !config.allow_args {
                     return Err("unexpected --".to_string());
-                }
-                if path.is_none() {
-                    return Err("missing path before --".to_string());
                 }
                 arg_values.extend(iter.cloned());
                 break;
@@ -493,6 +688,19 @@ fn execute(command: Command) -> Result<(), String> {
                 Err("check not implemented (use --json for stub output)".to_string())
             }
         }
+        Command::Build {
+            path,
+            engine,
+            emit,
+            out,
+        } => {
+            let context = resolve_project_context(path.as_deref())?;
+            let format = match emit {
+                Some(format) => format,
+                None => default_build_emit(engine)?,
+            };
+            emit_compiled(&context.entry, &context.config, engine, format, out)
+        }
         Command::Run {
             path,
             engine,
@@ -504,8 +712,11 @@ fn execute(command: Command) -> Result<(), String> {
             report,
             args,
         } => {
+            let context = resolve_project_context(path.as_deref())?;
+            let path = context.entry;
+            let config = context.config;
             if let Some(format) = emit {
-                return emit_compiled(&path, engine, format, out);
+                return emit_compiled(&path, &config, engine, format, out);
             }
             if json || report.is_some() {
                 let input = match stdin {
@@ -513,7 +724,7 @@ fn execute(command: Command) -> Result<(), String> {
                         .map_err(|err| format!("unable to read --stdin file '{path}': {err}"))?,
                     None => String::new(),
                 };
-                let run_report = run_report(&path, engine, &input, &args);
+                let run_report = run_report(&path, &config, engine, &input, &args);
                 let report_json =
                     serde_json::to_string_pretty(&run_report).unwrap_or_else(|_| "{}".to_string());
                 if let Some(path) = report.as_deref() {
@@ -543,13 +754,16 @@ fn execute(command: Command) -> Result<(), String> {
                         .map_err(|err| format!("unable to read stdin: {err}"))?;
                     buf
                 };
-                let program = birddisk_core::parse_and_typecheck(&path).map_err(|diags| {
-                    let hint = diags
-                        .first()
-                        .map(|diag| diag.message.as_str())
-                        .unwrap_or("parse/typecheck failed");
-                    format!("{hint} (use --json for full diagnostics)")
-                })?;
+                let program =
+                    birddisk_core::parse_and_typecheck_with_config(&path, &config).map_err(
+                        |diags| {
+                            let hint = diags
+                                .first()
+                                .map(|diag| diag.message.as_str())
+                                .unwrap_or("parse/typecheck failed");
+                            format!("{hint} (use --json for full diagnostics)")
+                        },
+                    )?;
                 match birddisk_vm::eval_with_io_streaming(
                     &program,
                     &input,
@@ -581,6 +795,7 @@ fn execute(command: Command) -> Result<(), String> {
 
 fn run_report(
     path: &str,
+    config: &birddisk_core::ModuleConfig,
     engine: birddisk_core::Engine,
     input: &str,
     args: &[String],
@@ -632,7 +847,7 @@ fn run_report(
             };
         }
     }
-    match birddisk_core::parse_and_typecheck(path) {
+    match birddisk_core::parse_and_typecheck_with_config(path, config) {
         Ok(program) => match engine {
             birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io(&program, input, args) {
                 Ok((result, stdout)) => birddisk_core::RunReport {
@@ -1310,11 +1525,12 @@ fn check_expected_native_error(
 
 fn emit_compiled(
     path: &str,
+    config: &birddisk_core::ModuleConfig,
     engine: birddisk_core::Engine,
     format: EmitFormat,
     out: Option<String>,
 ) -> Result<(), String> {
-    let program = birddisk_core::parse_and_typecheck(path)
+    let program = birddisk_core::parse_and_typecheck_with_config(path, config)
         .map_err(|_| "emit failed; run `birddiskc check --json` for diagnostics".to_string())?;
     match engine {
         birddisk_core::Engine::Wasm => {
@@ -1367,6 +1583,14 @@ fn emit_compiled(
             _ => Err("emit format not supported for --engine native".to_string()),
         },
         _ => Err("emit is only supported for --engine wasm or native".to_string()),
+    }
+}
+
+fn default_build_emit(engine: birddisk_core::Engine) -> Result<EmitFormat, String> {
+    match engine {
+        birddisk_core::Engine::Wasm => Ok(EmitFormat::Wasm),
+        birddisk_core::Engine::Native => Ok(EmitFormat::Exe),
+        _ => Err("build requires --engine wasm or native".to_string()),
     }
 }
 
@@ -1871,7 +2095,7 @@ mod tests {
         assert_eq!(
             command,
             Command::Run {
-                path: "main.bd".to_string(),
+                path: Some("main.bd".to_string()),
                 engine: birddisk_core::Engine::Wasm,
                 json: true,
                 emit: None,
@@ -1890,7 +2114,7 @@ mod tests {
         assert_eq!(
             command,
             Command::Run {
-                path: "main.bd".to_string(),
+                path: Some("main.bd".to_string()),
                 engine: birddisk_core::Engine::Wasm,
                 json: false,
                 emit: Some(EmitFormat::Wat),
@@ -1919,7 +2143,7 @@ mod tests {
         assert_eq!(
             command,
             Command::Run {
-                path: "main.bd".to_string(),
+                path: Some("main.bd".to_string()),
                 engine: birddisk_core::Engine::Wasm,
                 json: false,
                 emit: Some(EmitFormat::Wasm),
@@ -1968,7 +2192,7 @@ mod tests {
         assert_eq!(
             command,
             Command::Run {
-                path: "main.bd".to_string(),
+                path: Some("main.bd".to_string()),
                 engine: birddisk_core::Engine::Vm,
                 json: true,
                 emit: None,
@@ -2007,7 +2231,7 @@ mod tests {
         assert_eq!(
             command,
             Command::Run {
-                path: "main.bd".to_string(),
+                path: Some("main.bd".to_string()),
                 engine: birddisk_core::Engine::Vm,
                 json: false,
                 emit: None,
@@ -2026,7 +2250,7 @@ mod tests {
         assert_eq!(
             command,
             Command::Run {
-                path: "main.bd".to_string(),
+                path: Some("main.bd".to_string()),
                 engine: birddisk_core::Engine::Vm,
                 json: true,
                 emit: None,
@@ -2037,6 +2261,92 @@ mod tests {
                 args: vec!["alpha".to_string(), "beta".to_string()],
             }
         );
+    }
+
+    #[test]
+    fn parse_run_allows_args_without_path() {
+        let command = cmd(&["run", "--json", "--", "alpha"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Run {
+                path: None,
+                engine: birddisk_core::Engine::Vm,
+                json: true,
+                emit: None,
+                out: None,
+                stdin: None,
+                stdout: None,
+                report: None,
+                args: vec!["alpha".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn parse_build_with_emit() {
+        let command = cmd(&["build", "main.bd", "--emit", "obj"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Build {
+                path: Some("main.bd".to_string()),
+                engine: birddisk_core::Engine::Native,
+                emit: Some(EmitFormat::Obj),
+                out: None,
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_project_context_from_manifest_dir() {
+        let mut root = env::temp_dir();
+        root.push(format!("birddisk_manifest_{}", std::process::id()));
+        let src_dir = root.join("src");
+        let dep_dir = root.join("deps").join("util");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::create_dir_all(&dep_dir).unwrap();
+        fs::write(src_dir.join("main.bd"), "rule main() -> i64:\n  yield 0.\nend\n").unwrap();
+        fs::write(
+            dep_dir.join("math.bd"),
+            "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n",
+        )
+        .unwrap();
+        let manifest = "{\n  \"name\": \"demo\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"src/main.bd\",\n  \"deps\": { \"util\": \"deps/util\" }\n}\n";
+        fs::write(root.join(MANIFEST_FILE), manifest).unwrap();
+
+        let context = resolve_project_context(Some(root.to_str().unwrap())).unwrap();
+        assert!(context.entry.ends_with("src/main.bd"));
+        assert_eq!(context.config.project_root.as_ref().unwrap(), &root);
+        assert!(context.config.dep_roots.contains_key("util"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_project_context_from_manifest_with_versioned_dep() {
+        let mut root = env::temp_dir();
+        root.push(format!(
+            "birddisk_manifest_versioned_{}",
+            std::process::id()
+        ));
+        let src_dir = root.join("src");
+        let dep_dir = root.join("deps").join("util");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::create_dir_all(&dep_dir).unwrap();
+        fs::write(src_dir.join("main.bd"), "rule main() -> i64:\n  yield 0.\nend\n").unwrap();
+        fs::write(
+            dep_dir.join("math.bd"),
+            "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n",
+        )
+        .unwrap();
+        let manifest = "{\n  \"name\": \"demo\",\n  \"version\": \"0.1.0\",\n  \"entry\": \"src/main.bd\",\n  \"deps\": { \"util\": { \"path\": \"deps/util\", \"version\": \"0.1.0\" } }\n}\n";
+        fs::write(root.join(MANIFEST_FILE), manifest).unwrap();
+
+        let context = resolve_project_context(Some(root.to_str().unwrap())).unwrap();
+        assert!(context.entry.ends_with("src/main.bd"));
+        assert_eq!(context.config.project_root.as_ref().unwrap(), &root);
+        assert!(context.config.dep_roots.contains_key("util"));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

@@ -2,8 +2,8 @@ use crate::analysis::{build_root_slots, collect_local_types};
 use crate::compiler::NativeCompiler;
 use crate::error::{native_error, native_error_with_code_and_trace, NativeError};
 use crate::program::{
-    build_book_layouts, build_trace_table, collect_function_sigs, collect_functions,
-    declare_functions, make_signature, mangle_symbol,
+    build_book_layouts, build_enum_layouts, build_trace_table, collect_function_sigs,
+    collect_functions, declare_functions, make_signature, mangle_symbol,
 };
 use crate::rt::RuntimeFuncs;
 use crate::runtime;
@@ -70,6 +70,7 @@ pub fn run_with_io(
     builder.symbol("bd_throw", runtime::bd_throw as *const u8);
     builder.symbol("bd_alloc_string", runtime::bd_alloc_string as *const u8);
     builder.symbol("bd_alloc_array", runtime::bd_alloc_array as *const u8);
+    builder.symbol("bd_alloc_enum", runtime::bd_alloc_enum as *const u8);
     builder.symbol("bd_array_get_i64", runtime::bd_array_get_i64 as *const u8);
     builder.symbol("bd_array_set_i64", runtime::bd_array_set_i64 as *const u8);
     builder.symbol("bd_array_get_bool", runtime::bd_array_get_bool as *const u8);
@@ -87,6 +88,15 @@ pub fn run_with_io(
     builder.symbol("bd_object_set_u8", runtime::bd_object_set_u8 as *const u8);
     builder.symbol("bd_object_get_ref", runtime::bd_object_get_ref as *const u8);
     builder.symbol("bd_object_set_ref", runtime::bd_object_set_ref as *const u8);
+    builder.symbol("bd_enum_variant", runtime::bd_enum_variant as *const u8);
+    builder.symbol("bd_enum_payload_i64", runtime::bd_enum_payload_i64 as *const u8);
+    builder.symbol("bd_enum_payload_bool", runtime::bd_enum_payload_bool as *const u8);
+    builder.symbol("bd_enum_payload_u8", runtime::bd_enum_payload_u8 as *const u8);
+    builder.symbol("bd_enum_payload_ref", runtime::bd_enum_payload_ref as *const u8);
+    builder.symbol("bd_enum_set_payload_i64", runtime::bd_enum_set_payload_i64 as *const u8);
+    builder.symbol("bd_enum_set_payload_bool", runtime::bd_enum_set_payload_bool as *const u8);
+    builder.symbol("bd_enum_set_payload_u8", runtime::bd_enum_set_payload_u8 as *const u8);
+    builder.symbol("bd_enum_set_payload_ref", runtime::bd_enum_set_payload_ref as *const u8);
     builder.symbol("bd_string_len", runtime::bd_string_len as *const u8);
     builder.symbol("bd_string_concat", runtime::bd_string_concat as *const u8);
     builder.symbol("bd_string_eq", runtime::bd_string_eq as *const u8);
@@ -116,6 +126,7 @@ pub fn run_with_io(
     let mut module = JITModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, layout) = build_book_layouts(program)?;
+    let enums = build_enum_layouts(program)?;
     let trace_table = build_trace_table(program);
     let function_sigs = collect_function_sigs(program)?;
     let function_ids =
@@ -136,7 +147,7 @@ pub fn run_with_io(
         function_builder.seal_block(entry);
 
         let rt_ptr = function_builder.block_params(entry)[0];
-        let locals = collect_local_types(function, &function_sigs, &books)?;
+        let locals = collect_local_types(function, &function_sigs, &books, &enums)?;
         let root_slots = build_root_slots(&locals);
         let mut compiler = NativeCompiler::new(
             &mut function_builder,
@@ -148,6 +159,7 @@ pub fn run_with_io(
             locals,
             root_slots,
             &books,
+            &enums,
             &function_sigs,
             &function_ids,
             &mut string_data,
@@ -267,6 +279,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
     let mut module = ObjectModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, _) = build_book_layouts(program)?;
+    let enums = build_enum_layouts(program)?;
     let trace_table = build_trace_table(program);
     let function_sigs = collect_function_sigs(program)?;
     let function_ids =
@@ -287,7 +300,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
         function_builder.seal_block(entry);
 
         let rt_ptr = function_builder.block_params(entry)[0];
-        let locals = collect_local_types(function, &function_sigs, &books)?;
+        let locals = collect_local_types(function, &function_sigs, &books, &enums)?;
         let root_slots = build_root_slots(&locals);
         let mut compiler = NativeCompiler::new(
             &mut function_builder,
@@ -299,6 +312,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
             locals,
             root_slots,
             &books,
+            &enums,
             &function_sigs,
             &function_ids,
             &mut string_data,

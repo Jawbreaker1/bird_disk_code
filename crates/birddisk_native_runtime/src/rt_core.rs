@@ -24,6 +24,7 @@ pub(crate) enum HeapKind {
     String = abi::HEAP_KIND_STRING as u8,
     Array = abi::HEAP_KIND_ARRAY as u8,
     Object = abi::HEAP_KIND_OBJECT as u8,
+    Enum = abi::HEAP_KIND_ENUM as u8,
     Free = abi::HEAP_KIND_FREE as u8,
 }
 
@@ -106,6 +107,7 @@ impl HeapHeader {
             value if value == abi::HEAP_KIND_STRING as u8 => HeapKind::String,
             value if value == abi::HEAP_KIND_ARRAY as u8 => HeapKind::Array,
             value if value == abi::HEAP_KIND_OBJECT as u8 => HeapKind::Object,
+            value if value == abi::HEAP_KIND_ENUM as u8 => HeapKind::Enum,
             value if value == abi::HEAP_KIND_FREE as u8 => HeapKind::Free,
             _ => HeapKind::Free,
         }
@@ -425,6 +427,20 @@ impl Heap {
         self.alloc(header, payload_len)
     }
 
+    pub(crate) fn alloc_enum(
+        &mut self,
+        enum_id: u32,
+        variant_id: u32,
+        payload_kind: u32,
+        payload_len: usize,
+    ) -> Option<HeapHandle> {
+        if payload_len > u32::MAX as usize {
+            return None;
+        }
+        let header = HeapHeader::new(HeapKind::Enum, enum_id, variant_id, payload_kind);
+        self.alloc(header, payload_len)
+    }
+
     pub(crate) fn header(&self, handle: HeapHandle) -> HeapHeader {
         self.objects[handle.0 as usize].header
     }
@@ -554,6 +570,13 @@ impl Heap {
                 for field_index in layout.object_ref_fields(obj.header.type_id()) {
                     let offset = field_index * abi::OBJECT_FIELD_SIZE as usize;
                     if let Some(handle) = read_handle(&obj.payload, offset) {
+                        stack.push(handle);
+                    }
+                }
+            }
+            HeapKind::Enum => {
+                if obj.header.aux == ElemKind::Ref as u32 {
+                    if let Some(handle) = read_handle(&obj.payload, 0) {
                         stack.push(handle);
                     }
                 }

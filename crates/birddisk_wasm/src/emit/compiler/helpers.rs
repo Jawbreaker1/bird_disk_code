@@ -1,9 +1,9 @@
 use super::FuncCompiler;
 use super::super::{
-    wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY,
-    HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, OBJECT_FIELD_SIZE,
-    OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM,
-    TRAP_KIND_ARRAY, TRAP_KIND_OBJECT, TRAP_NULL_DEREF,
+    wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_HEADER_SIZE,
+    HEAP_KIND_ARRAY, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
+    OBJECT_FIELD_SIZE, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB,
+    TRAP_ARRAY_OOM, TRAP_KIND_ARRAY, TRAP_KIND_OBJECT, TRAP_NULL_DEREF,
 };
 use birddisk_core::ast::Type;
 use super::super::types::array_elem_kind;
@@ -102,6 +102,32 @@ impl<'a> FuncCompiler<'a> {
         elem_size: i32,
     ) -> Result<(), WasmError> {
         let idx_local = self.temp_local(Type::I64);
+        if super::is_ref_type(elem_ty) {
+            let zero_exit = self.fresh_label("arr_zero_exit");
+            let zero_loop = self.fresh_label("arr_zero_loop");
+            self.push_line("i64.const 0");
+            self.push_line(format!("local.set {idx_local}"));
+            self.push_line(format!("block ${zero_exit}"));
+            self.indent += 1;
+            self.push_line(format!("loop ${zero_loop}"));
+            self.indent += 1;
+            self.push_line(format!("local.get {idx_local}"));
+            self.push_line(format!("local.get {len_local}"));
+            self.push_line("i64.ge_u");
+            self.push_line(format!("br_if ${zero_exit}"));
+            self.emit_array_address_index(base_local, idx_local, elem_size);
+            self.push_line("i32.const 0");
+            self.emit_store(elem_ty);
+            self.push_line(format!("local.get {idx_local}"));
+            self.push_line("i64.const 1");
+            self.push_line("i64.add");
+            self.push_line(format!("local.set {idx_local}"));
+            self.push_line(format!("br ${zero_loop}"));
+            self.indent -= 1;
+            self.push_line("end");
+            self.indent -= 1;
+            self.push_line("end");
+        }
         self.push_line(format!("i64.const 0"));
         self.push_line(format!("local.set {idx_local}"));
         let exit_label = self.fresh_label("arr_init_exit");
@@ -171,6 +197,27 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("i32.wrap_i64");
             }
         }
+    }
+
+    pub(super) fn emit_enum_payload(&mut self, base_local: u32, ty: &Type) -> Result<(), WasmError> {
+        self.push_line(format!("local.get {base_local}"));
+        self.push_line(format!("i32.const {HEAP_HEADER_SIZE}"));
+        self.push_line("i32.add");
+        match ty {
+            Type::I64 => self.push_line("i64.load"),
+            Type::U8 | Type::Bool => self.push_line("i32.load8_u"),
+            Type::String | Type::Array(_) | Type::Book(_) => {
+                self.push_line("i64.load");
+                self.push_line("i32.wrap_i64");
+            }
+            Type::Void => {
+                return Err(wasm_error(
+                    "E0400",
+                    "Enum payload cannot be void.",
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub(super) fn emit_trap(&mut self, code: i32) {

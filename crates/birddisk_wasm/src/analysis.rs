@@ -199,6 +199,16 @@ fn stmt_has_array(stmt: &Stmt) -> bool {
         Stmt::Repeat { cond, body, .. } => {
             expr_has_array(cond) || body.iter().any(stmt_has_array)
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_array(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_array))
+                || otherwise.iter().any(stmt_has_array)
+        }
     }
 }
 
@@ -247,6 +257,16 @@ fn stmt_has_string(stmt: &Stmt) -> bool {
         }
         Stmt::Repeat { cond, body, .. } => {
             expr_has_string(cond) || body.iter().any(stmt_has_string)
+        }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_string(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_string))
+                || otherwise.iter().any(stmt_has_string)
         }
     }
 }
@@ -298,6 +318,16 @@ fn stmt_has_json(stmt: &Stmt) -> bool {
         Stmt::Repeat { cond, body, .. } => {
             expr_has_json(cond) || body.iter().any(stmt_has_json)
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_json(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_json))
+                || otherwise.iter().any(stmt_has_json)
+        }
     }
 }
 
@@ -348,6 +378,18 @@ fn stmt_has_string_from_bytes(stmt: &Stmt) -> bool {
         Stmt::Repeat { cond, body, .. } => {
             expr_has_string_from_bytes(cond) || body.iter().any(stmt_has_string_from_bytes)
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_string_from_bytes(expr)
+                || cases
+                    .iter()
+                    .any(|case| case.body.iter().any(stmt_has_string_from_bytes))
+                || otherwise.iter().any(stmt_has_string_from_bytes)
+        }
     }
 }
 
@@ -397,6 +439,16 @@ fn stmt_has_bytes(stmt: &Stmt) -> bool {
         Stmt::Repeat { cond, body, .. } => {
             expr_has_bytes(cond) || body.iter().any(stmt_has_bytes)
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_bytes(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_bytes))
+                || otherwise.iter().any(stmt_has_bytes)
+        }
     }
 }
 
@@ -440,6 +492,16 @@ fn stmt_has_io(stmt: &Stmt) -> bool {
             expr_has_io(cond) || then_body.iter().any(stmt_has_io) || else_body.iter().any(stmt_has_io)
         }
         Stmt::Repeat { cond, body, .. } => expr_has_io(cond) || body.iter().any(stmt_has_io),
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_io(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_io))
+                || otherwise.iter().any(stmt_has_io)
+        }
     }
 }
 
@@ -483,6 +545,16 @@ fn stmt_has_time(stmt: &Stmt) -> bool {
                 || else_body.iter().any(stmt_has_time)
         }
         Stmt::Repeat { cond, body, .. } => expr_has_time(cond) || body.iter().any(stmt_has_time),
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_time(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_time))
+                || otherwise.iter().any(stmt_has_time)
+        }
     }
 }
 
@@ -528,6 +600,16 @@ fn stmt_has_fs(stmt: &Stmt) -> bool {
                 || else_body.iter().any(stmt_has_fs)
         }
         Stmt::Repeat { cond, body, .. } => expr_has_fs(cond) || body.iter().any(stmt_has_fs),
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_fs(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_fs))
+                || otherwise.iter().any(stmt_has_fs)
+        }
     }
 }
 
@@ -571,6 +653,16 @@ fn stmt_has_path(stmt: &Stmt) -> bool {
                 || else_body.iter().any(stmt_has_path)
         }
         Stmt::Repeat { cond, body, .. } => expr_has_path(cond) || body.iter().any(stmt_has_path),
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_path(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_path))
+                || otherwise.iter().any(stmt_has_path)
+        }
     }
 }
 
@@ -614,6 +706,16 @@ fn stmt_has_env(stmt: &Stmt) -> bool {
                 || else_body.iter().any(stmt_has_env)
         }
         Stmt::Repeat { cond, body, .. } => expr_has_env(cond) || body.iter().any(stmt_has_env),
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_env(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_env))
+                || otherwise.iter().any(stmt_has_env)
+        }
     }
 }
 
@@ -664,6 +766,16 @@ fn stmt_has_object(stmt: &Stmt) -> bool {
         Stmt::Repeat { cond, body, .. } => {
             expr_has_object(cond) || body.iter().any(stmt_has_object)
         }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_object(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_object))
+                || otherwise.iter().any(stmt_has_object)
+        }
     }
 }
 
@@ -671,7 +783,10 @@ fn expr_has_object(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::New { .. } => true,
         ExprKind::MemberAccess { .. } => true,
-        ExprKind::Call { args, .. } => args.iter().any(expr_has_object),
+        ExprKind::Call { name, args } => {
+            (name.contains("::") && !name.starts_with("std::"))
+                || args.iter().any(expr_has_object)
+        }
         ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_object),
         ExprKind::ArrayNew { len } => expr_has_object(len),
         ExprKind::Index { base, index } => expr_has_object(base) || expr_has_object(index),

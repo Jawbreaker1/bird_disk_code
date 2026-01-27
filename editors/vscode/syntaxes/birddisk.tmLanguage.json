@@ -6,6 +6,7 @@
     {"include": "#strings"},
     {"include": "#numbers"},
     {"include": "#ruleDecl"},
+    {"include": "#enumDecl"},
     {"include": "#bookDecl"},
     {"include": "#fieldDecl"},
     {"include": "#keywords"},
@@ -67,6 +68,17 @@
         }
       ]
     },
+    "enumDecl": {
+      "patterns": [
+        {
+          "match": "\\b(enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": {"name": "keyword.control.birddisk"},
+            "2": {"name": "entity.name.type.birddisk"}
+          }
+        }
+      ]
+    },
     "fieldDecl": {
       "patterns": [
         {
@@ -82,7 +94,7 @@
       "patterns": [
         {
           "name": "keyword.control.birddisk",
-          "match": "\\b(rule|set|put|yield|throw|try|catch|when|otherwise|repeat|while|end|import|book|field|new)\\b"
+          "match": "\\b(rule|set|put|yield|throw|try|catch|when|otherwise|repeat|while|match|case|end|import|book|enum|field|new)\\b"
         }
       ]
     },

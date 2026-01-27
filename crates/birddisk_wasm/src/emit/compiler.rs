@@ -2,7 +2,10 @@ mod expr;
 mod helpers;
 
 use super::types::{array_elem_size, wat_type};
-use super::{wasm_error, BookLayout, FunctionSig, WasmError};
+use super::{
+    wasm_error, BookLayout, EnumInfo, FunctionSig, WasmError, HEAP_KIND_ENUM, HEAP_LEN_OFFSET,
+    HEAP_TYPE_ID_MASK, TRAP_KIND_ENUM,
+};
 use birddisk_core::ast::{Function, Stmt, Type};
 use std::collections::HashMap;
 
@@ -11,6 +14,7 @@ pub(super) fn emit_function(
     func: &Function,
     functions: &HashMap<String, FunctionSig>,
     books: &HashMap<String, BookLayout>,
+    enums: &HashMap<String, EnumInfo>,
     frame_id: i32,
     name_override: Option<&str>,
 ) -> Result<(), WasmError> {
@@ -26,7 +30,7 @@ pub(super) fn emit_function(
     emitter.push_line(format!("(func ${}{}", func_name, signature));
     emitter.indent();
 
-    let mut compiler = FuncCompiler::new(func, functions, books, frame_id);
+    let mut compiler = FuncCompiler::new(func, functions, books, enums, frame_id);
     compiler.emit_body()?;
     compiler.insert_root_prologue();
 
@@ -84,6 +88,7 @@ struct FuncCompiler<'a> {
     func: &'a Function,
     functions: &'a HashMap<String, FunctionSig>,
     books: &'a HashMap<String, BookLayout>,
+    enums: &'a HashMap<String, EnumInfo>,
     frame_id: i32,
     root_base_local: u32,
     root_count_local: u32,
@@ -100,12 +105,14 @@ impl<'a> FuncCompiler<'a> {
         func: &'a Function,
         functions: &'a HashMap<String, FunctionSig>,
         books: &'a HashMap<String, BookLayout>,
+        enums: &'a HashMap<String, EnumInfo>,
         frame_id: i32,
     ) -> Self {
         let mut compiler = Self {
             func,
             functions,
             books,
+            enums,
             frame_id,
             root_base_local: 0,
             root_count_local: 0,
@@ -363,6 +370,114 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line(format!("br ${loop_label}"));
                 self.indent -= 1;
                 self.push_line("end");
+                self.indent -= 1;
+                self.push_line("end");
+            }
+            Stmt::Match { .. } => {
+                let Stmt::Match {
+                    expr,
+                    cases,
+                    otherwise,
+                    ..
+                } = stmt else {
+                    unreachable!("match arm requires match stmt");
+                };
+                let expr_ty = self.infer_expr_type(expr)?;
+                let enum_name = match &expr_ty {
+                    Type::Book(name) if self.enums.contains_key(name) => name.clone(),
+                    _ => {
+                        return Err(wasm_error(
+                            "E0400",
+                            "match requires enum value.",
+                        ))
+                    }
+                };
+                let enum_info = self.enums.get(&enum_name).ok_or_else(|| {
+                    wasm_error("E0400", format!("Unknown enum '{enum_name}'"))
+                })?;
+
+                let match_local = self.temp_local(expr_ty.clone());
+                self.emit_expr(expr, Some(&expr_ty))?;
+                self.emit_local_set(match_local, &expr_ty);
+
+                self.emit_null_check(match_local);
+                self.emit_kind_check(match_local, HEAP_KIND_ENUM, TRAP_KIND_ENUM);
+                self.push_line(format!("local.get {match_local}"));
+                self.push_line("i32.load");
+                self.push_line(format!("i32.const {HEAP_TYPE_ID_MASK}"));
+                self.push_line("i32.and");
+                self.push_line(format!("i32.const {}", enum_info.id));
+                self.push_line("i32.ne");
+                self.push_line("if");
+                self.indent += 1;
+                self.emit_trap(TRAP_KIND_ENUM);
+                self.indent -= 1;
+                self.push_line("end");
+
+                let variant_local = self.temp_local(Type::Bool);
+                self.push_line(format!("local.get {match_local}"));
+                self.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+                self.push_line(format!("local.set {variant_local}"));
+
+                let exit_label = self.fresh_label("match_exit");
+                self.push_line(format!("block ${exit_label}"));
+                self.indent += 1;
+                for case in cases {
+                    if case.enum_name != enum_name {
+                        return Err(wasm_error(
+                            "E0400",
+                            format!(
+                                "Case enum '{}' does not match '{}'.",
+                                case.enum_name, enum_name
+                            ),
+                        ));
+                    }
+                    let variant = enum_info.variants.get(&case.variant_name).ok_or_else(|| {
+                        wasm_error(
+                            "E0400",
+                            format!(
+                                "Unknown enum variant '{}::{}'.",
+                                case.enum_name, case.variant_name
+                            ),
+                        )
+                    })?;
+                    if case.binding.is_some() && variant.payload.is_none() {
+                        return Err(wasm_error(
+                            "E0400",
+                            format!(
+                                "Variant '{}::{}' has no payload.",
+                                case.enum_name, case.variant_name
+                            ),
+                        ));
+                    }
+                    self.push_line(format!("local.get {variant_local}"));
+                    self.push_line(format!("i32.const {}", variant.id));
+                    self.push_line("i32.eq");
+                    self.push_line("if");
+                    self.indent += 1;
+                    self.push_scope();
+                    if let (Some(binding), Some(payload_ty)) =
+                        (&case.binding, variant.payload.as_ref())
+                    {
+                        let local = self.reserve_local(payload_ty.clone());
+                        self.emit_enum_payload(match_local, payload_ty)?;
+                        self.emit_local_set(local, payload_ty);
+                        self.bind_local(binding, local, payload_ty.clone());
+                    }
+                    for stmt in &case.body {
+                        self.emit_stmt(stmt)?;
+                    }
+                    self.pop_scope();
+                    self.push_line(format!("br ${exit_label}"));
+                    self.indent -= 1;
+                    self.push_line("end");
+                }
+                self.push_scope();
+                for stmt in otherwise {
+                    self.emit_stmt(stmt)?;
+                }
+                self.pop_scope();
+                self.push_line(format!("br ${exit_label}"));
                 self.indent -= 1;
                 self.push_line("end");
             }

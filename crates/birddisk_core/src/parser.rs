@@ -1,5 +1,6 @@
 use crate::ast::{
-    BinaryOp, Book, Expr, ExprKind, Field, Function, Import, Param, Program, Stmt, Type, UnaryOp,
+    BinaryOp, Book, EnumDecl, EnumPayload, EnumVariant, Expr, ExprKind, Field, Function, Import,
+    MatchCase, Param, Program, Stmt, Type, UnaryOp,
 };
 use crate::diagnostics::{Position, Span};
 use crate::lexer::{Token, TokenKind};
@@ -26,6 +27,7 @@ pub fn parse(tokens: &[Token]) -> Result<Program, ParseError> {
 pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>> {
     let mut parser = Parser::new_with_recovery(tokens);
     let mut imports = Vec::new();
+    let mut enums = Vec::new();
     let mut books = Vec::new();
     let mut functions = Vec::new();
     let mut errors = Vec::new();
@@ -39,6 +41,11 @@ pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>>
                     parser.sync_to_next_top_level();
                 }
             },
+            TokenKind::Enum => {
+                if let Some(enum_decl) = parser.parse_enum_with_recovery(&mut errors) {
+                    enums.push(enum_decl);
+                }
+            }
             TokenKind::Book => {
                 if let Some(book) = parser.parse_book_with_recovery(&mut errors) {
                     books.push(book);
@@ -52,7 +59,7 @@ pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>>
             _ => {
                 errors.push(parser.error(
                     "E0201",
-                    "Expected 'import', 'book', or 'rule' at top level.",
+                    "Expected 'import', 'enum', 'book', or 'rule' at top level.",
                 ));
                 parser.sync_to_next_top_level();
             }
@@ -62,6 +69,7 @@ pub fn parse_with_recovery(tokens: &[Token]) -> Result<Program, Vec<ParseError>>
     if errors.is_empty() {
         Ok(Program {
             imports,
+            enums,
             books,
             functions,
         })
@@ -98,16 +106,18 @@ impl<'a> Parser<'a> {
 
     fn parse_program(mut self) -> Result<Program, ParseError> {
         let mut imports = Vec::new();
+        let mut enums = Vec::new();
         let mut books = Vec::new();
         let mut functions = Vec::new();
         while !self.is_eof() {
             match self.peek_kind() {
                 TokenKind::Import => imports.push(self.parse_import()?),
+                TokenKind::Enum => enums.push(self.parse_enum()?),
                 TokenKind::Book => books.push(self.parse_book()?),
                 TokenKind::Rule => functions.push(self.parse_function()?),
                 _ => {
                     return Err(
-                        self.error("E0201", "Expected 'import', 'book', or 'rule' at top level.")
+                        self.error("E0201", "Expected 'import', 'enum', 'book', or 'rule' at top level.")
                     );
                 }
             }
@@ -115,6 +125,7 @@ impl<'a> Parser<'a> {
 
         Ok(Program {
             imports,
+            enums,
             books,
             functions,
         })
@@ -126,6 +137,59 @@ impl<'a> Parser<'a> {
         let end = self.expect_dot(end_span.end)?;
         Ok(Import {
             path,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_enum(&mut self) -> Result<EnumDecl, ParseError> {
+        let start = self.expect_simple(TokenKind::Enum, "Expected 'enum' keyword.")?;
+        let name = self.expect_ident("Expected enum name.")?;
+        self.expect_colon_with_fixit()?;
+        let mut variants = Vec::new();
+        while !self.is_eof() && !matches!(self.peek_kind(), TokenKind::End) {
+            match self.peek_kind() {
+                TokenKind::Case => variants.push(self.parse_enum_case()?),
+                _ => {
+                    return Err(self.error(
+                        "E0200",
+                        "Expected 'case' or 'end' inside enum.",
+                    ));
+                }
+            }
+        }
+        let end = self.expect_simple(TokenKind::End, "Expected 'end' to close enum.")?;
+        Ok(EnumDecl {
+            name,
+            variants,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_enum_case(&mut self) -> Result<EnumVariant, ParseError> {
+        let start = self.expect_simple(TokenKind::Case, "Expected 'case'.")?;
+        let name_token = self.expect_ident_token("Expected enum case name.")?;
+        let name = extract_ident(&name_token);
+        let mut last_end = name_token.span.end;
+        let payload = if matches!(self.peek_kind(), TokenKind::LParen) {
+            self.bump();
+            let payload_name_token = self.expect_ident_token("Expected payload name.")?;
+            let payload_name = extract_ident(&payload_name_token);
+            self.expect_simple(TokenKind::Colon, "Expected ':' after payload name.")?;
+            let ty = self.parse_type("Expected payload type.")?;
+            let end_paren = self.expect_rparen_with_fixit("Expected ')' after payload type.")?;
+            last_end = end_paren.span.end;
+            Some(EnumPayload {
+                name: payload_name,
+                ty,
+                span: Span::new(payload_name_token.span.start, end_paren.span.end),
+            })
+        } else {
+            None
+        };
+        let end = self.expect_dot(last_end)?;
+        Ok(EnumVariant {
+            name,
+            payload,
             span: Span::new(start.span.start, end.span.end),
         })
     }
@@ -369,6 +433,69 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_enum_with_recovery(&mut self, errors: &mut Vec<ParseError>) -> Option<EnumDecl> {
+        let start = match self.expect_simple(TokenKind::Enum, "Expected 'enum' keyword.") {
+            Ok(token) => token,
+            Err(err) => {
+                errors.push(err);
+                self.sync_to_next_top_level();
+                return None;
+            }
+        };
+
+        let name = match self.expect_ident("Expected enum name.") {
+            Ok(name) => name,
+            Err(err) => {
+                errors.push(err);
+                self.sync_to_next_top_level();
+                return None;
+            }
+        };
+
+        if let Err(err) = self.expect_colon_with_fixit() {
+            errors.push(err);
+            self.sync_to_next_top_level();
+            return None;
+        }
+
+        let mut variants = Vec::new();
+        while !self.is_eof() && !matches!(self.peek_kind(), TokenKind::End) {
+            match self.peek_kind() {
+                TokenKind::Case => match self.parse_enum_case() {
+                    Ok(variant) => variants.push(variant),
+                    Err(err) => {
+                        errors.push(err);
+                        self.sync_to_next_top_level();
+                        return None;
+                    }
+                },
+                _ => {
+                    errors.push(self.error(
+                        "E0200",
+                        "Expected 'case' or 'end' inside enum.",
+                    ));
+                    self.sync_to_next_top_level();
+                    return None;
+                }
+            }
+        }
+
+        let end = match self.expect_simple(TokenKind::End, "Expected 'end' to close enum.") {
+            Ok(token) => token,
+            Err(err) => {
+                errors.push(err);
+                self.sync_to_next_top_level();
+                return None;
+            }
+        };
+
+        Some(EnumDecl {
+            name,
+            variants,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
     fn parse_params(&mut self) -> Result<Vec<Param>, ParseError> {
         let mut params = Vec::new();
         if matches!(self.peek_kind(), TokenKind::RParen) {
@@ -461,8 +588,11 @@ impl<'a> Parser<'a> {
                     ));
                 }
                 TokenKind::End if terminator == Terminator::End => break,
+                TokenKind::End if terminator == Terminator::Case => break,
                 TokenKind::Otherwise if terminator == Terminator::Otherwise => break,
+                TokenKind::Otherwise if terminator == Terminator::Case => break,
                 TokenKind::Catch if terminator == Terminator::Catch => break,
+                TokenKind::Case if terminator == Terminator::Case => break,
                 TokenKind::End if terminator == Terminator::Otherwise => {
                     return Err(self.error_with_fixit(
                         "E0207",
@@ -490,6 +620,9 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::Catch => {
                     return Err(self.error("E0210", "Unexpected 'catch' here."));
+                }
+                TokenKind::Case => {
+                    return Err(self.error("E0200", "Unexpected 'case' here."));
                 }
                 _ => stmts.push(self.parse_statement()?),
             }
@@ -521,8 +654,11 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 TokenKind::End if terminator == Terminator::End => break,
+                TokenKind::End if terminator == Terminator::Case => break,
                 TokenKind::Otherwise if terminator == Terminator::Otherwise => break,
+                TokenKind::Otherwise if terminator == Terminator::Case => break,
                 TokenKind::Catch if terminator == Terminator::Catch => break,
+                TokenKind::Case if terminator == Terminator::Case => break,
                 TokenKind::End if terminator == Terminator::Otherwise => {
                     errors.push(self.error_with_fixit(
                         "E0207",
@@ -568,6 +704,10 @@ impl<'a> Parser<'a> {
                     errors.push(self.error("E0210", "Unexpected 'catch' here."));
                     self.sync_to_statement_boundary(terminator);
                 }
+                TokenKind::Case => {
+                    errors.push(self.error("E0200", "Unexpected 'case' here."));
+                    self.sync_to_statement_boundary(terminator);
+                }
                 _ => match self.parse_statement() {
                     Ok(stmt) => {
                         stmts.push(stmt);
@@ -598,6 +738,7 @@ impl<'a> Parser<'a> {
             TokenKind::Try => self.parse_try(),
             TokenKind::When => self.parse_when(),
             TokenKind::Repeat => self.parse_repeat(),
+            TokenKind::Match => self.parse_match(),
             TokenKind::Ident(_) => self.parse_call_stmt(),
             _ => Err(self.error("E0200", "Unexpected token in statement.")),
         }
@@ -745,6 +886,68 @@ impl<'a> Parser<'a> {
             cond,
             span: Span::new(start.span.start, end.span.end),
             body,
+        })
+    }
+
+    fn parse_match(&mut self) -> Result<Stmt, ParseError> {
+        let start = self.expect_simple(TokenKind::Match, "Expected 'match'.")?;
+        let expr = self.parse_expr("Expected expression after 'match'.")?;
+        self.expect_colon_with_fixit()?;
+        let mut cases = Vec::new();
+        while !self.is_eof()
+            && !matches!(self.peek_kind(), TokenKind::Otherwise | TokenKind::End)
+        {
+            cases.push(self.parse_match_case()?);
+        }
+        if matches!(self.peek_kind(), TokenKind::End) {
+            return Err(self.error_with_fixit(
+                "E0207",
+                "Missing 'otherwise' block for match statement.",
+                FixItHint {
+                    title: "Insert 'otherwise' block",
+                    span: self.tokens[self.index].span,
+                    replacement: "otherwise:\n  yield 0.\n".to_string(),
+                },
+            ));
+        }
+        self.expect_simple(TokenKind::Otherwise, "Expected 'otherwise'.")?;
+        self.expect_colon_with_fixit()?;
+        let otherwise = self.parse_statements_until(Terminator::End)?;
+        let end = self.expect_simple(TokenKind::End, "Expected 'end' to close match.")?;
+        Ok(Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            span: Span::new(start.span.start, end.span.end),
+        })
+    }
+
+    fn parse_match_case(&mut self) -> Result<MatchCase, ParseError> {
+        let start = self.expect_simple(TokenKind::Case, "Expected 'case'.")?;
+        let (segments, _span, qualified) = self.parse_qualified_name()?;
+        if !qualified || segments.len() != 2 {
+            return Err(self.error(
+                "E0211",
+                "Expected enum variant in the form Enum::Variant.",
+            ));
+        }
+        let enum_name = segments[0].clone();
+        let variant_name = segments[1].clone();
+        let mut binding = None;
+        if matches!(self.peek_kind(), TokenKind::LParen) {
+            self.bump();
+            let name = self.expect_ident("Expected binding name in case pattern.")?;
+            self.expect_rparen_with_fixit("Expected ')' after binding name.")?;
+            binding = Some(name);
+        }
+        self.expect_colon_with_fixit()?;
+        let body = self.parse_statements_until(Terminator::Case)?;
+        Ok(MatchCase {
+            enum_name,
+            variant_name,
+            binding,
+            body,
+            span: Span::new(start.span.start, self.previous_span_end()),
         })
     }
 
@@ -1304,7 +1507,7 @@ impl<'a> Parser<'a> {
         while !self.is_eof()
             && !matches!(
                 self.peek_kind(),
-                TokenKind::Rule | TokenKind::Import | TokenKind::Book
+                TokenKind::Rule | TokenKind::Import | TokenKind::Book | TokenKind::Enum
             )
         {
             self.bump();
@@ -1320,9 +1523,11 @@ impl<'a> Parser<'a> {
                 }
                 TokenKind::End => break,
                 TokenKind::Otherwise if terminator == Terminator::Otherwise => break,
+                TokenKind::Otherwise if terminator == Terminator::Case => break,
                 TokenKind::Otherwise => break,
                 TokenKind::Catch if terminator == Terminator::Catch => break,
                 TokenKind::Catch => break,
+                TokenKind::Case if terminator == Terminator::Case => break,
                 TokenKind::Rule => break,
                 _ => {
                     self.bump();
@@ -1461,6 +1666,7 @@ enum Terminator {
     End,
     Otherwise,
     Catch,
+    Case,
 }
 
 #[cfg(test)]
@@ -1498,6 +1704,15 @@ mod tests {
             "rule main() -> i64:\n  try:\n    throw \"boom\".\n  catch err:\n    yield 1.\n  end\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = parse(&tokens).unwrap();
+        assert_eq!(program.functions.len(), 1);
+    }
+
+    #[test]
+    fn parse_enum_and_match() {
+        let source = "enum Result:\n  case Ok(value: i64).\n  case Err(message: string).\nend\n\nrule main() -> i64:\n  set r: Result = Result::Ok(1).\n  match r:\n    case Result::Ok(value):\n      yield value.\n    case Result::Err(message):\n      yield 0.\n    otherwise:\n      yield 0.\n  end\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parse(&tokens).unwrap();
+        assert_eq!(program.enums.len(), 1);
         assert_eq!(program.functions.len(), 1);
     }
 

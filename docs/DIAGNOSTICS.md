@@ -99,10 +99,11 @@ E0202: Unexpected end of file while parsing block
 E0203: Expected expression
 E0205: Expected identifier
 E0206: Expected type
-E0207: Missing 'otherwise' block for when statement
+E0207: Missing 'otherwise' block for when/match statement
 E0208: Unexpected 'otherwise'
 E0209: Missing 'catch' block for try statement
 E0210: Unexpected 'catch'
+E0211: Expected enum variant in the form Enum::Variant
 
 E0300: Type mismatch
 E0301: Unknown name
@@ -117,6 +118,9 @@ E0309: Missing 'main' entry point (entry file only)
 E0310: Array constructor requires explicit array type
 E0311: u8 literal out of range
 E0312: Invalid void usage
+E0313: Unknown enum type
+E0314: Unknown enum variant
+E0315: Enum variant payload mismatch
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)

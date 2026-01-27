@@ -16,6 +16,7 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) throw_error: FuncId,
     pub(crate) alloc_string: FuncId,
     pub(crate) alloc_array: FuncId,
+    pub(crate) alloc_enum: FuncId,
     pub(crate) array_get_i64: FuncId,
     pub(crate) array_set_i64: FuncId,
     pub(crate) array_get_bool: FuncId,
@@ -33,6 +34,15 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) object_set_u8: FuncId,
     pub(crate) object_get_ref: FuncId,
     pub(crate) object_set_ref: FuncId,
+    pub(crate) enum_variant: FuncId,
+    pub(crate) enum_payload_i64: FuncId,
+    pub(crate) enum_payload_bool: FuncId,
+    pub(crate) enum_payload_u8: FuncId,
+    pub(crate) enum_payload_ref: FuncId,
+    pub(crate) enum_set_payload_i64: FuncId,
+    pub(crate) enum_set_payload_bool: FuncId,
+    pub(crate) enum_set_payload_u8: FuncId,
+    pub(crate) enum_set_payload_ref: FuncId,
     pub(crate) string_len: FuncId,
     pub(crate) string_concat: FuncId,
     pub(crate) string_eq: FuncId,
@@ -106,6 +116,12 @@ impl RuntimeFuncs {
             module,
             "bd_alloc_array",
             &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let alloc_enum = declare_runtime_func(
+            module,
+            "bd_alloc_enum",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
         let array_get_i64 = declare_runtime_func(
@@ -208,6 +224,60 @@ impl RuntimeFuncs {
             module,
             "bd_object_set_ref",
             &[types::I64, types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let enum_variant = declare_runtime_func(
+            module,
+            "bd_enum_variant",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let enum_payload_i64 = declare_runtime_func(
+            module,
+            "bd_enum_payload_i64",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let enum_payload_bool = declare_runtime_func(
+            module,
+            "bd_enum_payload_bool",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let enum_payload_u8 = declare_runtime_func(
+            module,
+            "bd_enum_payload_u8",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let enum_payload_ref = declare_runtime_func(
+            module,
+            "bd_enum_payload_ref",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let enum_set_payload_i64 = declare_runtime_func(
+            module,
+            "bd_enum_set_payload_i64",
+            &[types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let enum_set_payload_bool = declare_runtime_func(
+            module,
+            "bd_enum_set_payload_bool",
+            &[types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let enum_set_payload_u8 = declare_runtime_func(
+            module,
+            "bd_enum_set_payload_u8",
+            &[types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let enum_set_payload_ref = declare_runtime_func(
+            module,
+            "bd_enum_set_payload_ref",
+            &[types::I64, types::I64, types::I64],
             &[],
         )?;
         let string_len = declare_runtime_func(
@@ -407,6 +477,7 @@ impl RuntimeFuncs {
             throw_error,
             alloc_string,
             alloc_array,
+            alloc_enum,
             array_get_i64,
             array_set_i64,
             array_get_bool,
@@ -424,6 +495,15 @@ impl RuntimeFuncs {
             object_set_u8,
             object_get_ref,
             object_set_ref,
+            enum_variant,
+            enum_payload_i64,
+            enum_payload_bool,
+            enum_payload_u8,
+            enum_payload_ref,
+            enum_set_payload_i64,
+            enum_set_payload_bool,
+            enum_set_payload_u8,
+            enum_set_payload_ref,
             string_len,
             string_concat,
             string_eq,

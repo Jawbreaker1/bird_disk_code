@@ -330,14 +330,14 @@ Acceptance:
 
 ## Sprint 14 — Package & module workflow (1–3 weeks)
 Implement:
-- [ ] Module resolution rules beyond stdlib (project packages + manifest)
-- [ ] Simple manifest format (project name, version, deps)
-- [ ] CLI workflow: `birddiskc build`, `birddiskc run` with manifest
+- [x] Module resolution rules beyond stdlib (project packages + manifest)
+- [x] Simple manifest format (project name, version, deps)
+- [x] CLI workflow: `birddiskc build`, `birddiskc run` with manifest
 - [x] Align CLI naming: rename `birddiskc` crate or binary so build instructions match output name
 
 Add tests:
-- [ ] Multi-module compilation tests
-- [ ] Versioned dependency resolution tests (minimal)
+- [x] Multi-module compilation tests
+- [x] Versioned dependency resolution tests (minimal)
 
 Acceptance:
 - Projects can declare and build dependencies deterministically
@@ -346,8 +346,8 @@ Acceptance:
 
 ## Sprint 15 — Language ergonomics v0.x (2–6 weeks)
 Implement (small slices, one per PR):
-- [ ] Enums/variants (no generics yet)
-- [ ] Pattern matching for enums
+- [x] Enums/variants (no generics yet; VM + WASM + native done)
+- [x] Pattern matching for enums (VM + WASM + native done)
 - [ ] Floats (f64) with explicit conversions
 - [ ] Improved string/bytes APIs (slice, search, replace)
 

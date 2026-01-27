@@ -24,6 +24,23 @@ LLM-safe workflow
 3) Run `birddiskc run --engine vm --json` to validate execution.
 4) If parity matters, run `--engine wasm` and `--engine native`.
 
+Project template (preferred for multi-file)
+`birddisk.json`:
+```json
+{
+  "name": "demo",
+  "version": "0.1.0",
+  "entry": "src/main.bd",
+  "deps": {
+    "util": "deps/util"
+  }
+}
+```
+Then run:
+```sh
+./target/debug/birddiskc run --engine vm --json
+```
+
 JSON outputs (important for self-correction)
 - `birddiskc check --json` returns machine-readable errors + fix-its.
 - `birddiskc run --json` returns `{ ok, result, stdout, diagnostics }`.

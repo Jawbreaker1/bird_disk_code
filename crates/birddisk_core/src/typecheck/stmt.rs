@@ -12,19 +12,27 @@ impl<'a> Checker<'a> {
                         if ty.is_none() {
                             skip_infer_error = true;
                         }
-                        let expected = ty.as_ref().map(|ty| Ty::from_ast(ty.clone()));
+                        let expected = ty.as_ref().map(|ty| self.type_from_ast(ty.clone()));
                         self.check_array_new(len, expected.as_ref(), *span)
                     }
                     (ExprKind::ArrayLit(elements), Some(ty)) => {
-                        self.check_array_literal_expected(elements, expr.span, &Ty::from_ast(ty.clone()))
+                        self.check_array_literal_expected(
+                            elements,
+                            expr.span,
+                            &self.type_from_ast(ty.clone()),
+                        )
                     }
                     (ExprKind::Int(value), Some(ty)) => {
-                        self.check_int_literal_expected(*value, expr.span, &Ty::from_ast(ty.clone()))
+                        self.check_int_literal_expected(
+                            *value,
+                            expr.span,
+                            &self.type_from_ast(ty.clone()),
+                        )
                     }
                     _ => self.check_expr(expr),
                 };
                 let bound_ty = if let Some(ty) = ty {
-                    let annotated = Ty::from_ast(ty.clone());
+                    let annotated = self.type_from_ast(ty.clone());
                     self.validate_value_type(&annotated, *span);
                     if expr_ty != Ty::Unknown && expr_ty != annotated {
                         self.diagnostics.push(type_mismatch(
@@ -417,6 +425,130 @@ impl<'a> Checker<'a> {
                 }
                 self.push_scope();
                 for stmt in body {
+                    self.check_stmt(stmt);
+                }
+                self.pop_scope();
+            }
+            Stmt::Match {
+                expr,
+                cases,
+                otherwise,
+                ..
+            } => {
+                let expr_ty = self.check_expr(expr);
+                let match_enum = match expr_ty {
+                    Ty::Enum(name) => Some(name),
+                    Ty::Unknown => None,
+                    other => {
+                        self.diagnostics.push(diagnostic(
+                            "E0300",
+                            "error",
+                            "match requires an enum value.".to_string(),
+                            self.file,
+                            expr.span,
+                            vec![format!("Expected enum type, got {}.", other.name())],
+                            vec!["SPEC.md#5-8-match-match-case-otherwise-end".to_string()],
+                            Vec::new(),
+                            None,
+                        ));
+                        None
+                    }
+                };
+
+                for case in cases {
+                    let variant_payload = match self.enums.get(&case.enum_name) {
+                        Some(info) => match info.variants.get(&case.variant_name) {
+                            Some(variant) => Some(variant.payload.clone()),
+                            None => {
+                                self.diagnostics.push(diagnostic(
+                                    "E0314",
+                                    "error",
+                                    format!(
+                                        "Unknown enum variant '{}::{}'.",
+                                        case.enum_name, case.variant_name
+                                    ),
+                                    self.file,
+                                    case.span,
+                                    vec!["Check the variant name.".to_string()],
+                                    vec!["SPEC.md#2-1-enums".to_string()],
+                                    Vec::new(),
+                                    None,
+                                ));
+                                None
+                            }
+                        },
+                        None => {
+                            let suggestion = self.suggest_enum(&case.enum_name);
+                            let notes = notes_with_suggestion(
+                                vec!["Define the enum before matching it.".to_string()],
+                                suggestion,
+                            );
+                            self.diagnostics.push(diagnostic(
+                                "E0313",
+                                "error",
+                                format!("Unknown enum type '{}'.", case.enum_name),
+                                self.file,
+                                case.span,
+                                notes,
+                                vec!["SPEC.md#2-1-enums".to_string()],
+                                Vec::new(),
+                                None,
+                            ));
+                            None
+                        }
+                    };
+
+                    if let Some(match_enum) = &match_enum {
+                        if &case.enum_name != match_enum {
+                            self.diagnostics.push(diagnostic(
+                                "E0300",
+                                "error",
+                                format!(
+                                    "Case enum '{}' does not match '{}'.",
+                                    case.enum_name, match_enum
+                                ),
+                                self.file,
+                                case.span,
+                                vec!["Match cases must use the same enum.".to_string()],
+                                vec!["SPEC.md#5-8-match-match-case-otherwise-end".to_string()],
+                                Vec::new(),
+                                None,
+                            ));
+                        }
+                    }
+
+                    if matches!(variant_payload, Some(None)) && case.binding.is_some() {
+                        self.diagnostics.push(diagnostic(
+                            "E0315",
+                            "error",
+                            format!(
+                                "Variant '{}::{}' has no payload.",
+                                case.enum_name, case.variant_name
+                            ),
+                            self.file,
+                            case.span,
+                            vec!["Remove the case binding.".to_string()],
+                            vec!["SPEC.md#2-1-enums".to_string()],
+                            Vec::new(),
+                            None,
+                        ));
+                    }
+
+                    self.push_scope();
+                    if let (Some(binding), Some(Some(payload_ty))) =
+                        (&case.binding, variant_payload.as_ref())
+                    {
+                        self.current_scope_mut()
+                            .insert(binding.clone(), payload_ty.clone());
+                    }
+                    for stmt in &case.body {
+                        self.check_stmt(stmt);
+                    }
+                    self.pop_scope();
+                }
+
+                self.push_scope();
+                for stmt in otherwise {
                     self.check_stmt(stmt);
                 }
                 self.pop_scope();

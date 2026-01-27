@@ -1,5 +1,5 @@
 use crate::error::{native_error, NativeError};
-use crate::program::{stdlib_signature, BookLayout, FunctionSig};
+use crate::program::{stdlib_signature, BookLayout, EnumInfo, FunctionSig};
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Stmt, Type, UnaryOp};
 use birddisk_core::runtime as abi;
 use std::collections::HashMap;
@@ -8,6 +8,7 @@ pub(crate) fn collect_local_types(
     function: &birddisk_core::ast::Function,
     functions: &HashMap<String, FunctionSig>,
     books: &HashMap<String, BookLayout>,
+    enums: &HashMap<String, EnumInfo>,
 ) -> Result<HashMap<String, Type>, NativeError> {
     let mut locals = HashMap::new();
     for param in &function.params {
@@ -19,7 +20,7 @@ pub(crate) fn collect_local_types(
         }
         locals.insert(param.name.clone(), param.ty.clone());
     }
-    collect_local_types_in_block(&function.body, &mut locals, functions, books)?;
+    collect_local_types_in_block(&function.body, &mut locals, functions, books, enums)?;
     Ok(locals)
 }
 
@@ -28,6 +29,7 @@ fn collect_local_types_in_block(
     locals: &mut HashMap<String, Type>,
     functions: &HashMap<String, FunctionSig>,
     books: &HashMap<String, BookLayout>,
+    enums: &HashMap<String, EnumInfo>,
 ) -> Result<(), NativeError> {
     for stmt in stmts {
         match stmt {
@@ -40,7 +42,7 @@ fn collect_local_types_in_block(
                 let var_ty = if let Some(ty) = ty {
                     ty.clone()
                 } else {
-                    infer_expr_type(expr, locals, functions, books).ok_or_else(|| {
+                    infer_expr_type(expr, locals, functions, books, enums).ok_or_else(|| {
                         native_error(format!(
                             "native backend requires explicit type for '{name}'."
                         ))
@@ -53,8 +55,8 @@ fn collect_local_types_in_block(
                 else_body,
                 ..
             } => {
-                collect_local_types_in_block(then_body, locals, functions, books)?;
-                collect_local_types_in_block(else_body, locals, functions, books)?;
+                collect_local_types_in_block(then_body, locals, functions, books, enums)?;
+                collect_local_types_in_block(else_body, locals, functions, books, enums)?;
             }
             Stmt::Try {
                 try_body,
@@ -62,17 +64,46 @@ fn collect_local_types_in_block(
                 catch_body,
                 ..
             } => {
-                collect_local_types_in_block(try_body, locals, functions, books)?;
+                collect_local_types_in_block(try_body, locals, functions, books, enums)?;
                 if locals.contains_key(catch_name) {
                     return Err(native_error(format!(
                         "native backend does not support shadowing '{catch_name}'."
                     )));
                 }
                 locals.insert(catch_name.clone(), Type::String);
-                collect_local_types_in_block(catch_body, locals, functions, books)?;
+                collect_local_types_in_block(catch_body, locals, functions, books, enums)?;
             }
             Stmt::Repeat { body, .. } => {
-                collect_local_types_in_block(body, locals, functions, books)?;
+                collect_local_types_in_block(body, locals, functions, books, enums)?;
+            }
+            Stmt::Match { cases, otherwise, .. } => {
+                for case in cases {
+                    if let Some(binding) = &case.binding {
+                        let enum_info = enums.get(&case.enum_name).ok_or_else(|| {
+                            native_error(format!("unknown enum '{}'.", case.enum_name))
+                        })?;
+                        let variant = enum_info.variants.get(&case.variant_name).ok_or_else(|| {
+                            native_error(format!(
+                                "unknown enum variant '{}::{}'.",
+                                case.enum_name, case.variant_name
+                            ))
+                        })?;
+                        let Some(payload_ty) = variant.payload.as_ref() else {
+                            return Err(native_error(format!(
+                                "variant '{}::{}' has no payload.",
+                                case.enum_name, case.variant_name
+                            )));
+                        };
+                        if locals.contains_key(binding) {
+                            return Err(native_error(format!(
+                                "native backend does not support shadowing '{binding}'."
+                            )));
+                        }
+                        locals.insert(binding.clone(), payload_ty.clone());
+                    }
+                    collect_local_types_in_block(&case.body, locals, functions, books, enums)?;
+                }
+                collect_local_types_in_block(otherwise, locals, functions, books, enums)?;
             }
             _ => {}
         }
@@ -85,6 +116,7 @@ pub(crate) fn infer_expr_type(
     locals: &HashMap<String, Type>,
     functions: &HashMap<String, FunctionSig>,
     books: &HashMap<String, BookLayout>,
+    enums: &HashMap<String, EnumInfo>,
 ) -> Option<Type> {
     match &expr.kind {
         ExprKind::Int(_) => Some(Type::I64),
@@ -98,6 +130,18 @@ pub(crate) fn infer_expr_type(
             {
                 return Some(return_type);
             }
+            if let Some((enum_name, variant_name)) = name.split_once("::") {
+                if enum_name != "std"
+                    && !variant_name.contains("::")
+                    && !locals.contains_key(enum_name)
+                {
+                    if let Some(enum_info) = enums.get(enum_name) {
+                        if enum_info.variants.contains_key(variant_name) {
+                            return Some(Type::Book(enum_name.to_string()));
+                        }
+                    }
+                }
+            }
             if let Some((base, method)) = name.split_once("::") {
                 if base != "std" {
                     if let Some(Type::Book(book)) = locals.get(base) {
@@ -109,7 +153,7 @@ pub(crate) fn infer_expr_type(
             None
         }
         ExprKind::Unary { op, expr } => match op {
-            UnaryOp::Neg => infer_expr_type(expr, locals, functions, books),
+            UnaryOp::Neg => infer_expr_type(expr, locals, functions, books, enums),
             UnaryOp::Not => Some(Type::Bool),
         },
         ExprKind::Binary { op, .. } => match op {
@@ -131,9 +175,9 @@ pub(crate) fn infer_expr_type(
             if elements.is_empty() {
                 None
             } else {
-                let first = infer_expr_type(&elements[0], locals, functions, books)?;
+                let first = infer_expr_type(&elements[0], locals, functions, books, enums)?;
                 for elem in &elements[1..] {
-                    let ty = infer_expr_type(elem, locals, functions, books)?;
+                    let ty = infer_expr_type(elem, locals, functions, books, enums)?;
                     if ty != first {
                         return None;
                     }
@@ -142,7 +186,7 @@ pub(crate) fn infer_expr_type(
             }
         }
         ExprKind::Index { base, .. } => {
-            let base_ty = infer_expr_type(base, locals, functions, books)?;
+            let base_ty = infer_expr_type(base, locals, functions, books, enums)?;
             match base_ty {
                 Type::Array(inner) => Some(*inner),
                 _ => None,

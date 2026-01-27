@@ -1,11 +1,11 @@
 use super::{
     WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_BOOL, ARRAY_KIND_I64, ARRAY_KIND_REF, ARRAY_KIND_U8,
-    HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY, HEAP_KIND_FREE, HEAP_KIND_OBJECT,
-    HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, HEAP_TYPE_ID_MASK, OBJECT_HEADER_SIZE,
-    STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
-    TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER, TRAP_KIND_BYTES, TRAP_KIND_STRING,
-    TRAP_PATH, TRAP_STRING_PARSE, TRAP_TRACE_OOM, TRAP_UTF8_INVALID, TRAP_NULL_DEREF,
-    TRAP_JSON_PARSE,
+    HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_HEADER_SIZE, HEAP_KIND_ARRAY, HEAP_KIND_ENUM,
+    HEAP_KIND_FREE, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
+    HEAP_TYPE_ID_MASK, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET,
+    TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS, TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO,
+    TRAP_HEAP_HEADER, TRAP_KIND_BYTES, TRAP_KIND_STRING, TRAP_PATH, TRAP_STRING_PARSE,
+    TRAP_TRACE_OOM, TRAP_UTF8_INVALID, TRAP_NULL_DEREF, TRAP_JSON_PARSE,
 };
 
 pub(super) fn emit_heap_runtime(
@@ -3550,6 +3550,28 @@ pub(super) fn emit_gc_layout_runtime(
     emitter.push_line("end");
     emitter.dedent();
     emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $kind");
+    emitter.push_line(format!("i32.const {HEAP_KIND_ENUM}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.load offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line(format!("i32.const {ARRAY_KIND_REF}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {HEAP_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("i64.load");
+    emitter.push_line("i32.wrap_i64");
+    emitter.push_line("call $bd_mark_push");
     emitter.dedent();
     emitter.push_line("end");
     emitter.dedent();

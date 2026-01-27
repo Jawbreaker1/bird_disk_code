@@ -11,6 +11,7 @@ pub(crate) enum Value {
     Void,
     Array { handle: HeapHandle, elem_type: Type },
     Object { handle: HeapHandle, book: String },
+    Enum { handle: HeapHandle, name: String },
 }
 
 impl Value {
@@ -18,7 +19,8 @@ impl Value {
         match self {
             Value::String(handle)
             | Value::Array { handle, .. }
-            | Value::Object { handle, .. } => Some(*handle),
+            | Value::Object { handle, .. }
+            | Value::Enum { handle, .. } => Some(*handle),
             _ => None,
         }
     }
@@ -33,6 +35,7 @@ pub(crate) fn value_type(value: &Value) -> Result<Type, RuntimeError> {
         Value::Void => Ok(Type::Void),
         Value::Array { elem_type, .. } => Ok(Type::Array(Box::new(elem_type.clone()))),
         Value::Object { book, .. } => Ok(Type::Book(book.clone())),
+        Value::Enum { name, .. } => Ok(Type::Book(name.clone())),
     }
 }
 
@@ -81,6 +84,13 @@ pub(crate) fn coerce_value(value: Value, expected: &Type) -> Result<Value, Runti
                     Ok(Value::Object { handle, book })
                 } else {
                     Err(runtime_error("E0400", "Expected book value."))
+                }
+            }
+            Value::Enum { handle, name } => {
+                if &name == expected {
+                    Ok(Value::Enum { handle, name })
+                } else {
+                    Err(runtime_error("E0400", "Expected enum value."))
                 }
             }
             _ => Err(runtime_error("E0400", "Expected book value.")),

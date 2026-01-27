@@ -1,0 +1,18 @@
+import std::string.
+
+enum Result:
+  case Ok(value: i64).
+  case Err(message: string).
+end
+
+rule main() -> i64:
+  set r: Result = Result::Err("nope").
+  match r:
+    case Result::Ok(value):
+      yield value.
+    case Result::Err(message):
+      yield std::string::len(message).
+    otherwise:
+      yield 0.
+  end
+end

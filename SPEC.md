@@ -4,8 +4,8 @@ This spec is intentionally small and strict.
 If something is not defined here, it is not part of v0.1.
 
 ## 1. Program structure
-A program is a sequence of top-level items: imports, book declarations, and
-function rules. Imports are top-level only.
+A program is a sequence of top-level items: imports, enum declarations, book
+declarations, and function rules. Imports are top-level only.
 
 Syntax:
 - `import std::module.`
@@ -21,7 +21,16 @@ Imported modules do not need a `main` rule and may contain only books or helper 
 - Non-stdlib imports map `::` segments to path segments ending in `.bd`.
 - Resolution order for non-stdlib modules:
   1) Relative to the entry file directory
-  2) Relative to the project root (nearest ancestor containing `stdlib/`)
+  2) Relative to the project root (manifest directory if `birddisk.json` exists, otherwise nearest ancestor containing `stdlib/`)
+  3) Dependency roots declared in `birddisk.json` (match the first segment of the import path)
+- `birddisk.json` (project manifest) fields:
+  - `name` (string)
+  - `version` (string)
+  - `entry` (path to the entry `.bd` file; defaults to `src/main.bd`)
+  - `deps` (map of module name → entry). Each entry is either a path string or an object:
+    `{ "path": "...", "version": "..." }`. Version is parsed but not used in v0.1.
+    For `import util::math.`, resolution uses `<deps.util>/math.bd`. A root import
+    `import util.` resolves to `<deps.util>/mod.bd` if present.
 - Imported functions are namespaced under their module path
   (e.g. `import app::util.` defines `app::util::foo`).
 - Book/type names are global in v0.1; avoid collisions across modules.
@@ -42,6 +51,23 @@ Built-in types:
 
 No implicit casts.
 No floats in v0.1.
+
+### 2.1 Enums
+Enums declare a closed set of variants. Variants may optionally carry a single payload.
+
+Syntax:
+```
+enum Result:
+  case Ok(value: i64).
+  case Err(message: string).
+end
+```
+
+Rules:
+- Enum names are global in v0.1 (avoid collisions with books).
+- Variants may have zero or one payload (name + type).
+- Construct variants using calls: `Result::Ok(1)` or `Result::Err("oops")`.
+- Zero-payload variants use an empty call: `Result::None()`.
 
 ## 3. Names, scope, and shadowing
 - Lexical, block-based scope.
@@ -141,6 +167,26 @@ Rules:
 - `try` executes the try-body; if a `throw` occurs, control jumps to `catch`.
 - `catch` binds the thrown message as `string` in a new lexical scope.
 - Only explicit `throw` is catchable in v0.x; runtime traps still abort.
+
+### 5.8 Match (`match/case/otherwise/end`)
+Syntax:
+```
+match expr:
+  case Result::Ok(value):
+    yield value.
+  case Result::Err(message):
+    yield 0.
+  otherwise:
+    yield 0.
+end
+```
+
+Rules:
+- `match` evaluates `expr` once.
+- `case` names must be `Enum::Variant` and may bind a payload name.
+- `otherwise` is required in v0.1.
+- Each case body is a new lexical scope; the bound name is available only inside its case.
+- Case bindings are only allowed when the variant carries a payload.
 
 ## 6. Expressions
 ### 6.1 Literals

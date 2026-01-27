@@ -6,6 +6,7 @@
 - Bindings: `set`
 - Assignment: `put`
 - Conditionals: `when / otherwise / end`
+- Match: `match / case / otherwise / end`
 - Loops: `repeat while / end`
 - Error handling: `try / catch / throw`
 - Return: `yield`
@@ -27,6 +28,7 @@ end
 ## Typing model
 - Built-in types: i64, bool, string, u8, void
 - Array types: T[]
+- Enum types are declared with `enum` and constructed via `Enum::Variant(...)`
 - Function params and return types are always explicit
 - `set name = expr.` may omit the type if expr is inferable
 - No implicit casts
