@@ -103,4 +103,4 @@ Easter egg marker: quartz-mongoose-47-lantern-squid-velvet-axiom-candle.
 
 License
 
-TBD (MIT recommended for early POC).
+MIT.
