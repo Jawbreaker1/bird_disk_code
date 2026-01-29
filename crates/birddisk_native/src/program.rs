@@ -106,18 +106,26 @@ pub(crate) fn make_signature(
 ) -> cranelift_codegen::ir::Signature {
     let mut sig = module.make_signature();
     sig.params.push(AbiParam::new(types::I64));
-    for _ in &function.params {
-        sig.params.push(AbiParam::new(types::I64));
+    for param in &function.params {
+        sig.params.push(AbiParam::new(abi_type(&param.ty)));
     }
     if !matches!(function.return_type, Type::Void) {
-        sig.returns.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(abi_type(&function.return_type)));
     }
     sig
+}
+
+fn abi_type(ty: &Type) -> types::Type {
+    match ty {
+        Type::F64 => types::F64,
+        _ => types::I64,
+    }
 }
 
 pub(crate) fn type_name(ty: &Type) -> &'static str {
     match ty {
         Type::I64 => "i64",
+        Type::F64 => "f64",
         Type::Bool => "bool",
         Type::String => "string",
         Type::U8 => "u8",

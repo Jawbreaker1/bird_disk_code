@@ -158,6 +158,7 @@ impl<'a> FuncCompiler<'a> {
     pub(super) fn emit_store(&mut self, ty: &Type) {
         match ty {
             Type::I64 => self.push_line("i64.store"),
+            Type::F64 => self.push_line("f64.store"),
             Type::U8 => self.push_line("i32.store8"),
             Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
                 debug_assert!(!matches!(ty, Type::Void));
@@ -169,6 +170,7 @@ impl<'a> FuncCompiler<'a> {
     pub(super) fn emit_field_store(&mut self, ty: &Type) {
         match ty {
             Type::I64 => self.push_line("i64.store"),
+            Type::F64 => self.push_line("f64.store"),
             Type::U8 | Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
                 debug_assert!(!matches!(ty, Type::Void));
                 self.push_line("i64.extend_i32_u");
@@ -180,6 +182,7 @@ impl<'a> FuncCompiler<'a> {
     pub(super) fn emit_load(&mut self, ty: &Type) {
         match ty {
             Type::I64 => self.push_line("i64.load"),
+            Type::F64 => self.push_line("f64.load"),
             Type::U8 => self.push_line("i32.load8_u"),
             Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
                 debug_assert!(!matches!(ty, Type::Void));
@@ -191,6 +194,7 @@ impl<'a> FuncCompiler<'a> {
     pub(super) fn emit_field_load(&mut self, ty: &Type) {
         match ty {
             Type::I64 => self.push_line("i64.load"),
+            Type::F64 => self.push_line("f64.load"),
             Type::U8 | Type::Bool | Type::String | Type::Void | Type::Array(_) | Type::Book(_) => {
                 debug_assert!(!matches!(ty, Type::Void));
                 self.push_line("i64.load");
@@ -205,6 +209,7 @@ impl<'a> FuncCompiler<'a> {
         self.push_line("i32.add");
         match ty {
             Type::I64 => self.push_line("i64.load"),
+            Type::F64 => self.push_line("f64.load"),
             Type::U8 | Type::Bool => self.push_line("i32.load8_u"),
             Type::String | Type::Array(_) | Type::Book(_) => {
                 self.push_line("i64.load");
@@ -252,6 +257,7 @@ impl<'a> FuncCompiler<'a> {
     pub(super) fn emit_default_value(&mut self, ty: &Type) -> Result<(), WasmError> {
         match ty {
             Type::I64 => self.push_line("i64.const 0"),
+            Type::F64 => self.push_line("f64.const 0"),
             Type::Bool => self.push_line("i32.const 0"),
             Type::String => {
                 self.emit_empty_string()?;

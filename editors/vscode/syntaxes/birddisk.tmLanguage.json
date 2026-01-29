@@ -41,6 +41,10 @@
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.float.birddisk",
+          "match": "\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
           "name": "constant.numeric.decimal.birddisk",
           "match": "\\b[0-9]+\\b"
         }
@@ -94,7 +98,7 @@
       "patterns": [
         {
           "name": "keyword.control.birddisk",
-          "match": "\\b(rule|set|put|yield|throw|try|catch|when|otherwise|repeat|while|match|case|end|import|book|enum|field|new)\\b"
+          "match": "\\b(rule|set|put|yield|throw|try|catch|when|otherwise|repeat|while|match|case|end|import|book|enum|field|new|as)\\b"
         }
       ]
     },
@@ -102,7 +106,7 @@
       "patterns": [
         {
           "name": "storage.type.birddisk",
-          "match": "\\b(i64|bool|string|u8)\\b"
+          "match": "\\b(i64|f64|bool|string|u8|void)\\b"
         }
       ]
     },

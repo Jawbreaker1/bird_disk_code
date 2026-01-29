@@ -17,6 +17,7 @@ Core syntax rules (must-follow)
 - `array(len)` requires an explicit array type, e.g. `set xs: i64[] = array(3).`
 - `::` is used for member access and module-qualified calls.
 - `try`/`catch` handles only explicit `throw "message"` (string).
+- Explicit casts use `expr as type` and are limited to `i64 <-> f64` in v0.1.
 
 LLM-safe workflow
 1) Generate code + tests (use `docs/COOKBOOK.md` patterns).

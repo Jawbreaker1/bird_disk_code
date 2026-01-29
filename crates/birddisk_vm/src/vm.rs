@@ -184,6 +184,7 @@ impl<'a> Vm<'a> {
         match value {
             Value::I64(value) => Ok(value),
             Value::Bool(_)
+            | Value::F64(_)
             | Value::String(_)
             | Value::U8(_)
             | Value::Void
@@ -552,6 +553,7 @@ impl<'a> Vm<'a> {
     pub(crate) fn eval_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         match &expr.kind {
             ExprKind::Int(value) => Ok(Value::I64(*value)),
+            ExprKind::Float(value) => Ok(Value::F64(*value)),
             ExprKind::Bool(value) => Ok(Value::Bool(*value)),
             ExprKind::String(value) => Ok(self.alloc_string(value)),
             ExprKind::Ident(name) => self.lookup(name).cloned().ok_or_else(|| {
@@ -658,10 +660,15 @@ impl<'a> Vm<'a> {
                 "array constructor requires explicit array type",
             )),
             ExprKind::Index { base, index } => self.eval_index_expr(base, index),
+            ExprKind::Cast { expr, ty } => {
+                let value = self.eval_expr(expr)?;
+                self.eval_cast(value, ty)
+            }
             ExprKind::Unary { op, expr } => {
                 let value = self.eval_expr(expr)?;
                 match (op, value) {
                     (UnaryOp::Neg, Value::I64(value)) => Ok(Value::I64(-value)),
+                    (UnaryOp::Neg, Value::F64(value)) => Ok(Value::F64(-value)),
                     (UnaryOp::Not, Value::Bool(value)) => Ok(Value::Bool(!value)),
                     _ => Err(runtime_error("E0400", "invalid unary operation")),
                 }
@@ -775,6 +782,7 @@ impl<'a> Vm<'a> {
     ) -> Result<Vec<u8>, RuntimeError> {
         match (ty, value) {
             (Type::I64, Value::I64(value)) => Ok(value.to_le_bytes().to_vec()),
+            (Type::F64, Value::F64(value)) => Ok(value.to_le_bytes().to_vec()),
             (Type::Bool, Value::Bool(value)) => Ok(vec![*value as u8]),
             (Type::U8, Value::U8(value)) => Ok(vec![*value]),
             (Type::String, Value::String(handle)) => {
@@ -807,6 +815,14 @@ impl<'a> Vm<'a> {
                     .get(0..8)
                     .ok_or_else(|| runtime_error("E0400", "Enum payload missing."))?;
                 Ok(Value::I64(i64::from_le_bytes(
+                    bytes.try_into().unwrap(),
+                )))
+            }
+            Type::F64 => {
+                let bytes = payload
+                    .get(0..8)
+                    .ok_or_else(|| runtime_error("E0400", "Enum payload missing."))?;
+                Ok(Value::F64(f64::from_le_bytes(
                     bytes.try_into().unwrap(),
                 )))
             }
@@ -914,6 +930,32 @@ impl<'a> Vm<'a> {
         }
     }
 
+    fn eval_cast(&self, value: Value, ty: &Type) -> Result<Value, RuntimeError> {
+        match (value, ty) {
+            (Value::I64(value), Type::I64) => Ok(Value::I64(value)),
+            (Value::F64(value), Type::F64) => Ok(Value::F64(value)),
+            (Value::I64(value), Type::F64) => Ok(Value::F64(value as f64)),
+            (Value::F64(value), Type::I64) => {
+                if !value.is_finite() {
+                    return Err(runtime_error(
+                        "E0400",
+                        "f64 to i64 conversion requires a finite value.",
+                    ));
+                }
+                let min = i64::MIN as f64;
+                let max = i64::MAX as f64;
+                if value < min || value > max {
+                    return Err(runtime_error(
+                        "E0400",
+                        "f64 to i64 conversion out of range.",
+                    ));
+                }
+                Ok(Value::I64(value.trunc() as i64))
+            }
+            _ => Err(runtime_error("E0400", "invalid cast")),
+        }
+    }
+
     fn eval_binary(
         &self,
         op: BinaryOp,
@@ -924,40 +966,79 @@ impl<'a> Vm<'a> {
             (BinaryOp::Add, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::I64(left + right))
             }
+            (BinaryOp::Add, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::F64(left + right))
+            }
             (BinaryOp::Sub, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::I64(left - right))
+            }
+            (BinaryOp::Sub, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::F64(left - right))
             }
             (BinaryOp::Mul, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::I64(left * right))
             }
+            (BinaryOp::Mul, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::F64(left * right))
+            }
             (BinaryOp::Div, Value::I64(_), Value::I64(0)) => {
+                Err(runtime_error("E0402", "division by zero"))
+            }
+            (BinaryOp::Div, Value::F64(_), Value::F64(right)) if right == 0.0 => {
                 Err(runtime_error("E0402", "division by zero"))
             }
             (BinaryOp::Mod, Value::I64(_), Value::I64(0)) => {
                 Err(runtime_error("E0402", "modulo by zero"))
             }
+            (BinaryOp::Mod, Value::F64(_), Value::F64(right)) if right == 0.0 => {
+                Err(runtime_error("E0402", "modulo by zero"))
+            }
             (BinaryOp::Div, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::I64(left / right))
+            }
+            (BinaryOp::Div, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::F64(left / right))
             }
             (BinaryOp::Mod, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::I64(left % right))
             }
+            (BinaryOp::Mod, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::F64(left % right))
+            }
             (BinaryOp::EqEq, Value::I64(left), Value::I64(right)) => {
+                Ok(Value::Bool(left == right))
+            }
+            (BinaryOp::EqEq, Value::F64(left), Value::F64(right)) => {
                 Ok(Value::Bool(left == right))
             }
             (BinaryOp::NotEq, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::Bool(left != right))
             }
+            (BinaryOp::NotEq, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::Bool(left != right))
+            }
             (BinaryOp::Lt, Value::I64(left), Value::I64(right)) => {
+                Ok(Value::Bool(left < right))
+            }
+            (BinaryOp::Lt, Value::F64(left), Value::F64(right)) => {
                 Ok(Value::Bool(left < right))
             }
             (BinaryOp::LtEq, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::Bool(left <= right))
             }
+            (BinaryOp::LtEq, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::Bool(left <= right))
+            }
             (BinaryOp::Gt, Value::I64(left), Value::I64(right)) => {
                 Ok(Value::Bool(left > right))
             }
+            (BinaryOp::Gt, Value::F64(left), Value::F64(right)) => {
+                Ok(Value::Bool(left > right))
+            }
             (BinaryOp::GtEq, Value::I64(left), Value::I64(right)) => {
+                Ok(Value::Bool(left >= right))
+            }
+            (BinaryOp::GtEq, Value::F64(left), Value::F64(right)) => {
                 Ok(Value::Bool(left >= right))
             }
             (BinaryOp::EqEq, Value::Bool(left), Value::Bool(right)) => {
@@ -1060,6 +1141,7 @@ impl<'a> Vm<'a> {
     fn default_value(&mut self, ty: &Type) -> Result<Value, RuntimeError> {
         match ty {
             Type::I64 => Ok(Value::I64(0)),
+            Type::F64 => Ok(Value::F64(0.0)),
             Type::Bool => Ok(Value::Bool(false)),
             Type::String => Ok(self.alloc_string("")),
             Type::U8 => Ok(Value::U8(0)),
@@ -1224,6 +1306,12 @@ impl<'a> Vm<'a> {
                 })?;
                 Value::I64(i64::from_le_bytes(bytes.try_into().unwrap()))
             }
+            ElemKind::F64 => {
+                let bytes = payload.get(offset..offset + 8).ok_or_else(|| {
+                    runtime_error("E0400", "Array payload out of bounds.")
+                })?;
+                Value::F64(f64::from_le_bytes(bytes.try_into().unwrap()))
+            }
             ElemKind::Bool => {
                 let byte = *payload.get(offset).ok_or_else(|| {
                     runtime_error("E0400", "Array payload out of bounds.")
@@ -1273,6 +1361,12 @@ impl<'a> Vm<'a> {
         let offset = index * elem_size(elem_kind);
         match (elem_kind, value) {
             (ElemKind::I64, Value::I64(value)) => {
+                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
+                    runtime_error("E0400", "Array payload out of bounds.")
+                })?;
+                target.copy_from_slice(&value.to_le_bytes());
+            }
+            (ElemKind::F64, Value::F64(value)) => {
                 let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
                     runtime_error("E0400", "Array payload out of bounds.")
                 })?;
@@ -1328,6 +1422,7 @@ impl<'a> Vm<'a> {
         let raw = u64::from_le_bytes(bytes.try_into().unwrap());
         match field_ty {
             Type::I64 => Ok(Value::I64(i64::from_le_bytes(bytes.try_into().unwrap()))),
+            Type::F64 => Ok(Value::F64(f64::from_le_bytes(bytes.try_into().unwrap()))),
             Type::Bool => Ok(Value::Bool(raw != 0)),
             Type::U8 => Ok(Value::U8(raw as u8)),
             Type::String | Type::Array(_) | Type::Book(_) => {
@@ -1357,6 +1452,12 @@ impl<'a> Vm<'a> {
         let offset = index * 8;
         match value {
             Value::I64(value) => {
+                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
+                    runtime_error("E0400", "Object payload out of bounds.")
+                })?;
+                target.copy_from_slice(&value.to_le_bytes());
+            }
+            Value::F64(value) => {
                 let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
                     runtime_error("E0400", "Object payload out of bounds.")
                 })?;
@@ -1582,6 +1683,7 @@ fn is_ref_type(ty: &Type) -> bool {
 fn elem_kind_for_type(ty: &Type) -> Result<ElemKind, RuntimeError> {
     match ty {
         Type::I64 => Ok(ElemKind::I64),
+        Type::F64 => Ok(ElemKind::F64),
         Type::Bool => Ok(ElemKind::Bool),
         Type::U8 => Ok(ElemKind::U8),
         Type::String | Type::Array(_) | Type::Book(_) => Ok(ElemKind::Ref),
@@ -1592,6 +1694,7 @@ fn elem_kind_for_type(ty: &Type) -> Result<ElemKind, RuntimeError> {
 fn elem_size(kind: ElemKind) -> usize {
     match kind {
         ElemKind::I64 => 8,
+        ElemKind::F64 => 8,
         ElemKind::Bool => 1,
         ElemKind::U8 => 1,
         ElemKind::Ref => 8,

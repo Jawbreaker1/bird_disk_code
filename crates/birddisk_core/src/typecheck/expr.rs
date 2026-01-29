@@ -6,6 +6,7 @@ impl<'a> Checker<'a> {
     pub(super) fn check_expr(&mut self, expr: &Expr) -> Ty {
         match &expr.kind {
             ExprKind::Int(_) => Ty::I64,
+            ExprKind::Float(_) => Ty::F64,
             ExprKind::Bool(_) => Ty::Bool,
             ExprKind::String(_) => Ty::String,
             ExprKind::Ident(name) => self.lookup(name).unwrap_or_else(|| {
@@ -48,11 +49,44 @@ impl<'a> Checker<'a> {
                 Ty::Unknown
             }
             ExprKind::Index { base, index } => self.check_index(expr.span, base, index),
+            ExprKind::Cast { expr: inner, ty } => {
+                let from_ty = self.check_expr(inner);
+                let to_ty = self.type_from_ast(ty.clone());
+                if from_ty == Ty::Unknown {
+                    return Ty::Unknown;
+                }
+                if from_ty == to_ty {
+                    return to_ty;
+                }
+                match (&from_ty, &to_ty) {
+                    (Ty::I64, Ty::F64) | (Ty::F64, Ty::I64) => to_ty,
+                    _ => {
+                        let message = format!(
+                            "Cannot cast from {} to {}.",
+                            from_ty.name(),
+                            to_ty.name()
+                        );
+                        self.diagnostics.push(diagnostic(
+                            "E0316",
+                            "error",
+                            message,
+                            self.file,
+                            expr.span,
+                            vec!["Only i64 <-> f64 casts are supported.".to_string()],
+                            vec!["SPEC.md#2-types".to_string()],
+                            Vec::new(),
+                            None,
+                        ));
+                        Ty::Unknown
+                    }
+                }
+            }
             ExprKind::Unary { op, expr: inner } => {
                 let inner_ty = self.check_expr(inner);
                 match op {
                     UnaryOp::Neg => match inner_ty {
                         Ty::I64 => Ty::I64,
+                        Ty::F64 => Ty::F64,
                         Ty::Unknown => Ty::Unknown,
                         other => {
                             self.diagnostics.push(type_mismatch(
@@ -674,26 +708,39 @@ impl<'a> Checker<'a> {
         }
 
         match op {
-            BinaryOp::Add
-            | BinaryOp::Sub
-            | BinaryOp::Mul
-            | BinaryOp::Div
-            | BinaryOp::Mod => {
-                if !self.check_binary_operands(Ty::I64, left, left_ty, right, right_ty) {
-                    return Ty::Unknown;
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => {
+                match (left_ty.clone(), right_ty.clone()) {
+                    (Ty::I64, Ty::I64) => Ty::I64,
+                    (Ty::F64, Ty::F64) => Ty::F64,
+                    _ => {
+                        self.check_binary_mismatch(left, left_ty, right, right_ty);
+                        Ty::Unknown
+                    }
                 }
-                Ty::I64
             }
-            BinaryOp::EqEq
-            | BinaryOp::NotEq
-            | BinaryOp::Lt
-            | BinaryOp::LtEq
-            | BinaryOp::Gt
-            | BinaryOp::GtEq => {
-                if !self.check_binary_operands(Ty::I64, left, left_ty, right, right_ty) {
-                    return Ty::Unknown;
+            BinaryOp::Mod => match (left_ty.clone(), right_ty.clone()) {
+                (Ty::I64, Ty::I64) => Ty::I64,
+                _ => {
+                    self.check_binary_mismatch(left, left_ty, right, right_ty);
+                    Ty::Unknown
                 }
-                Ty::Bool
+            },
+            BinaryOp::EqEq | BinaryOp::NotEq => match (left_ty.clone(), right_ty.clone()) {
+                (Ty::I64, Ty::I64) | (Ty::F64, Ty::F64) => Ty::Bool,
+                (Ty::Bool, Ty::Bool) => Ty::Bool,
+                _ => {
+                    self.check_binary_mismatch(left, left_ty, right, right_ty);
+                    Ty::Unknown
+                }
+            },
+            BinaryOp::Lt | BinaryOp::LtEq | BinaryOp::Gt | BinaryOp::GtEq => {
+                match (left_ty.clone(), right_ty.clone()) {
+                    (Ty::I64, Ty::I64) | (Ty::F64, Ty::F64) => Ty::Bool,
+                    _ => {
+                        self.check_binary_mismatch(left, left_ty, right, right_ty);
+                        Ty::Unknown
+                    }
+                }
             }
             BinaryOp::AndAnd | BinaryOp::OrOr => {
                 if !self.check_binary_operands(Ty::Bool, left, left_ty, right, right_ty) {
@@ -701,6 +748,15 @@ impl<'a> Checker<'a> {
                 }
                 Ty::Bool
             }
+        }
+    }
+
+    fn check_binary_mismatch(&mut self, left: &Expr, left_ty: Ty, right: &Expr, right_ty: Ty) {
+        if left_ty != Ty::Unknown && right_ty != Ty::Unknown && left_ty != right_ty {
+            self.diagnostics
+                .push(type_mismatch(self.file, right.span, left_ty.clone(), right_ty.clone()));
+            self.diagnostics
+                .push(type_mismatch(self.file, left.span, right_ty, left_ty));
         }
     }
 

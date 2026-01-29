@@ -495,6 +495,7 @@ impl<'a> FuncCompiler<'a> {
         let ret_local = self.temp_local(self.func.return_type.clone());
         match &self.func.return_type {
             Type::I64 => self.push_line("i64.const 0"),
+            Type::F64 => self.push_line("f64.const 0"),
             Type::Bool | Type::String | Type::U8 | Type::Array(_) | Type::Book(_) => {
                 self.push_line("i32.const 0")
             }

@@ -1,0 +1,11 @@
+rule main() -> i64:
+  set a: i64 = 5.
+  set b: f64 = a as f64.
+  set c: i64 = b as i64.
+  set d: i64 = (-2.7) as i64.
+  when c == 5 && d == -2:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

@@ -347,6 +347,35 @@ end
 ```
 See `examples/enum_result.bd` for a runnable file example.
 
+## 23) Floats (f64)
+```birddisk
+rule main() -> i64:
+  set a: f64 = 1.5.
+  set b: f64 = 2.25.
+  set c: f64 = a + b.
+  when c == 3.75:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+See `tests/floats/float_basic.bd` for a runnable file example.
+
+## 24) Explicit casts (i64 <-> f64)
+```birddisk
+rule main() -> i64:
+  set a: i64 = 5.
+  set b: f64 = a as f64.
+  set c: i64 = b as i64.
+  when c == 5:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+
 ---
 
 Notes:

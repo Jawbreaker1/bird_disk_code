@@ -43,6 +43,7 @@ Imported modules do not need a `main` rule and may contain only books or helper 
 ## 2. Types
 Built-in types:
 - `i64`
+- `f64`
 - `bool`
 - `string`
 - `u8` (unsigned 8-bit integer, 0..255)
@@ -50,7 +51,8 @@ Built-in types:
 - `T[]` array type (where `T` is a built-in type)
 
 No implicit casts.
-No floats in v0.1.
+Explicit casts use `expr as type` and are limited to `i64 <-> f64` in v0.1.
+Float literals use `digits "." digits` (e.g. `1.5`, `2.0`). Exponent notation is not supported in v0.1.
 
 ### 2.1 Enums
 Enums declare a closed set of variants. Variants may optionally carry a single payload.
@@ -200,21 +202,22 @@ Notes:
 An identifier expression resolves to the type of the bound name.
 
 ### 6.3 Unary operators
-- `-x` requires `x: i64` and returns `i64`
+- `-x` requires `x: i64` or `x: f64` and returns the same type
 - `!x` requires `x: bool` and returns `bool`
 
 ### 6.4 Binary operators
-Arithmetic (i64, i64 -> i64):
-- `+ - * / %`
+Arithmetic:
+- `i64` and `f64` use `+ - * /` (operands must match; result is same type)
+- `%` is `i64` only
 
-Comparison (i64, i64 -> bool):
-- `== != < <= > >=`
+Comparison:
+- `i64` or `f64` operands (matching types) use `== != < <= > >=`
+- `bool` supports `== !=`
 
 Boolean (bool, bool -> bool):
 - `&& ||`
 
 Notes:
-- `==` and `!=` are only defined for `i64` in v0.1 to keep things simple.
 - Division or modulo by zero is a runtime error.
 
 ### 6.5 Function calls

@@ -348,7 +348,8 @@ Acceptance:
 Implement (small slices, one per PR):
 - [x] Enums/variants (no generics yet; VM + WASM + native done)
 - [x] Pattern matching for enums (VM + WASM + native done)
-- [ ] Floats (f64) with explicit conversions
+- [x] Floats (f64) (no implicit casts)
+- [x] Explicit float conversions (i64 <-> f64)
 - [ ] Improved string/bytes APIs (slice, search, replace)
 
 Add tests:

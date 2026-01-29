@@ -319,6 +319,7 @@ impl Formatter {
 fn format_type(ty: &Type) -> String {
     match ty {
         Type::I64 => "i64".to_string(),
+        Type::F64 => "f64".to_string(),
         Type::Bool => "bool".to_string(),
         Type::String => "string".to_string(),
         Type::U8 => "u8".to_string(),
@@ -331,6 +332,7 @@ fn format_type(ty: &Type) -> String {
 fn format_expr(expr: &Expr, parent_prec: u8) -> String {
     match &expr.kind {
         ExprKind::Int(value) => value.to_string(),
+        ExprKind::Float(value) => format_float_literal(*value),
         ExprKind::Bool(value) => value.to_string(),
         ExprKind::String(value) => format!("\"{}\"", escape_string(value)),
         ExprKind::Ident(name) => name.clone(),
@@ -389,6 +391,15 @@ fn format_expr(expr: &Expr, parent_prec: u8) -> String {
                 format!("{op_str}{inner}")
             }
         }
+        ExprKind::Cast { expr, ty } => {
+            let inner = format_expr(expr, precedence_cast());
+            let rendered = format!("{inner} as {}", format_type(ty));
+            if precedence(expr) < precedence_cast() {
+                format!("({rendered})")
+            } else {
+                rendered
+            }
+        }
         ExprKind::Binary { left, op, right } => {
             let prec = precedence_op(*op);
             let left_s = format_expr(left, prec);
@@ -401,6 +412,14 @@ fn format_expr(expr: &Expr, parent_prec: u8) -> String {
             }
         }
     }
+}
+
+fn format_float_literal(value: f64) -> String {
+    let mut text = value.to_string();
+    if !text.contains('.') && !text.contains('e') && !text.contains('E') {
+        text.push_str(".0");
+    }
+    text
 }
 
 fn format_binary_op(op: BinaryOp) -> &'static str {
@@ -438,6 +457,7 @@ fn precedence(expr: &Expr) -> u8 {
     match &expr.kind {
         ExprKind::Binary { op, .. } => precedence_op(*op),
         ExprKind::Unary { .. } => precedence_unary(),
+        ExprKind::Cast { .. } => precedence_cast(),
         _ => precedence_primary(),
     }
 }
@@ -454,6 +474,10 @@ fn precedence_op(op: BinaryOp) -> u8 {
 }
 
 fn precedence_unary() -> u8 {
+    7
+}
+
+fn precedence_cast() -> u8 {
     7
 }
 

@@ -32,6 +32,7 @@ pub(crate) enum ElemKind {
     Bool = abi::ARRAY_KIND_BOOL as u8,
     U8 = abi::ARRAY_KIND_U8 as u8,
     Ref = abi::ARRAY_KIND_REF as u8,
+    F64 = abi::ARRAY_KIND_F64 as u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -471,7 +472,8 @@ mod tests {
                     if value == abi::ARRAY_KIND_I64
                         || value == abi::ARRAY_KIND_BOOL
                         || value == abi::ARRAY_KIND_U8
-                        || value == abi::ARRAY_KIND_REF =>
+                        || value == abi::ARRAY_KIND_REF
+                        || value == abi::ARRAY_KIND_F64 =>
                 {
                     Ok(())
                 }
@@ -489,7 +491,8 @@ mod tests {
                         || value == abi::ARRAY_KIND_I64
                         || value == abi::ARRAY_KIND_BOOL
                         || value == abi::ARRAY_KIND_U8
-                        || value == abi::ARRAY_KIND_REF =>
+                        || value == abi::ARRAY_KIND_REF
+                        || value == abi::ARRAY_KIND_F64 =>
                 {
                     Ok(())
                 }

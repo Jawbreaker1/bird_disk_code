@@ -71,6 +71,7 @@ pub struct Param {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     I64,
+    F64,
     Bool,
     String,
     U8,
@@ -159,6 +160,7 @@ pub struct Expr {
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     Int(i64),
+    Float(f64),
     Bool(bool),
     String(String),
     Ident(String),
@@ -169,6 +171,7 @@ pub enum ExprKind {
     ArrayNew { len: Box<Expr> },
     Index { base: Box<Expr>, index: Box<Expr> },
     Unary { op: UnaryOp, expr: Box<Expr> },
+    Cast { expr: Box<Expr>, ty: Type },
     Binary {
         left: Box<Expr>,
         op: BinaryOp,
@@ -176,9 +179,10 @@ pub enum ExprKind {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     I64(i64),
+    F64(f64),
     Bool(bool),
     String(String),
     U8(u8),

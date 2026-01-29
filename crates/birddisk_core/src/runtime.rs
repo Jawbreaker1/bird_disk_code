@@ -22,3 +22,4 @@ pub const ARRAY_KIND_I64: u32 = 1;
 pub const ARRAY_KIND_BOOL: u32 = 2;
 pub const ARRAY_KIND_U8: u32 = 3;
 pub const ARRAY_KIND_REF: u32 = 4;
+pub const ARRAY_KIND_F64: u32 = 5;

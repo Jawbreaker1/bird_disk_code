@@ -4,7 +4,8 @@ use crate::program::{type_name, BookLayout, EnumInfo, FunctionSig, stdlib_signat
 use crate::rt::RuntimeFuncs;
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, MatchCase, Stmt, Type, UnaryOp};
 use birddisk_core::runtime as abi;
-use cranelift_codegen::ir::condcodes::IntCC;
+use cranelift_codegen::ir::condcodes::{FloatCC, IntCC};
+use cranelift_codegen::ir::immediates::Ieee64;
 use cranelift_codegen::ir::{types, InstBuilder, Value};
 use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::{DataDescription, DataId, FuncId, Linkage, Module};
@@ -121,7 +122,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         let params: Vec<Value> = self.builder.block_params(entry).to_vec();
         for (index, param) in function.params.iter().enumerate() {
             let value = params[index + 1];
-            let var = self.new_var();
+            let var = self.new_var(&param.ty);
             self.builder.def_var(var, value);
             self.vars.insert(
                 param.name.clone(),
@@ -148,7 +149,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .get(name)
                     .ok_or_else(|| native_error(format!("missing type for '{name}'.")))?
                     .clone();
-                let var = self.new_var();
+                let var = self.new_var(&var_ty);
                 let value = self.emit_expr(expr, Some(&var_ty))?;
                 self.builder.def_var(var, value);
                 self.vars.insert(
@@ -394,6 +395,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     fn emit_expr(&mut self, expr: &Expr, expected: Option<&Type>) -> Result<Value, NativeError> {
         match &expr.kind {
             ExprKind::Int(value) => Ok(self.builder.ins().iconst(types::I64, *value)),
+            ExprKind::Float(value) => Ok(self
+                .builder
+                .ins()
+                .f64const(Ieee64::with_float(*value))),
             ExprKind::Bool(value) => {
                 let bit = if *value { 1 } else { 0 };
                 Ok(self.builder.ins().iconst(types::I64, bit))
@@ -407,6 +412,20 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .ok_or_else(|| native_error(format!("unknown name '{name}'.")))?;
                 Ok(self.builder.use_var(var.var))
             }
+            ExprKind::Cast { expr, ty } => {
+                let value = self.emit_expr(expr, None)?;
+                let from_ty = self.infer_expr_type(expr).unwrap_or(Type::I64);
+                match (&from_ty, ty) {
+                    (Type::I64, Type::F64) => {
+                        Ok(self.builder.ins().fcvt_from_sint(types::F64, value))
+                    }
+                    (Type::F64, Type::I64) => {
+                        Ok(self.builder.ins().fcvt_to_sint(types::I64, value))
+                    }
+                    (from, to) if from == to => Ok(value),
+                    _ => Err(native_error("invalid cast")),
+                }
+            }
             ExprKind::Call { name, args } => {
                 let value = self.emit_call(name, args, expected)?;
                 value.ok_or_else(|| native_error("void call cannot be used as expression."))
@@ -416,7 +435,14 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             ExprKind::Unary { op, expr } => {
                 let value = self.emit_expr(expr, None)?;
                 match op {
-                    UnaryOp::Neg => Ok(self.builder.ins().ineg(value)),
+                    UnaryOp::Neg => {
+                        let ty = self.infer_expr_type(expr).unwrap_or(Type::I64);
+                        if matches!(ty, Type::F64) {
+                            Ok(self.builder.ins().fneg(value))
+                        } else {
+                            Ok(self.builder.ins().ineg(value))
+                        }
+                    }
                     UnaryOp::Not => {
                         let cond = self.builder.ins().icmp_imm(IntCC::Equal, value, 0);
                         Ok(self.bool_to_i64(cond))
@@ -424,21 +450,36 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 }
             }
             ExprKind::Binary { left, op, right } => {
+                let left_ty = self.infer_expr_type(left).unwrap_or(Type::I64);
+                let right_ty = self.infer_expr_type(right).unwrap_or(Type::I64);
                 match op {
                     BinaryOp::Add
                     | BinaryOp::Sub
                     | BinaryOp::Mul
                     | BinaryOp::Div
                     | BinaryOp::Mod => {
-                        let left = self.emit_expr(left, None)?;
-                        let right = self.emit_expr(right, None)?;
-                        let value = match op {
-                            BinaryOp::Add => self.builder.ins().iadd(left, right),
-                            BinaryOp::Sub => self.builder.ins().isub(left, right),
-                            BinaryOp::Mul => self.builder.ins().imul(left, right),
-                            BinaryOp::Div => self.builder.ins().sdiv(left, right),
-                            BinaryOp::Mod => self.builder.ins().srem(left, right),
-                            _ => unreachable!(),
+                        let left_val = self.emit_expr(left, None)?;
+                        let right_val = self.emit_expr(right, None)?;
+                        let value = if matches!((&left_ty, &right_ty), (Type::F64, Type::F64)) {
+                            match op {
+                                BinaryOp::Add => self.builder.ins().fadd(left_val, right_val),
+                                BinaryOp::Sub => self.builder.ins().fsub(left_val, right_val),
+                                BinaryOp::Mul => self.builder.ins().fmul(left_val, right_val),
+                                BinaryOp::Div => self.builder.ins().fdiv(left_val, right_val),
+                                BinaryOp::Mod => {
+                                    return Err(native_error("mod is not supported for f64."));
+                                }
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            match op {
+                                BinaryOp::Add => self.builder.ins().iadd(left_val, right_val),
+                                BinaryOp::Sub => self.builder.ins().isub(left_val, right_val),
+                                BinaryOp::Mul => self.builder.ins().imul(left_val, right_val),
+                                BinaryOp::Div => self.builder.ins().sdiv(left_val, right_val),
+                                BinaryOp::Mod => self.builder.ins().srem(left_val, right_val),
+                                _ => unreachable!(),
+                            }
                         };
                         Ok(value)
                     }
@@ -448,26 +489,30 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     | BinaryOp::LtEq
                     | BinaryOp::Gt
                     | BinaryOp::GtEq => {
-                        let left = self.emit_expr(left, None)?;
-                        let right = self.emit_expr(right, None)?;
-                        let cond = match op {
-                            BinaryOp::EqEq => self.builder.ins().icmp(IntCC::Equal, left, right),
-                            BinaryOp::NotEq => {
-                                self.builder.ins().icmp(IntCC::NotEqual, left, right)
-                            }
-                            BinaryOp::Lt => self.builder.ins().icmp(IntCC::SignedLessThan, left, right),
-                            BinaryOp::LtEq => {
-                                self.builder
-                                    .ins()
-                                    .icmp(IntCC::SignedLessThanOrEqual, left, right)
-                            }
-                            BinaryOp::Gt => self.builder.ins().icmp(IntCC::SignedGreaterThan, left, right),
-                            BinaryOp::GtEq => {
-                                self.builder
-                                    .ins()
-                                    .icmp(IntCC::SignedGreaterThanOrEqual, left, right)
-                            }
-                            _ => unreachable!(),
+                        let left_val = self.emit_expr(left, None)?;
+                        let right_val = self.emit_expr(right, None)?;
+                        let cond = if matches!((&left_ty, &right_ty), (Type::F64, Type::F64)) {
+                            let cc = match op {
+                                BinaryOp::EqEq => FloatCC::Equal,
+                                BinaryOp::NotEq => FloatCC::NotEqual,
+                                BinaryOp::Lt => FloatCC::LessThan,
+                                BinaryOp::LtEq => FloatCC::LessThanOrEqual,
+                                BinaryOp::Gt => FloatCC::GreaterThan,
+                                BinaryOp::GtEq => FloatCC::GreaterThanOrEqual,
+                                _ => unreachable!(),
+                            };
+                            self.builder.ins().fcmp(cc, left_val, right_val)
+                        } else {
+                            let cc = match op {
+                                BinaryOp::EqEq => IntCC::Equal,
+                                BinaryOp::NotEq => IntCC::NotEqual,
+                                BinaryOp::Lt => IntCC::SignedLessThan,
+                                BinaryOp::LtEq => IntCC::SignedLessThanOrEqual,
+                                BinaryOp::Gt => IntCC::SignedGreaterThan,
+                                BinaryOp::GtEq => IntCC::SignedGreaterThanOrEqual,
+                                _ => unreachable!(),
+                            };
+                            self.builder.ins().icmp(cc, left_val, right_val)
                         };
                         Ok(self.bool_to_i64(cond))
                     }
@@ -984,7 +1029,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             &[self.rt_ptr, kind_val, size_val, len_val],
         );
         if elem_kind == abi::ARRAY_KIND_REF {
-            let idx_var = self.new_var();
+            let idx_var = self.new_var(&Type::I64);
             let zero = self.builder.ins().iconst(types::I64, 0);
             self.builder.def_var(idx_var, zero);
             let loop_block = self.builder.create_block();
@@ -1068,6 +1113,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     fn emit_default_value(&mut self, ty: &Type) -> Result<Value, NativeError> {
         match ty {
             Type::I64 => Ok(self.builder.ins().iconst(types::I64, 0)),
+            Type::F64 => Ok(self
+                .builder
+                .ins()
+                .f64const(Ieee64::with_float(0.0))),
             Type::Bool => Ok(self.builder.ins().iconst(types::I64, 0)),
             Type::U8 => Ok(self.builder.ins().iconst(types::I64, 0)),
             Type::String => self.emit_string_literal(""),
@@ -1137,6 +1186,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.array_get_i64,
                 &[self.rt_ptr, handle, index],
             )),
+            Type::F64 => Ok(self.call_runtime_value(
+                self.runtime.array_get_f64,
+                &[self.rt_ptr, handle, index],
+            )),
             Type::Bool => Ok(self.call_runtime_value(
                 self.runtime.array_get_bool,
                 &[self.rt_ptr, handle, index],
@@ -1163,6 +1216,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         match elem_ty {
             Type::I64 => self.call_runtime_void(
                 self.runtime.array_set_i64,
+                &[self.rt_ptr, handle, index, value],
+            ),
+            Type::F64 => self.call_runtime_void(
+                self.runtime.array_set_f64,
                 &[self.rt_ptr, handle, index, value],
             ),
             Type::Bool => self.call_runtime_void(
@@ -1356,6 +1413,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.enum_payload_i64,
                 &[self.rt_ptr, handle],
             ),
+            Type::F64 => self.call_runtime_value(
+                self.runtime.enum_payload_f64,
+                &[self.rt_ptr, handle],
+            ),
             Type::Bool => self.call_runtime_value(
                 self.runtime.enum_payload_bool,
                 &[self.rt_ptr, handle],
@@ -1382,6 +1443,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         match payload_ty {
             Type::I64 => self.call_runtime_void(
                 self.runtime.enum_set_payload_i64,
+                &[self.rt_ptr, handle, value],
+            ),
+            Type::F64 => self.call_runtime_void(
+                self.runtime.enum_set_payload_f64,
                 &[self.rt_ptr, handle, value],
             ),
             Type::Bool => self.call_runtime_void(
@@ -1412,6 +1477,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.object_get_i64,
                 &[self.rt_ptr, handle, index],
             )),
+            Type::F64 => Ok(self.call_runtime_value(
+                self.runtime.object_get_f64,
+                &[self.rt_ptr, handle, index],
+            )),
             Type::Bool => Ok(self.call_runtime_value(
                 self.runtime.object_get_bool,
                 &[self.rt_ptr, handle, index],
@@ -1438,6 +1507,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         match field_ty {
             Type::I64 => self.call_runtime_void(
                 self.runtime.object_set_i64,
+                &[self.rt_ptr, handle, index, value],
+            ),
+            Type::F64 => self.call_runtime_void(
+                self.runtime.object_set_f64,
                 &[self.rt_ptr, handle, index, value],
             ),
             Type::Bool => self.call_runtime_void(
@@ -1480,7 +1553,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         if matches!(self.return_type, Type::Void) {
             self.builder.ins().return_(&[]);
         } else {
-            let zero = self.builder.ins().iconst(types::I64, 0);
+            let zero = match self.return_type {
+                Type::F64 => self.builder.ins().f64const(Ieee64::with_float(0.0)),
+                _ => self.builder.ins().iconst(types::I64, 0),
+            };
             self.builder.ins().return_(&[zero]);
         }
         self.builder.seal_block(self.error_block);
@@ -1565,7 +1641,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 )));
             }
         }
-        let var = self.new_var();
+        let var = self.new_var(&ty);
         self.builder.def_var(var, value);
         self.vars.insert(
             name.to_string(),
@@ -1581,6 +1657,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     fn infer_expr_type(&self, expr: &Expr) -> Option<Type> {
         match &expr.kind {
             ExprKind::Int(_) => Some(Type::I64),
+            ExprKind::Float(_) => Some(Type::F64),
             ExprKind::Bool(_) => Some(Type::Bool),
             ExprKind::String(_) => Some(Type::String),
             ExprKind::Ident(name) => self
@@ -1625,21 +1702,31 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 UnaryOp::Neg => self.infer_expr_type(expr),
                 UnaryOp::Not => Some(Type::Bool),
             },
-            ExprKind::Binary { op, .. } => match op {
-                BinaryOp::Add
-                | BinaryOp::Sub
-                | BinaryOp::Mul
-                | BinaryOp::Div
-                | BinaryOp::Mod => Some(Type::I64),
-                BinaryOp::EqEq
-                | BinaryOp::NotEq
-                | BinaryOp::Lt
-                | BinaryOp::LtEq
-                | BinaryOp::Gt
-                | BinaryOp::GtEq
-                | BinaryOp::AndAnd
-                | BinaryOp::OrOr => Some(Type::Bool),
-            },
+            ExprKind::Binary { op, left, right } => {
+                let left_ty = self.infer_expr_type(left);
+                let right_ty = self.infer_expr_type(right);
+                match op {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Mod => {
+                        if matches!((left_ty.as_ref(), right_ty.as_ref()), (Some(Type::F64), Some(Type::F64))) {
+                            Some(Type::F64)
+                        } else {
+                            Some(Type::I64)
+                        }
+                    }
+                    BinaryOp::EqEq
+                    | BinaryOp::NotEq
+                    | BinaryOp::Lt
+                    | BinaryOp::LtEq
+                    | BinaryOp::Gt
+                    | BinaryOp::GtEq
+                    | BinaryOp::AndAnd
+                    | BinaryOp::OrOr => Some(Type::Bool),
+                }
+            }
             ExprKind::ArrayLit(elements) => {
                 if elements.is_empty() {
                     None
@@ -1674,10 +1761,17 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         }
     }
 
-    fn new_var(&mut self) -> Variable {
+    fn new_var(&mut self, ty: &Type) -> Variable {
         let var = Variable::from_u32(self.next_var);
         self.next_var += 1;
-        self.builder.declare_var(var, types::I64);
+        self.builder.declare_var(var, clif_type(ty));
         var
+    }
+}
+
+fn clif_type(ty: &Type) -> types::Type {
+    match ty {
+        Type::F64 => types::F64,
+        _ => types::I64,
     }
 }

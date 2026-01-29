@@ -48,6 +48,7 @@ pub(crate) const ARRAY_KIND_I64: i32 = abi::ARRAY_KIND_I64 as i32;
 pub(crate) const ARRAY_KIND_BOOL: i32 = abi::ARRAY_KIND_BOOL as i32;
 pub(crate) const ARRAY_KIND_U8: i32 = abi::ARRAY_KIND_U8 as i32;
 pub(crate) const ARRAY_KIND_REF: i32 = abi::ARRAY_KIND_REF as i32;
+pub(crate) const ARRAY_KIND_F64: i32 = abi::ARRAY_KIND_F64 as i32;
 pub(crate) const TRAP_ARRAY_OOB: i32 = 403;
 pub(crate) const TRAP_ARRAY_LEN_NEG: i32 = 400;
 pub(crate) const TRAP_ARRAY_OOM: i32 = 405;

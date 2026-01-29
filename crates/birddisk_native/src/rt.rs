@@ -19,6 +19,8 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) alloc_enum: FuncId,
     pub(crate) array_get_i64: FuncId,
     pub(crate) array_set_i64: FuncId,
+    pub(crate) array_get_f64: FuncId,
+    pub(crate) array_set_f64: FuncId,
     pub(crate) array_get_bool: FuncId,
     pub(crate) array_set_bool: FuncId,
     pub(crate) array_get_u8: FuncId,
@@ -28,6 +30,8 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) alloc_object: FuncId,
     pub(crate) object_get_i64: FuncId,
     pub(crate) object_set_i64: FuncId,
+    pub(crate) object_get_f64: FuncId,
+    pub(crate) object_set_f64: FuncId,
     pub(crate) object_get_bool: FuncId,
     pub(crate) object_set_bool: FuncId,
     pub(crate) object_get_u8: FuncId,
@@ -36,10 +40,12 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) object_set_ref: FuncId,
     pub(crate) enum_variant: FuncId,
     pub(crate) enum_payload_i64: FuncId,
+    pub(crate) enum_payload_f64: FuncId,
     pub(crate) enum_payload_bool: FuncId,
     pub(crate) enum_payload_u8: FuncId,
     pub(crate) enum_payload_ref: FuncId,
     pub(crate) enum_set_payload_i64: FuncId,
+    pub(crate) enum_set_payload_f64: FuncId,
     pub(crate) enum_set_payload_bool: FuncId,
     pub(crate) enum_set_payload_u8: FuncId,
     pub(crate) enum_set_payload_ref: FuncId,
@@ -136,6 +142,18 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64, types::I64],
             &[],
         )?;
+        let array_get_f64 = declare_runtime_func(
+            module,
+            "bd_array_get_f64",
+            &[types::I64, types::I64, types::I64],
+            &[types::F64],
+        )?;
+        let array_set_f64 = declare_runtime_func(
+            module,
+            "bd_array_set_f64",
+            &[types::I64, types::I64, types::I64, types::F64],
+            &[],
+        )?;
         let array_get_bool = declare_runtime_func(
             module,
             "bd_array_get_bool",
@@ -190,6 +208,18 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64, types::I64],
             &[],
         )?;
+        let object_get_f64 = declare_runtime_func(
+            module,
+            "bd_object_get_f64",
+            &[types::I64, types::I64, types::I64],
+            &[types::F64],
+        )?;
+        let object_set_f64 = declare_runtime_func(
+            module,
+            "bd_object_set_f64",
+            &[types::I64, types::I64, types::I64, types::F64],
+            &[],
+        )?;
         let object_get_bool = declare_runtime_func(
             module,
             "bd_object_get_bool",
@@ -238,6 +268,12 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
+        let enum_payload_f64 = declare_runtime_func(
+            module,
+            "bd_enum_payload_f64",
+            &[types::I64, types::I64],
+            &[types::F64],
+        )?;
         let enum_payload_bool = declare_runtime_func(
             module,
             "bd_enum_payload_bool",
@@ -260,6 +296,12 @@ impl RuntimeFuncs {
             module,
             "bd_enum_set_payload_i64",
             &[types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let enum_set_payload_f64 = declare_runtime_func(
+            module,
+            "bd_enum_set_payload_f64",
+            &[types::I64, types::I64, types::F64],
             &[],
         )?;
         let enum_set_payload_bool = declare_runtime_func(
@@ -480,6 +522,8 @@ impl RuntimeFuncs {
             alloc_enum,
             array_get_i64,
             array_set_i64,
+            array_get_f64,
+            array_set_f64,
             array_get_bool,
             array_set_bool,
             array_get_u8,
@@ -489,6 +533,8 @@ impl RuntimeFuncs {
             alloc_object,
             object_get_i64,
             object_set_i64,
+            object_get_f64,
+            object_set_f64,
             object_get_bool,
             object_set_bool,
             object_get_u8,
@@ -497,10 +543,12 @@ impl RuntimeFuncs {
             object_set_ref,
             enum_variant,
             enum_payload_i64,
+            enum_payload_f64,
             enum_payload_bool,
             enum_payload_u8,
             enum_payload_ref,
             enum_set_payload_i64,
+            enum_set_payload_f64,
             enum_set_payload_bool,
             enum_set_payload_u8,
             enum_set_payload_ref,

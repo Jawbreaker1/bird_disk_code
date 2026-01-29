@@ -5,6 +5,7 @@ use birddisk_core::ast::Type;
 #[derive(Debug, Clone)]
 pub(crate) enum Value {
     I64(i64),
+    F64(f64),
     Bool(bool),
     String(HeapHandle),
     U8(u8),
@@ -29,6 +30,7 @@ impl Value {
 pub(crate) fn value_type(value: &Value) -> Result<Type, RuntimeError> {
     match value {
         Value::I64(_) => Ok(Type::I64),
+        Value::F64(_) => Ok(Type::F64),
         Value::Bool(_) => Ok(Type::Bool),
         Value::String(_) => Ok(Type::String),
         Value::U8(_) => Ok(Type::U8),
@@ -44,6 +46,10 @@ pub(crate) fn coerce_value(value: Value, expected: &Type) -> Result<Value, Runti
         Type::I64 => match value {
             Value::I64(value) => Ok(Value::I64(value)),
             _ => Err(runtime_error("E0400", "Expected i64 value.")),
+        },
+        Type::F64 => match value {
+            Value::F64(value) => Ok(Value::F64(value)),
+            _ => Err(runtime_error("E0400", "Expected f64 value.")),
         },
         Type::Bool => match value {
             Value::Bool(value) => Ok(Value::Bool(value)),

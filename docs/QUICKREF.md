@@ -26,12 +26,14 @@ end
 ```
 
 ## Typing model
-- Built-in types: i64, bool, string, u8, void
+- Built-in types: i64, f64, bool, string, u8, void
 - Array types: T[]
 - Enum types are declared with `enum` and constructed via `Enum::Variant(...)`
 - Function params and return types are always explicit
 - `set name = expr.` may omit the type if expr is inferable
 - No implicit casts
+- Explicit casts use `expr as type` (i64 <-> f64 only)
+- Float literals use `digits "." digits` (e.g. `1.5`, `2.0`)
 - stdlib string ops live in `std::string` (import required)
 - byte helpers live in `std::bytes` (import required)
 - `std::string::from_bytes(u8[])` validates UTF-8 and returns a string

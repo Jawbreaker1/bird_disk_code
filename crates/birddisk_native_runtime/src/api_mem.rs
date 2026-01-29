@@ -366,6 +366,77 @@ pub extern "C-unwind" fn bd_array_set_i64(
 }
 
 #[no_mangle]
+pub extern "C-unwind" fn bd_array_get_f64(rt: *mut Runtime, handle: u64, index: i64) -> f64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0.0;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let header = match array_header(rt, handle, ElemKind::F64) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let idx = match array_index(rt, header.len_or_size as usize, index) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let offset = idx * elem_size(ElemKind::F64);
+    let payload = match heap_payload(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let bytes = match payload.get(offset..offset + 8) {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "Array payload out of bounds.");
+            return 0.0;
+        }
+    };
+    f64::from_le_bytes(bytes.try_into().unwrap())
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_array_set_f64(
+    rt: *mut Runtime,
+    handle: u64,
+    index: i64,
+    value: f64,
+) {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let header = match array_header(rt, handle, ElemKind::F64) {
+        Some(value) => value,
+        None => return,
+    };
+    let idx = match array_index(rt, header.len_or_size as usize, index) {
+        Some(value) => value,
+        None => return,
+    };
+    let offset = idx * elem_size(ElemKind::F64);
+    let payload = match heap_payload_mut(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let target = match payload.get_mut(offset..offset + 8) {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "Array payload out of bounds.");
+            return;
+        }
+    };
+    target.copy_from_slice(&value.to_le_bytes());
+}
+
+#[no_mangle]
 pub extern "C-unwind" fn bd_array_get_bool(rt: *mut Runtime, handle: u64, index: i64) -> i64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
@@ -667,6 +738,38 @@ pub extern "C-unwind" fn bd_enum_payload_i64(rt: *mut Runtime, handle: u64) -> i
 }
 
 #[no_mangle]
+pub extern "C-unwind" fn bd_enum_payload_f64(rt: *mut Runtime, handle: u64) -> f64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0.0;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let header = match enum_header(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    if header.aux != ElemKind::F64 as u32 {
+        runtime_error(rt, "Enum payload type mismatch.");
+        return 0.0;
+    }
+    let payload = match heap_payload(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let bytes = match payload.get(0..8) {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "Enum payload missing.");
+            return 0.0;
+        }
+    };
+    f64::from_le_bytes(bytes.try_into().unwrap())
+}
+
+#[no_mangle]
 pub extern "C-unwind" fn bd_enum_payload_bool(rt: *mut Runtime, handle: u64) -> i64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
@@ -786,6 +889,42 @@ pub extern "C-unwind" fn bd_enum_set_payload_i64(
         None => return,
     };
     if header.aux != ElemKind::I64 as u32 {
+        runtime_error(rt, "Enum payload type mismatch.");
+        return;
+    }
+    let payload = match heap_payload_mut(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let slot = match payload.get_mut(0..8) {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "Enum payload missing.");
+            return;
+        }
+    };
+    slot.copy_from_slice(&value.to_le_bytes());
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_enum_set_payload_f64(
+    rt: *mut Runtime,
+    handle: u64,
+    value: f64,
+) {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let header = match enum_header(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    if header.aux != ElemKind::F64 as u32 {
         runtime_error(rt, "Enum payload type mismatch.");
         return;
     }
@@ -971,6 +1110,77 @@ pub extern "C-unwind" fn bd_object_set_i64(
     handle: u64,
     index: i64,
     value: i64,
+) {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let header = match object_header(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let idx = match object_index(rt, header.len_or_size as usize, index) {
+        Some(value) => value,
+        None => return,
+    };
+    let offset = idx * abi::OBJECT_FIELD_SIZE as usize;
+    let payload = match heap_payload_mut(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let target = match payload.get_mut(offset..offset + 8) {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "Object payload out of bounds.");
+            return;
+        }
+    };
+    target.copy_from_slice(&value.to_le_bytes());
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_object_get_f64(rt: *mut Runtime, handle: u64, index: i64) -> f64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0.0;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let header = match object_header(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let idx = match object_index(rt, header.len_or_size as usize, index) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let offset = idx * abi::OBJECT_FIELD_SIZE as usize;
+    let payload = match heap_payload(rt, handle) {
+        Some(value) => value,
+        None => return 0.0,
+    };
+    let bytes = match payload.get(offset..offset + 8) {
+        Some(value) => value,
+        None => {
+            runtime_error(rt, "Object payload out of bounds.");
+            return 0.0;
+        }
+    };
+    f64::from_le_bytes(bytes.try_into().unwrap())
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_object_set_f64(
+    rt: *mut Runtime,
+    handle: u64,
+    index: i64,
+    value: f64,
 ) {
     let rt = runtime_mut(rt);
     if rt.has_error() {

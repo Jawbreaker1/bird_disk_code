@@ -19,6 +19,8 @@
 - Strings + std::string (VM + WASM + native)
 - try/catch/throw error handling (VM + WASM + native)
 - u8 + std::bytes + std::string::bytes (VM + WASM + native)
+- f64 floats (VM + WASM + native)
+- explicit i64 <-> f64 casts (`as`)
 - std::io (VM + WASM + native)
 - std::time (VM + WASM + native)
 - std::fs (VM + WASM + native)

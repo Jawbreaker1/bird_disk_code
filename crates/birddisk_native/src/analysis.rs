@@ -120,6 +120,7 @@ pub(crate) fn infer_expr_type(
 ) -> Option<Type> {
     match &expr.kind {
         ExprKind::Int(_) => Some(Type::I64),
+        ExprKind::Float(_) => Some(Type::F64),
         ExprKind::Bool(_) => Some(Type::Bool),
         ExprKind::String(_) => Some(Type::String),
         ExprKind::Ident(name) => locals.get(name).cloned(),
@@ -156,21 +157,32 @@ pub(crate) fn infer_expr_type(
             UnaryOp::Neg => infer_expr_type(expr, locals, functions, books, enums),
             UnaryOp::Not => Some(Type::Bool),
         },
-        ExprKind::Binary { op, .. } => match op {
-            BinaryOp::Add
-            | BinaryOp::Sub
-            | BinaryOp::Mul
-            | BinaryOp::Div
-            | BinaryOp::Mod => Some(Type::I64),
-            BinaryOp::EqEq
-            | BinaryOp::NotEq
-            | BinaryOp::Lt
-            | BinaryOp::LtEq
-            | BinaryOp::Gt
-            | BinaryOp::GtEq
-            | BinaryOp::AndAnd
-            | BinaryOp::OrOr => Some(Type::Bool),
-        },
+        ExprKind::Cast { ty, .. } => Some(ty.clone()),
+        ExprKind::Binary { op, left, right } => {
+            let left_ty = infer_expr_type(left, locals, functions, books, enums);
+            let right_ty = infer_expr_type(right, locals, functions, books, enums);
+            match op {
+                BinaryOp::Add
+                | BinaryOp::Sub
+                | BinaryOp::Mul
+                | BinaryOp::Div
+                | BinaryOp::Mod => {
+                    if matches!((left_ty.as_ref(), right_ty.as_ref()), (Some(Type::F64), Some(Type::F64))) {
+                        Some(Type::F64)
+                    } else {
+                        Some(Type::I64)
+                    }
+                }
+                BinaryOp::EqEq
+                | BinaryOp::NotEq
+                | BinaryOp::Lt
+                | BinaryOp::LtEq
+                | BinaryOp::Gt
+                | BinaryOp::GtEq
+                | BinaryOp::AndAnd
+                | BinaryOp::OrOr => Some(Type::Bool),
+            }
+        }
         ExprKind::ArrayLit(elements) => {
             if elements.is_empty() {
                 None
@@ -225,6 +237,7 @@ pub(crate) fn is_ref_type(ty: &Type) -> bool {
 pub(crate) fn elem_kind_for_type(ty: &Type) -> Result<u32, NativeError> {
     match ty {
         Type::I64 => Ok(abi::ARRAY_KIND_I64),
+        Type::F64 => Ok(abi::ARRAY_KIND_F64),
         Type::Bool => Ok(abi::ARRAY_KIND_BOOL),
         Type::U8 => Ok(abi::ARRAY_KIND_U8),
         Type::String | Type::Array(_) | Type::Book(_) => Ok(abi::ARRAY_KIND_REF),
@@ -235,6 +248,7 @@ pub(crate) fn elem_kind_for_type(ty: &Type) -> Result<u32, NativeError> {
 pub(crate) fn elem_size_for_kind(kind: u32) -> Result<u32, NativeError> {
     match kind {
         value if value == abi::ARRAY_KIND_I64 => Ok(8),
+        value if value == abi::ARRAY_KIND_F64 => Ok(8),
         value if value == abi::ARRAY_KIND_BOOL => Ok(1),
         value if value == abi::ARRAY_KIND_U8 => Ok(1),
         value if value == abi::ARRAY_KIND_REF => Ok(8),

@@ -540,6 +540,10 @@ impl<'a> Parser<'a> {
                 self.bump();
                 Type::I64
             }
+            TokenKind::TypeF64 => {
+                self.bump();
+                Type::F64
+            }
             TokenKind::TypeBool => {
                 self.bump();
                 Type::Bool
@@ -1165,6 +1169,13 @@ impl<'a> Parser<'a> {
                     span: token.span,
                 })
             }
+            TokenKind::FloatLit(value) => {
+                let token = self.bump();
+                Ok(Expr {
+                    kind: ExprKind::Float(value),
+                    span: token.span,
+                })
+            }
             TokenKind::BoolLit(value) => {
                 let token = self.bump();
                 Ok(Expr {
@@ -1389,6 +1400,17 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
+            } else if matches!(self.peek_kind(), TokenKind::As) {
+                self.bump();
+                let ty = self.parse_type("Expected type after 'as'.")?;
+                let span = Span::new(expr.span.start, self.previous_span_end());
+                expr = Expr {
+                    kind: ExprKind::Cast {
+                        expr: Box::new(expr),
+                        ty,
+                    },
+                    span,
+                };
             } else {
                 break;
             }
@@ -1567,6 +1589,10 @@ impl<'a> Parser<'a> {
             TokenKind::TypeI64 => {
                 let token = self.bump();
                 Ok(("i64".to_string(), token.span))
+            }
+            TokenKind::TypeF64 => {
+                let token = self.bump();
+                Ok(("f64".to_string(), token.span))
             }
             TokenKind::TypeBool => {
                 let token = self.bump();

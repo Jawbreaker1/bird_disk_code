@@ -21,6 +21,9 @@ impl<'a> FuncCompiler<'a> {
                     self.push_line(format!("i64.const {value}"));
                 }
             }
+            ExprKind::Float(value) => {
+                self.push_line(format!("f64.const {}", format_f64(*value)));
+            }
             ExprKind::Bool(value) => {
                 let bit = if *value { 1 } else { 0 };
                 self.push_line(format!("i32.const {bit}"));
@@ -234,11 +237,36 @@ impl<'a> FuncCompiler<'a> {
             ExprKind::ArrayLit(elements) => self.emit_array_literal(elements, expected)?,
             ExprKind::ArrayNew { len } => self.emit_array_new(len, expected)?,
             ExprKind::Index { base, index } => self.emit_index_expr(base, index)?,
+            ExprKind::Cast { expr, ty } => {
+                let from_ty = self.infer_expr_type(expr)?;
+                let to_ty = ty.clone();
+                self.emit_expr(expr, None)?;
+                match (from_ty, &to_ty) {
+                    (Type::I64, Type::F64) => self.push_line("f64.convert_i64_s"),
+                    (Type::F64, Type::I64) => self.push_line("i64.trunc_f64_s"),
+                    (from, to) if from == *to => {}
+                    (from, to) => {
+                        return Err(wasm_error(
+                            "E0400",
+                            format!("Cannot cast from {from:?} to {to:?}."),
+                        ));
+                    }
+                }
+            }
             ExprKind::Unary { op, expr } => match op {
                 UnaryOp::Neg => {
-                    self.push_line("i64.const 0");
-                    self.emit_expr(expr, None)?;
-                    self.push_line("i64.sub");
+                    let expr_ty = self.infer_expr_type(expr)?;
+                    match expr_ty {
+                        Type::F64 => {
+                            self.emit_expr(expr, None)?;
+                            self.push_line("f64.neg");
+                        }
+                        _ => {
+                            self.push_line("i64.const 0");
+                            self.emit_expr(expr, None)?;
+                            self.push_line("i64.sub");
+                        }
+                    }
                 }
                 UnaryOp::Not => {
                     self.emit_expr(expr, None)?;
@@ -246,22 +274,35 @@ impl<'a> FuncCompiler<'a> {
                 }
             },
             ExprKind::Binary { left, op, right } => {
+                let left_ty = self.infer_expr_type(left)?;
+                let right_ty = self.infer_expr_type(right)?;
                 self.emit_expr(left, None)?;
                 self.emit_expr(right, None)?;
-                let instr = match op {
-                    BinaryOp::Add => "i64.add",
-                    BinaryOp::Sub => "i64.sub",
-                    BinaryOp::Mul => "i64.mul",
-                    BinaryOp::Div => "i64.div_s",
-                    BinaryOp::Mod => "i64.rem_s",
-                    BinaryOp::EqEq => "i64.eq",
-                    BinaryOp::NotEq => "i64.ne",
-                    BinaryOp::Lt => "i64.lt_s",
-                    BinaryOp::LtEq => "i64.le_s",
-                    BinaryOp::Gt => "i64.gt_s",
-                    BinaryOp::GtEq => "i64.ge_s",
-                    BinaryOp::AndAnd => "i32.and",
-                    BinaryOp::OrOr => "i32.or",
+                let instr = match (op, left_ty, right_ty) {
+                    (BinaryOp::Add, Type::F64, Type::F64) => "f64.add",
+                    (BinaryOp::Sub, Type::F64, Type::F64) => "f64.sub",
+                    (BinaryOp::Mul, Type::F64, Type::F64) => "f64.mul",
+                    (BinaryOp::Div, Type::F64, Type::F64) => "f64.div",
+                    (BinaryOp::Mod, Type::F64, Type::F64) => "f64.rem",
+                    (BinaryOp::EqEq, Type::F64, Type::F64) => "f64.eq",
+                    (BinaryOp::NotEq, Type::F64, Type::F64) => "f64.ne",
+                    (BinaryOp::Lt, Type::F64, Type::F64) => "f64.lt",
+                    (BinaryOp::LtEq, Type::F64, Type::F64) => "f64.le",
+                    (BinaryOp::Gt, Type::F64, Type::F64) => "f64.gt",
+                    (BinaryOp::GtEq, Type::F64, Type::F64) => "f64.ge",
+                    (BinaryOp::Add, _, _) => "i64.add",
+                    (BinaryOp::Sub, _, _) => "i64.sub",
+                    (BinaryOp::Mul, _, _) => "i64.mul",
+                    (BinaryOp::Div, _, _) => "i64.div_s",
+                    (BinaryOp::Mod, _, _) => "i64.rem_s",
+                    (BinaryOp::EqEq, _, _) => "i64.eq",
+                    (BinaryOp::NotEq, _, _) => "i64.ne",
+                    (BinaryOp::Lt, _, _) => "i64.lt_s",
+                    (BinaryOp::LtEq, _, _) => "i64.le_s",
+                    (BinaryOp::Gt, _, _) => "i64.gt_s",
+                    (BinaryOp::GtEq, _, _) => "i64.ge_s",
+                    (BinaryOp::AndAnd, _, _) => "i32.and",
+                    (BinaryOp::OrOr, _, _) => "i32.or",
                 };
                 self.push_line(instr);
             }
@@ -476,6 +517,9 @@ impl<'a> FuncCompiler<'a> {
             match payload_ty {
                 Type::I64 => {
                     self.push_line("i64.store");
+                }
+                Type::F64 => {
+                    self.push_line("f64.store");
                 }
                 Type::U8 | Type::Bool => {
                     self.push_line("i32.store8");
@@ -1029,6 +1073,7 @@ impl<'a> FuncCompiler<'a> {
     pub(super) fn infer_expr_type(&self, expr: &Expr) -> Result<Type, WasmError> {
         match &expr.kind {
             ExprKind::Int(_) => Ok(Type::I64),
+            ExprKind::Float(_) => Ok(Type::F64),
             ExprKind::Bool(_) => Ok(Type::Bool),
             ExprKind::String(_) => Ok(Type::String),
             ExprKind::Ident(name) => self
@@ -1122,25 +1167,43 @@ impl<'a> FuncCompiler<'a> {
                 })?;
                 Ok(field_ty.clone())
             }
-            ExprKind::Unary { op, .. } => match op {
-                UnaryOp::Neg => Ok(Type::I64),
+            ExprKind::Unary { op, expr } => match op {
+                UnaryOp::Neg => {
+                    let inner = self.infer_expr_type(expr)?;
+                    if matches!(inner, Type::F64) {
+                        Ok(Type::F64)
+                    } else {
+                        Ok(Type::I64)
+                    }
+                }
                 UnaryOp::Not => Ok(Type::Bool),
             },
-            ExprKind::Binary { op, .. } => match op {
-                BinaryOp::Add
-                | BinaryOp::Sub
-                | BinaryOp::Mul
-                | BinaryOp::Div
-                | BinaryOp::Mod => Ok(Type::I64),
-                BinaryOp::EqEq
-                | BinaryOp::NotEq
-                | BinaryOp::Lt
-                | BinaryOp::LtEq
-                | BinaryOp::Gt
-                | BinaryOp::GtEq
-                | BinaryOp::AndAnd
-                | BinaryOp::OrOr => Ok(Type::Bool),
-            },
+            ExprKind::Cast { ty, .. } => Ok(ty.clone()),
+            ExprKind::Binary { op, left, right } => {
+                let left_ty = self.infer_expr_type(left)?;
+                let right_ty = self.infer_expr_type(right)?;
+                match op {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Mod => {
+                        if matches!((&left_ty, &right_ty), (Type::F64, Type::F64)) {
+                            Ok(Type::F64)
+                        } else {
+                            Ok(Type::I64)
+                        }
+                    }
+                    BinaryOp::EqEq
+                    | BinaryOp::NotEq
+                    | BinaryOp::Lt
+                    | BinaryOp::LtEq
+                    | BinaryOp::Gt
+                    | BinaryOp::GtEq
+                    | BinaryOp::AndAnd
+                    | BinaryOp::OrOr => Ok(Type::Bool),
+                }
+            }
         }
     }
 
@@ -1181,4 +1244,12 @@ impl<'a> FuncCompiler<'a> {
             _ => self.functions.get(name).map(|sig| sig.return_type.clone()),
         }
     }
+}
+
+fn format_f64(value: f64) -> String {
+    let mut text = value.to_string();
+    if !text.contains('.') && !text.contains('e') && !text.contains('E') {
+        text.push_str(".0");
+    }
+    text
 }

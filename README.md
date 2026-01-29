@@ -64,6 +64,7 @@ Examples (start here)
 - [examples/book_account.bd](examples/book_account.bd) (book with methods and constructor)
 - [examples/book_point.bd](examples/book_point.bd) (field access + method calls)
 - [examples/enum_result.bd](examples/enum_result.bd) (enum variants + match)
+- [examples/floats.bd](examples/floats.bd) (f64 arithmetic + explicit cast)
 - [examples/terminal_calculator.bd](examples/terminal_calculator.bd) (terminal IO + operator dispatch)
 - [examples/yahtzee/](examples/yahtzee/) (multi-file ASCII Yahtzee demo; VM/WASM/native)
 

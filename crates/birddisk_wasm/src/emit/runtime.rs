@@ -1,5 +1,6 @@
 use super::{
-    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_BOOL, ARRAY_KIND_I64, ARRAY_KIND_REF, ARRAY_KIND_U8,
+    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_BOOL, ARRAY_KIND_F64, ARRAY_KIND_I64,
+    ARRAY_KIND_REF, ARRAY_KIND_U8,
     HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_HEADER_SIZE, HEAP_KIND_ARRAY, HEAP_KIND_ENUM,
     HEAP_KIND_FREE, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
     HEAP_TYPE_ID_MASK, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET,
@@ -3222,6 +3223,10 @@ pub(super) fn emit_gc_layout_runtime(
     emitter.push_line("i32.or");
     emitter.push_line("local.get $aux");
     emitter.push_line(format!("i32.const {ARRAY_KIND_U8}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("i32.or");
+    emitter.push_line("local.get $aux");
+    emitter.push_line(format!("i32.const {ARRAY_KIND_F64}"));
     emitter.push_line("i32.eq");
     emitter.push_line("i32.or");
     emitter.push_line("local.get $aux");

@@ -763,6 +763,7 @@ fn path_segment(token: &Token) -> Option<String> {
     match &token.kind {
         TokenKind::Ident(name) => Some(name.clone()),
         TokenKind::TypeI64 => Some("i64".to_string()),
+        TokenKind::TypeF64 => Some("f64".to_string()),
         TokenKind::TypeBool => Some("bool".to_string()),
         TokenKind::TypeString => Some("string".to_string()),
         TokenKind::TypeU8 => Some("u8".to_string()),
@@ -1006,15 +1007,17 @@ fn semantic_kind(tokens: &[Token], idx: usize) -> Option<SemanticTokenKind> {
         | TokenKind::Book
         | TokenKind::Field
         | TokenKind::New
+        | TokenKind::As
         | TokenKind::End
         | TokenKind::Array => Some(SemanticTokenKind::Keyword),
         TokenKind::TypeI64
+        | TokenKind::TypeF64
         | TokenKind::TypeBool
         | TokenKind::TypeString
         | TokenKind::TypeU8
         | TokenKind::TypeVoid => Some(SemanticTokenKind::Type),
         TokenKind::BoolLit(_) => Some(SemanticTokenKind::Keyword),
-        TokenKind::IntLit(_) => Some(SemanticTokenKind::Number),
+        TokenKind::IntLit(_) | TokenKind::FloatLit(_) => Some(SemanticTokenKind::Number),
         TokenKind::StringLit(_) => Some(SemanticTokenKind::String),
         TokenKind::Plus
         | TokenKind::Minus
@@ -1632,10 +1635,20 @@ fn collect_inlay_hints_in_expr(
             }
             None
         }
+        ExprKind::Cast { expr, ty } => {
+            collect_inlay_hints_in_expr(expr, env, index, stdlib, range, hints);
+            Some(ty.clone())
+        }
         ExprKind::Unary { op, expr } => {
             let inner = collect_inlay_hints_in_expr(expr, env, index, stdlib, range, hints);
             match op {
-                birddisk_core::ast::UnaryOp::Neg => Some(Type::I64),
+                birddisk_core::ast::UnaryOp::Neg => {
+                    if inner == Some(Type::F64) {
+                        Some(Type::F64)
+                    } else {
+                        Some(Type::I64)
+                    }
+                }
                 birddisk_core::ast::UnaryOp::Not => Some(Type::Bool),
             }
             .or(inner)
@@ -1657,7 +1670,9 @@ fn collect_inlay_hints_in_expr(
                 | birddisk_core::ast::BinaryOp::Mul
                 | birddisk_core::ast::BinaryOp::Div
                 | birddisk_core::ast::BinaryOp::Mod => {
-                    if left_ty == Some(Type::I64) || right_ty == Some(Type::I64) {
+                    if left_ty == Some(Type::F64) || right_ty == Some(Type::F64) {
+                        Some(Type::F64)
+                    } else if left_ty == Some(Type::I64) || right_ty == Some(Type::I64) {
                         Some(Type::I64)
                     } else {
                         None
@@ -1667,6 +1682,7 @@ fn collect_inlay_hints_in_expr(
         }
         ExprKind::Ident(name) => env.get(name),
         ExprKind::Int(_) => Some(Type::I64),
+        ExprKind::Float(_) => Some(Type::F64),
         ExprKind::Bool(_) => Some(Type::Bool),
         ExprKind::String(_) => Some(Type::String),
     }
@@ -2413,7 +2429,7 @@ fn is_type_context(tokens: &[Token], idx: usize) -> bool {
     }
     matches!(
         tokens[idx - 1].kind,
-        TokenKind::Colon | TokenKind::Arrow | TokenKind::New | TokenKind::Book
+        TokenKind::Colon | TokenKind::Arrow | TokenKind::New | TokenKind::Book | TokenKind::As
     )
 }
 
@@ -2559,7 +2575,7 @@ fn completion_items(
     let mut items = Vec::new();
     let keywords = [
         "rule", "set", "put", "yield", "when", "otherwise", "repeat", "while", "end",
-        "import", "book", "field", "new",
+        "import", "book", "field", "new", "as",
     ];
     if let Some(line) = line_at_position(text, pos.line) {
         if line.trim_start().starts_with("import ") {
@@ -2945,6 +2961,7 @@ fn format_ast_params(params: &[birddisk_core::ast::Param]) -> String {
 fn type_name(ty: &Type) -> String {
     match ty {
         Type::I64 => "i64".to_string(),
+        Type::F64 => "f64".to_string(),
         Type::Bool => "bool".to_string(),
         Type::String => "string".to_string(),
         Type::U8 => "u8".to_string(),

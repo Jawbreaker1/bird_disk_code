@@ -83,7 +83,7 @@ Questions:
 
 ## 5) Memory model & GC
 status: decided
-date: 2026-01-07
+date: 2026-01-28
 decision: Use tracing GC (mark/sweep) as the primary memory strategy.
 rationale: Handles cycles cleanly, keeps user model simple, and is most LLM-friendly.
 impact: VM/WASM/native runtime, ABI, stack maps/roots, tests, docs
@@ -364,13 +364,13 @@ Questions:
 ## 13) Primitive types beyond i64/bool
 status: decided
 date: 2026-01-07
-decision: Add `i32` and `f64` as the next primitive types. No implicit casts; explicit casts and literal suffixes are deferred.
-rationale: `i32` covers memory/interop needs; `f64` covers core float use cases while keeping surface area small.
+decision: Add `i32` and `f64` as the next primitive types. No implicit casts; explicit `as` casts are allowed for `i64 <-> f64`.
+rationale: `i32` covers memory/interop needs; `f64` covers core float use cases while keeping surface area small while keeping conversions explicit.
 impact: lexer/parser, typechecker, VM/WASM/native codegen, stdlib, tests
 
 Questions:
 - Integer widths: add `i32`, `i16`, `i8` (and/or unsigned `u64`, `u32`)?
 - Floats: `f32`/`f64` in v0.x or defer?
 - Char type: `char` vs `string` only?
-- Implicit casts: still none, or allow explicit casts only?
+- Explicit casts: `expr as type` limited to `i64 <-> f64` (v0.1)
 - Literal suffixes: `1i32`, `1u64`, `1f64`?

@@ -16,7 +16,7 @@ params        = param { "," param } ;
 param         = ident ":" type ;
 
 type          = base_type { "[]" } ;
-base_type     = "i64" | "bool" | "string" | "u8" | "void" | ident ;
+base_type     = "i64" | "f64" | "bool" | "string" | "u8" | "void" | ident ;
 
 stmt          = set_stmt
               | call_stmt
@@ -55,9 +55,10 @@ add           = mul { ( "+" | "-" ) mul } ;
 mul           = unary { ( "*" | "/" | "%" ) unary } ;
 unary         = ( "!" | "-" ) unary | postfix ;
 
-postfix       = primary { "[" expr "]" } ;
+postfix       = primary { "[" expr "]" | "as" type } ;
 
 primary       = int_lit
+              | float_lit
               | bool_lit
               | string_lit
               | array_lit
@@ -77,6 +78,7 @@ new_expr      = "new" ident "(" [ args ] ")" ;
 bool_lit      = "true" | "false" ;
 string_lit    = "\"" { char } "\"" ; (* escapes: \", \\, \n *)
 int_lit       = digit { digit } ;
+float_lit     = digit { digit } "." digit { digit } ;
 
 qualified_ident = ident { "::" ident } ;
 member_access = ident "::" ident ;

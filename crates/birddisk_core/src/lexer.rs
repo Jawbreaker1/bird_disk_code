@@ -1,6 +1,6 @@
 use crate::diagnostics::{Position, Span};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Import,
     Rule,
@@ -20,15 +20,18 @@ pub enum TokenKind {
     Book,
     Field,
     New,
+    As,
     End,
     Array,
     TypeI64,
+    TypeF64,
     TypeBool,
     TypeString,
     TypeU8,
     TypeVoid,
     BoolLit(bool),
     IntLit(i64),
+    FloatLit(f64),
     StringLit(String),
     Ident(String),
     LParen,
@@ -58,7 +61,7 @@ pub enum TokenKind {
     Eof,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
@@ -250,11 +253,8 @@ impl Lexer {
                 }
                 ch if is_letter(ch) => self.lex_identifier(),
                 ch if is_digit(ch) => {
-                    let (value, span) = self.lex_number(start)?;
-                    tokens.push(Token {
-                        kind: TokenKind::IntLit(value),
-                        span,
-                    });
+                    let (kind, span) = self.lex_number(start)?;
+                    tokens.push(Token { kind, span });
                     continue;
                 }
                 _ => {
@@ -306,9 +306,11 @@ impl Lexer {
             "book" => TokenKind::Book,
             "field" => TokenKind::Field,
             "new" => TokenKind::New,
+            "as" => TokenKind::As,
             "end" => TokenKind::End,
             "array" => TokenKind::Array,
             "i64" => TokenKind::TypeI64,
+            "f64" => TokenKind::TypeF64,
             "bool" => TokenKind::TypeBool,
             "string" => TokenKind::TypeString,
             "u8" => TokenKind::TypeU8,
@@ -319,7 +321,7 @@ impl Lexer {
         }
     }
 
-    fn lex_number(&mut self, start: Position) -> Result<(i64, Span), LexError> {
+    fn lex_number(&mut self, start: Position) -> Result<(TokenKind, Span), LexError> {
         let mut buf = String::new();
         while let Some(ch) = self.peek() {
             if is_digit(ch) {
@@ -330,10 +332,35 @@ impl Lexer {
             }
         }
 
+        if self.peek() == Some('.') {
+            let next = self.peek_next();
+            if matches!(next, Some(ch) if is_digit(ch)) {
+                buf.push('.');
+                self.advance();
+                while let Some(ch) = self.peek() {
+                    if is_digit(ch) {
+                        buf.push(ch);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+                let span = Span::new(start, self.position());
+                return match buf.parse::<f64>() {
+                    Ok(value) => Ok((TokenKind::FloatLit(value), span)),
+                    Err(_) => Err(LexError {
+                        code: "E0101",
+                        message: "Float literal out of range.".to_string(),
+                        span,
+                    }),
+                };
+            }
+        }
+
         let end = self.position();
         let span = Span::new(start, end);
         match buf.parse::<i64>() {
-            Ok(value) => Ok((value, span)),
+            Ok(value) => Ok((TokenKind::IntLit(value), span)),
             Err(_) => Err(LexError {
                 code: "E0101",
                 message: "Integer literal out of range.".to_string(),
@@ -393,6 +420,10 @@ impl Lexer {
 
     fn peek(&self) -> Option<char> {
         self.chars.get(self.index).copied()
+    }
+
+    fn peek_next(&self) -> Option<char> {
+        self.chars.get(self.index + 1).copied()
     }
 
     fn advance(&mut self) -> Option<char> {
@@ -461,6 +492,15 @@ mod tests {
         let tokens = lex(source).unwrap();
         assert!(tokens.iter().any(|token| {
             matches!(token.kind, TokenKind::StringLit(ref value) if value == "hi\n")
+        }));
+    }
+
+    #[test]
+    fn lex_float_literal() {
+        let source = "rule main() -> i64:\n  set x: f64 = 1.25.\n  yield 0.\nend\n";
+        let tokens = lex(source).unwrap();
+        assert!(tokens.iter().any(|token| {
+            matches!(token.kind, TokenKind::FloatLit(value) if (value - 1.25).abs() < 1e-9)
         }));
     }
 

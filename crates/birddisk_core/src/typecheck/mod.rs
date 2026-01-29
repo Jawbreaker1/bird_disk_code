@@ -11,6 +11,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Ty {
     I64,
+    F64,
     Bool,
     String,
     U8,
@@ -25,6 +26,7 @@ impl Ty {
     fn from_ast(ty: Type) -> Self {
         match ty {
             Type::I64 => Ty::I64,
+            Type::F64 => Ty::F64,
             Type::Bool => Ty::Bool,
             Type::String => Ty::String,
             Type::U8 => Ty::U8,
@@ -37,6 +39,7 @@ impl Ty {
     fn name(&self) -> String {
         match self {
             Ty::I64 => "i64".to_string(),
+            Ty::F64 => "f64".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::String => "string".to_string(),
             Ty::U8 => "u8".to_string(),

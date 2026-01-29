@@ -21,7 +21,8 @@ const KEYWORDS = [
   'import',
   'book',
   'field',
-  'new'
+  'new',
+  'as'
 ];
 
 const BUILTIN_MODULES = [

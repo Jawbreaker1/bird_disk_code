@@ -35,6 +35,7 @@ pub(crate) enum ElemKind {
     Bool = abi::ARRAY_KIND_BOOL as u8,
     U8 = abi::ARRAY_KIND_U8 as u8,
     Ref = abi::ARRAY_KIND_REF as u8,
+    F64 = abi::ARRAY_KIND_F64 as u8,
 }
 
 #[derive(Debug, Clone)]
@@ -690,6 +691,7 @@ pub(crate) fn heap_payload_mut<'a>(rt: &'a mut Runtime, handle: HeapHandle) -> O
 pub(crate) fn elem_size(kind: ElemKind) -> usize {
     match kind {
         ElemKind::I64 => 8,
+        ElemKind::F64 => 8,
         ElemKind::Bool => 1,
         ElemKind::U8 => 1,
         ElemKind::Ref => 8,
@@ -699,6 +701,7 @@ pub(crate) fn elem_size(kind: ElemKind) -> usize {
 pub(crate) fn parse_elem_kind(rt: &Runtime, value: u64) -> Option<ElemKind> {
     match value as u32 {
         abi::ARRAY_KIND_I64 => Some(ElemKind::I64),
+        abi::ARRAY_KIND_F64 => Some(ElemKind::F64),
         abi::ARRAY_KIND_BOOL => Some(ElemKind::Bool),
         abi::ARRAY_KIND_U8 => Some(ElemKind::U8),
         abi::ARRAY_KIND_REF => Some(ElemKind::Ref),

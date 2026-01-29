@@ -121,6 +121,7 @@ E0312: Invalid void usage
 E0313: Unknown enum type
 E0314: Unknown enum variant
 E0315: Enum variant payload mismatch
+E0316: Invalid cast
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)
