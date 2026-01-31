@@ -12,6 +12,8 @@ pub(crate) struct Manifest {
     version: Option<String>,
     entry: Option<String>,
     deps: Option<HashMap<String, ManifestDep>>,
+    require_tests: Option<bool>,
+    test_exclude: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,6 +30,8 @@ enum ManifestDep {
 pub(crate) struct ProjectContext {
     pub(crate) entry: String,
     pub(crate) config: birddisk_core::ModuleConfig,
+    pub(crate) require_tests: bool,
+    pub(crate) test_exclude: Vec<String>,
 }
 
 fn find_manifest(start: &Path) -> Option<PathBuf> {
@@ -132,11 +136,15 @@ pub(crate) fn resolve_project_context(path: Option<&str>) -> Result<ProjectConte
             return Ok(ProjectContext {
                 entry: entry.to_string_lossy().to_string(),
                 config,
+                require_tests: manifest.require_tests.unwrap_or(false),
+                test_exclude: manifest.test_exclude.unwrap_or_default(),
             });
         }
         return Ok(ProjectContext {
             entry: path.to_string(),
             config: birddisk_core::ModuleConfig::default(),
+            require_tests: false,
+            test_exclude: Vec::new(),
         });
     }
 
@@ -151,6 +159,8 @@ pub(crate) fn resolve_project_context(path: Option<&str>) -> Result<ProjectConte
     Ok(ProjectContext {
         entry: entry.to_string_lossy().to_string(),
         config,
+        require_tests: manifest.require_tests.unwrap_or(false),
+        test_exclude: manifest.test_exclude.unwrap_or_default(),
     })
 }
 

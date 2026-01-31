@@ -6,6 +6,7 @@ mod json;
 mod path;
 mod rand;
 mod string;
+mod test;
 mod time;
 
 use crate::runtime_error::RuntimeError;
@@ -43,6 +44,9 @@ impl<'a> Vm<'a> {
             return Ok(Some(value));
         }
         if let Some(value) = self.eval_env_builtin(name, args)? {
+            return Ok(Some(value));
+        }
+        if let Some(value) = self.eval_test_builtin(name, args)? {
             return Ok(Some(value));
         }
         Ok(None)

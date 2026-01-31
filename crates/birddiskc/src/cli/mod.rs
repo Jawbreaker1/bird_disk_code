@@ -1,13 +1,24 @@
 pub(crate) mod args;
 pub(crate) mod build;
+pub(crate) mod doc;
 pub(crate) mod diagnostics;
 pub(crate) mod manifest;
+pub(crate) mod require_tests;
 pub(crate) mod run;
 pub(crate) mod test;
 
 use args::Command;
 use diagnostics::format_diagnostics_human;
+use require_tests::{enforce_require_tests, enforce_require_tests_from_cwd};
 use std::io::{IsTerminal, Read};
+
+#[derive(serde::Serialize)]
+struct LintReport {
+    tool: &'static str,
+    version: &'static str,
+    ok: bool,
+    diagnostics: Vec<birddisk_core::Diagnostic>,
+}
 
 pub(crate) fn execute(command: Command) -> Result<(), String> {
     match command {
@@ -20,13 +31,49 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                 Err("check not implemented (use --json for stub output)".to_string())
             }
         }
+        Command::Lint {
+            path,
+            json,
+            require_tests,
+        } => {
+    let report = lint_report(&path, require_tests)?;
+            if json {
+                let output =
+                    serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string());
+                println!("{output}");
+                Ok(())
+            } else if report.ok {
+                Ok(())
+            } else {
+                Err(format_diagnostics_human(&report.diagnostics))
+            }
+        }
+        Command::Doc { path, out } => {
+            let context = manifest::resolve_project_context(path.as_deref())?;
+            let output = doc::render_docs(&context.entry, &context.config)?;
+            if let Some(out_path) = out {
+                std::fs::write(&out_path, output)
+                    .map_err(|err| format!("unable to write doc output '{out_path}': {err}"))?;
+            } else {
+                print!("{output}");
+            }
+            Ok(())
+        }
         Command::Build {
             path,
             engine,
             emit,
             out,
+            require_tests,
         } => {
             let context = manifest::resolve_project_context(path.as_deref())?;
+            if require_tests || context.require_tests {
+                let diagnostics =
+                    enforce_require_tests(&context.entry, &context.config, &context.test_exclude);
+                if !diagnostics.is_empty() {
+                    return Err(format_diagnostics_human(&diagnostics));
+                }
+            }
             let format = match emit {
                 Some(format) => format,
                 None => build::default_build_emit(engine)?,
@@ -134,8 +181,22 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
             engine,
             dirs,
             tags,
+            require_tests,
         } => {
             if json {
+                let manifest_requires = manifest::resolve_project_context(None)
+                    .ok()
+                    .map(|ctx| ctx.require_tests)
+                    .unwrap_or(false);
+                let diagnostics = if require_tests || manifest_requires {
+                    enforce_require_tests_from_cwd()
+                } else {
+                    Vec::new()
+                };
+                if !diagnostics.is_empty() {
+                    println!("{}", test::report_with_diagnostics(diagnostics));
+                    return Ok(());
+                }
                 println!("{}", test::run_tests_json(engine, &dirs, &tags));
                 Ok(())
             } else {
@@ -143,6 +204,27 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
             }
         }
     }
+}
+
+fn lint_report(path: &str, require_tests: bool) -> Result<LintReport, String> {
+    let context = manifest::resolve_project_context(Some(path))?;
+    let program = birddisk_core::parse_and_typecheck_with_config(&context.entry, &context.config)
+        .map_err(|diags| format_diagnostics_human(&diags))?;
+    let mut diagnostics = birddisk_core::lint_program(&program);
+    if require_tests || context.require_tests {
+        diagnostics.extend(enforce_require_tests(
+            &context.entry,
+            &context.config,
+            &context.test_exclude,
+        ));
+    }
+    let ok = diagnostics.is_empty();
+    Ok(LintReport {
+        tool: birddisk_core::TOOL_NAME,
+        version: birddisk_core::VERSION,
+        ok,
+        diagnostics,
+    })
 }
 
 #[cfg(test)]
@@ -351,6 +433,7 @@ mod tests {
                 engine: birddisk_core::Engine::Native,
                 emit: Some(EmitFormat::Obj),
                 out: None,
+                require_tests: false,
             }
         );
     }
@@ -427,6 +510,7 @@ mod tests {
                 engine: None,
                 dirs: vec!["examples".to_string()],
                 tags: vec!["loop".to_string()],
+                require_tests: false,
             }
         );
     }
@@ -441,8 +525,60 @@ mod tests {
                 engine: Some(birddisk_core::Engine::Vm),
                 dirs: Vec::new(),
                 tags: Vec::new(),
+                require_tests: false,
             }
         );
+    }
+
+    #[test]
+    fn parse_lint_with_json() {
+        let command = cmd(&["lint", "main.bd", "--json"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Lint {
+                path: "main.bd".to_string(),
+                json: true,
+                require_tests: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_doc_with_out() {
+        let command = cmd(&["doc", "main.bd", "--out", "docs.md"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Doc {
+                path: Some("main.bd".to_string()),
+                out: Some("docs.md".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn lint_json_output_smoke() {
+        let source = "import std::io.\n\nrule main() -> i64:\n  set value = 1.\n  yield 0.\nend\n";
+        let mut path = env::temp_dir();
+        path.push(format!("birddisk_lint_json_{}.bd", std::process::id()));
+        fs::write(&path, source).expect("write temp source");
+        let path_str = path.to_string_lossy().to_string();
+
+        let report = super::lint_report(&path_str, false).expect("lint report");
+        let json = serde_json::to_value(&report).expect("to json");
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["tool"], birddisk_core::TOOL_NAME);
+        assert!(json["diagnostics"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .any(|diag| diag["code"] == "L1001"));
+        assert!(json["diagnostics"]
+            .as_array()
+            .unwrap_or(&Vec::new())
+            .iter()
+            .any(|diag| diag["code"] == "L1007"));
+
+        let _ = fs::remove_file(&path);
     }
 
     #[test]

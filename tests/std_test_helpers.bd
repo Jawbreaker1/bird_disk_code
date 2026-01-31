@@ -1,0 +1,12 @@
+import std::test.
+import std::string.
+
+rule main() -> i64:
+  std::test::assert(true, "expected true").
+  std::test::assert_eq_i64(2 + 3, 5, "2 + 3 should be 5").
+  std::test::assert_eq_bool(true, true, "bool match").
+  set left: string = "hi".
+  set right: string = std::string::concat("h", "i").
+  std::test::assert_eq_string(left, right, "string match").
+  yield 0.
+end

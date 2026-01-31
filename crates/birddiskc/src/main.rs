@@ -1,7 +1,8 @@
 mod cli;
 
 use cli::args::{
-    contains_help_flag, parse_command, BUILD_HELP, CHECK_HELP, FMT_HELP, HELP, RUN_HELP, TEST_HELP,
+    contains_help_flag, parse_command, BUILD_HELP, CHECK_HELP, DOC_HELP, FMT_HELP, HELP, LINT_HELP,
+    RUN_HELP, TEST_HELP,
 };
 use std::env;
 use std::process;
@@ -25,6 +26,14 @@ fn main() {
     }
     if args[0] == "check" && contains_help_flag(&args[1..]) {
         print!("{CHECK_HELP}");
+        return;
+    }
+    if args[0] == "lint" && contains_help_flag(&args[1..]) {
+        print!("{LINT_HELP}");
+        return;
+    }
+    if args[0] == "doc" && contains_help_flag(&args[1..]) {
+        print!("{DOC_HELP}");
         return;
     }
     if args[0] == "build" && contains_help_flag(&args[1..]) {

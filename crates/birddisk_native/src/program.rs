@@ -241,6 +241,22 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::I64, Type::I64],
             return_type: Type::I64,
         }),
+        "std::test::assert" => Some(FunctionSig {
+            params: vec![Type::Bool, Type::String],
+            return_type: Type::Void,
+        }),
+        "std::test::assert_eq_i64" => Some(FunctionSig {
+            params: vec![Type::I64, Type::I64, Type::String],
+            return_type: Type::Void,
+        }),
+        "std::test::assert_eq_bool" => Some(FunctionSig {
+            params: vec![Type::Bool, Type::Bool, Type::String],
+            return_type: Type::Void,
+        }),
+        "std::test::assert_eq_string" => Some(FunctionSig {
+            params: vec![Type::String, Type::String, Type::String],
+            return_type: Type::Void,
+        }),
         "std::fs::read_text" => Some(FunctionSig {
             params: vec![Type::String],
             return_type: Type::String,

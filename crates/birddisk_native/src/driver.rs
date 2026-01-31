@@ -121,6 +121,10 @@ pub fn run_with_io(
     builder.symbol("bd_time_sleep_ms", runtime::bd_time_sleep_ms as *const u8);
     builder.symbol("bd_rand_seed", runtime::bd_rand_seed as *const u8);
     builder.symbol("bd_rand_range", runtime::bd_rand_range as *const u8);
+    builder.symbol("bd_test_assert", runtime::bd_test_assert as *const u8);
+    builder.symbol("bd_test_assert_eq_i64", runtime::bd_test_assert_eq_i64 as *const u8);
+    builder.symbol("bd_test_assert_eq_bool", runtime::bd_test_assert_eq_bool as *const u8);
+    builder.symbol("bd_test_assert_eq_string", runtime::bd_test_assert_eq_string as *const u8);
     builder.symbol("bd_fs_read_text", runtime::bd_fs_read_text as *const u8);
     builder.symbol("bd_fs_write_text", runtime::bd_fs_write_text as *const u8);
     builder.symbol("bd_fs_read_bytes", runtime::bd_fs_read_bytes as *const u8);

@@ -5,13 +5,15 @@ This document lists the current CLI commands, flags, and runtime notes.
 ## Commands
 - `birddiskc fmt <file|dir>` (canonical formatter)
 - `birddiskc check <file|dir> [--json]` (JSON diagnostics)
-- `birddiskc build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>]`
+- `birddiskc lint <file|dir> [--json] [--require-tests]` (LLM-friendly lint warnings)
+- `birddiskc doc [<file|dir>] [--out <file>]` (generate Markdown docs)
+- `birddiskc build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>] [--require-tests]`
 - `birddiskc run [<file|dir>] [--engine vm|wasm|native] [--json] [--stdin <file>] [--stdout <file>] [--report <file>]`
 - `birddiskc run <file> --engine wasm --emit wat` (print generated WAT)
 - `birddiskc run <file> --engine wasm --emit wasm [--out <file>]` (write .wasm)
 - `birddiskc run <file> --engine native --emit obj [--out <file>]` (write native .o)
 - `birddiskc run <file> --engine native --emit exe [--out <file>]` (write native executable)
-- `birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]`
+- `birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--require-tests]`
 
 Notes:
 - JSON output is supported for `check`, `run`, and `test`.
@@ -25,6 +27,8 @@ Manifest (`birddisk.json`)
   "name": "demo",
   "version": "0.1.0",
   "entry": "src/main.bd",
+  "require_tests": false,
+  "test_exclude": ["src/generated", "src/legacy.bd"],
   "deps": {
     "util": "deps/util"
   }
@@ -32,6 +36,8 @@ Manifest (`birddisk.json`)
 ```
 Notes:
 - `deps` entries can also be objects: `"util": { "path": "deps/util", "version": "0.1.0" }` (version is parsed but not used in v0.1).
+- `require_tests` enables test enforcement for `lint`, `test`, and `build` (opt-in).
+- `test_exclude` skips test requirements for listed files or directories (paths are relative to the manifest root).
 
 ## WASM runtime notes
 - If a program uses arrays, the emitted WASM module imports `env.bd_trap`

@@ -48,6 +48,11 @@ impl<'a> Checker<'a> {
                 && import.path[0] == "std"
                 && import.path[1] == "rand"
         });
+        let has_std_test = program.imports.iter().any(|import| {
+            import.path.len() == 2
+                && import.path[0] == "std"
+                && import.path[1] == "test"
+        });
         if has_std_string {
             self.insert_function(
                 "std::string::len",
@@ -196,6 +201,28 @@ impl<'a> Checker<'a> {
         if has_std_rand {
             self.insert_function("std::rand::seed", vec![Ty::I64], Ty::Void);
             self.insert_function("std::rand::range", vec![Ty::I64, Ty::I64], Ty::I64);
+        }
+        if has_std_test {
+            self.insert_function(
+                "std::test::assert",
+                vec![Ty::Bool, Ty::String],
+                Ty::Void,
+            );
+            self.insert_function(
+                "std::test::assert_eq_i64",
+                vec![Ty::I64, Ty::I64, Ty::String],
+                Ty::Void,
+            );
+            self.insert_function(
+                "std::test::assert_eq_bool",
+                vec![Ty::Bool, Ty::Bool, Ty::String],
+                Ty::Void,
+            );
+            self.insert_function(
+                "std::test::assert_eq_string",
+                vec![Ty::String, Ty::String, Ty::String],
+                Ty::Void,
+            );
         }
     }
 

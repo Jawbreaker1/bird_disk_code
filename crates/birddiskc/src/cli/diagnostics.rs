@@ -145,6 +145,36 @@ pub(crate) fn runtime_spec_refs(code: &str) -> Vec<String> {
     }
 }
 
+pub(crate) fn require_tests_diagnostic(path: &str, expected: &str) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "L2000",
+        severity: "error",
+        message: format!("Missing test file for '{path}'."),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec![format!("Expected test file at '{expected}'.")],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: Some("Add at least one `rule test_*() -> void` in the test file.".to_string()),
+    }
+}
+
+pub(crate) fn require_tests_config_diagnostic(message: impl Into<String>) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "L2001",
+        severity: "error",
+        message: message.into(),
+        file: "<tests>".to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Require-tests enforcement could not be applied.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: Some("Add a birddisk.json manifest or pass an explicit entry file.".to_string()),
+    }
+}
+
 fn default_span() -> birddisk_core::Span {
     birddisk_core::Span::new(
         birddisk_core::Position::new(1, 1),

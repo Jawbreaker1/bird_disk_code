@@ -3,6 +3,7 @@
 pub mod ast;
 mod diagnostics;
 mod fmt;
+mod lint;
 pub mod lexer;
 pub mod parser;
 pub mod runtime;
@@ -50,6 +51,7 @@ pub struct RunReport {
 }
 
 pub use diagnostics::{Diagnostic, Edit, FixIt, Position, Span, TraceFrame};
+pub use lint::lint_program;
 
 pub fn check_json(path: &str) -> String {
     let report = match parse_and_typecheck(path) {
@@ -195,6 +197,7 @@ fn is_builtin_std_module(path: &[String]) -> bool {
                     || module == "io"
                     || module == "time"
                     || module == "rand"
+                    || module == "test"
                     || module == "fs"
                     || module == "path"
                     || module == "env"

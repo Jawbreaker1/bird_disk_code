@@ -6,6 +6,7 @@ mod json;
 mod path;
 mod rand;
 mod string;
+mod test;
 mod time;
 
 pub use bytes::{bd_bytes_contains, bd_bytes_eq, bd_bytes_index_of, bd_bytes_len, bd_bytes_slice};
@@ -22,6 +23,9 @@ pub use string::{
     bd_string_bytes, bd_string_concat, bd_string_contains, bd_string_eq, bd_string_from_bytes,
     bd_string_from_i64, bd_string_index_of, bd_string_len, bd_string_replace, bd_string_slice,
     bd_string_to_i64,
+};
+pub use test::{
+    bd_test_assert, bd_test_assert_eq_bool, bd_test_assert_eq_i64, bd_test_assert_eq_string,
 };
 pub use time::{bd_time_now_ms, bd_time_sleep_ms};
 

@@ -262,7 +262,23 @@ rule main() -> i64:
 end
 ```
 
-## 17) Files (std::fs)
+## 17) Testing helpers (std::test)
+```birddisk
+import std::test.
+import std::string.
+
+rule test_add() -> void:
+  std::test::assert_eq_i64(2 + 3, 5, "2 + 3 should be 5").
+end
+
+rule test_strings() -> void:
+  set left: string = "hi".
+  set right: string = std::string::concat("h", "i").
+  std::test::assert_eq_string(left, right, "strings should match").
+end
+```
+
+## 18) Files (std::fs)
 ```birddisk
 import std::fs.
 import std::string.
@@ -273,7 +289,7 @@ rule main() -> i64:
 end
 ```
 
-## 18) Paths (std::path)
+## 19) Paths (std::path)
 ```birddisk
 import std::path.
 import std::string.
@@ -289,7 +305,7 @@ rule main() -> i64:
 end
 ```
 
-## 19) Environment (std::env)
+## 20) Environment (std::env)
 ```birddisk
 import std::env.
 import std::string.
@@ -308,7 +324,7 @@ Pass program args after `--`:
 ./target/debug/birddiskc run examples/main.bd --json -- alpha beta
 ```
 
-## 20) Error handling (try/catch/throw)
+## 21) Error handling (try/catch/throw)
 ```birddisk
 import std::io.
 import std::string.
@@ -335,7 +351,7 @@ rule main() -> i64:
 end
 ```
 
-## 21) Native AOT (emit exe)
+## 22) Native AOT (emit exe)
 ```birddisk
 rule main() -> i64:
   yield 0.
@@ -370,13 +386,13 @@ Test note (optional):
 BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddiskc native_aot_json_trace_smoke
 ```
 
-## 22) Large example (Yahtzee)
+## 23) Large example (Yahtzee)
 See `examples/yahtzee/` for a multi-file terminal demo.
 ```sh
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.stdin
 ```
 
-## 23) Enums and match
+## 24) Enums and match
 ```birddisk
 enum Result:
   case Ok(value: i64).
@@ -397,7 +413,7 @@ end
 ```
 See `examples/enum_result.bd` for a runnable file example.
 
-## 24) Floats (f64)
+## 25) Floats (f64)
 ```birddisk
 rule main() -> i64:
   set a: f64 = 1.5.
@@ -412,7 +428,7 @@ end
 ```
 See `tests/floats/float_basic.bd` for a runnable file example.
 
-## 25) Explicit casts (i64 <-> f64)
+## 26) Explicit casts (i64 <-> f64)
 ```birddisk
 rule main() -> i64:
   set a: i64 = 5.

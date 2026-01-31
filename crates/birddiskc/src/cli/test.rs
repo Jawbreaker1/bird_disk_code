@@ -27,6 +27,17 @@ pub(crate) struct TestReport {
     pub(crate) diagnostics: Vec<birddisk_core::Diagnostic>,
 }
 
+pub(crate) fn report_with_diagnostics(diagnostics: Vec<birddisk_core::Diagnostic>) -> String {
+    let report = TestReport {
+        tool: birddisk_core::TOOL_NAME,
+        version: birddisk_core::VERSION,
+        ok: false,
+        cases: Vec::new(),
+        diagnostics,
+    };
+    serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string())
+}
+
 pub(crate) fn run_tests_json(
     engine: Option<birddisk_core::Engine>,
     dirs: &[String],

@@ -244,6 +244,34 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.rand_range,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
+            "std::test::assert" => {
+                self.call_runtime_void(
+                    self.runtime.test_assert,
+                    &[self.rt_ptr, arg_vals[0], arg_vals[1]],
+                );
+                None
+            }
+            "std::test::assert_eq_i64" => {
+                self.call_runtime_void(
+                    self.runtime.test_assert_eq_i64,
+                    &[self.rt_ptr, arg_vals[0], arg_vals[1], arg_vals[2]],
+                );
+                None
+            }
+            "std::test::assert_eq_bool" => {
+                self.call_runtime_void(
+                    self.runtime.test_assert_eq_bool,
+                    &[self.rt_ptr, arg_vals[0], arg_vals[1], arg_vals[2]],
+                );
+                None
+            }
+            "std::test::assert_eq_string" => {
+                self.call_runtime_void(
+                    self.runtime.test_assert_eq_string,
+                    &[self.rt_ptr, arg_vals[0], arg_vals[1], arg_vals[2]],
+                );
+                None
+            }
             "std::fs::read_text" => Some(self.call_runtime_value(
                 self.runtime.fs_read_text,
                 &[self.rt_ptr, arg_vals[0]],

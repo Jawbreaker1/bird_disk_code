@@ -5,9 +5,10 @@ and examples so an LLM can generate valid BirdDisk code with minimal ambiguity.
 
 Start here
 1) Read `docs/QUICKREF.md` for syntax and typing rules.
-2) Scan `docs/COOKBOOK.md` for runnable examples.
-3) Use `SPEC.md` for edge cases and precise rules.
-4) Use `docs/DIAGNOSTICS.md` for error codes + fix-its.
+2) Use `docs/REFERENCE.md` for LLM-friendly semantics lookup.
+3) Scan `docs/COOKBOOK.md` for runnable examples.
+4) Use `SPEC.md` for edge cases and precise rules.
+5) Use `docs/DIAGNOSTICS.md` for error codes + fix-its.
 
 Core syntax rules (must-follow)
 - Statements end with `.` (dot). Blocks end with `end`.

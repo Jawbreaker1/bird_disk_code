@@ -24,6 +24,7 @@
 - std::io (VM + WASM + native)
 - std::time (VM + WASM + native)
 - std::rand (VM + WASM + native)
+- std::test (VM + WASM + native)
 - std::fs (VM + WASM + native)
 - std::path (VM + WASM + native)
 - std::env (VM + WASM + native)

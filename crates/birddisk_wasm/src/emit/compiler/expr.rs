@@ -65,6 +65,9 @@ impl<'a> FuncCompiler<'a> {
                 if self.emit_rand_call(name, args)? {
                     return Ok(());
                 }
+                if self.emit_test_call(name, args)? {
+                    return Ok(());
+                }
                 if self.emit_fs_call(name, args)? {
                     return Ok(());
                 }
@@ -987,6 +990,96 @@ impl<'a> FuncCompiler<'a> {
         }
     }
 
+    fn emit_test_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::test::assert" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::test::assert expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::Bool, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("i32.eqz");
+                self.push_line("if");
+                self.indent += 1;
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_throw");
+                self.emit_error_check();
+                self.indent -= 1;
+                self.push_line("end");
+                Ok(true)
+            }
+            "std::test::assert_eq_i64" => {
+                if args.len() != 3 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::test::assert_eq_i64 expects 3 arguments",
+                    ));
+                }
+                let param_types = [Type::I64, Type::I64, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("i64.ne");
+                self.push_line("if");
+                self.indent += 1;
+                self.push_line(format!("local.get {}", arg_locals[2]));
+                self.push_line("call $bd_throw");
+                self.emit_error_check();
+                self.indent -= 1;
+                self.push_line("end");
+                Ok(true)
+            }
+            "std::test::assert_eq_bool" => {
+                if args.len() != 3 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::test::assert_eq_bool expects 3 arguments",
+                    ));
+                }
+                let param_types = [Type::Bool, Type::Bool, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("i32.ne");
+                self.push_line("if");
+                self.indent += 1;
+                self.push_line(format!("local.get {}", arg_locals[2]));
+                self.push_line("call $bd_throw");
+                self.emit_error_check();
+                self.indent -= 1;
+                self.push_line("end");
+                Ok(true)
+            }
+            "std::test::assert_eq_string" => {
+                if args.len() != 3 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::test::assert_eq_string expects 3 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_string_eq");
+                self.push_line("i32.eqz");
+                self.push_line("if");
+                self.indent += 1;
+                self.push_line(format!("local.get {}", arg_locals[2]));
+                self.push_line("call $bd_throw");
+                self.emit_error_check();
+                self.indent -= 1;
+                self.push_line("end");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     fn emit_fs_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
             "std::fs::read_text" => {
@@ -1370,6 +1463,10 @@ impl<'a> FuncCompiler<'a> {
             "std::time::sleep_ms" => Some(Type::I64),
             "std::rand::seed" => Some(Type::Void),
             "std::rand::range" => Some(Type::I64),
+            "std::test::assert" => Some(Type::Void),
+            "std::test::assert_eq_i64" => Some(Type::Void),
+            "std::test::assert_eq_bool" => Some(Type::Void),
+            "std::test::assert_eq_string" => Some(Type::Void),
             "std::fs::read_text" => Some(Type::String),
             "std::fs::write_text" => Some(Type::I64),
             "std::fs::read_bytes" => Some(Type::Array(Box::new(Type::U8))),

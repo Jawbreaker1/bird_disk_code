@@ -13,6 +13,7 @@ BirdDisk focuses on:
 - **Strong static typing** with **local type inference**
 - **Deterministic formatter** (one canonical style)
 - **Structured JSON diagnostics + fix-its** (machine actionable)
+- **Optional test enforcement** for higher-quality LLM output (opt-in quality gate)
 - **Golden reference execution** (VM/interpreter)
 - **Native compilation** (host JIT + AOT object/exe)
 - **WASM as a portable baseline**
@@ -57,6 +58,16 @@ end
 See [docs/VSCODE.md](docs/VSCODE.md).
 
 More commands and flags live in [docs/CLI.md](docs/CLI.md).
+
+Quality gate (optional)
+BirdDisk can enforce tests before building to keep LLM-generated code reliable:
+```sh
+./target/debug/birddiskc build --require-tests
+```
+Or set it in `birddisk.json`:
+```json
+{ "require_tests": true }
+```
 
 Examples (start here)
 - [examples/minimal_main.bd](examples/minimal_main.bd) (smallest runnable program)

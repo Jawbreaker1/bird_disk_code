@@ -373,6 +373,24 @@ Functions:
   - Sleeps for `ms` milliseconds and returns the duration.
   - Negative values are runtime errors.
 
+### 12.2 std::rand module
+To use random helpers, import the module:
+- `import std::rand.`
+
+Functions:
+- `std::rand::seed(value: i64) -> void`
+- `std::rand::range(min: i64, max: i64) -> i64`
+
+### 12.3 std::test module
+To use test helpers, import the module:
+- `import std::test.`
+
+Functions:
+- `std::test::assert(cond: bool, msg: string) -> void`
+- `std::test::assert_eq_i64(a: i64, b: i64, msg: string) -> void`
+- `std::test::assert_eq_bool(a: bool, b: bool, msg: string) -> void`
+- `std::test::assert_eq_string(a: string, b: string, msg: string) -> void`
+
 ## 13. Files and Paths (v0.1)
 BirdDisk exposes minimal filesystem and path helpers through the stdlib.
 
@@ -433,7 +451,7 @@ BirdDisk ships stdlib modules on disk for reusable logic.
   - `import std::math.` resolves to `stdlib/std/math.bd`.
 - Functions in stdlib modules are compiled with their module prefix
   (e.g. `std::math::add`).
-- `std::string`, `std::bytes`, `std::io`, `std::time`, `std::fs`, `std::path`, and `std::env` remain implemented in Rust for now.
+- `std::string`, `std::bytes`, `std::io`, `std::time`, `std::rand`, `std::test`, `std::fs`, `std::path`, `std::env`, and `std::json` remain implemented in Rust for now.
 - In v0.1, BirdDisk stdlib modules should be self-contained and avoid
   importing other modules.
 

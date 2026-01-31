@@ -10,6 +10,7 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) trace_push: FuncId,
     pub(crate) trace_pop: FuncId,
     pub(crate) has_error: FuncId,
+    #[allow(dead_code)]
     pub(crate) error_is_throw: FuncId,
     pub(crate) error_message: FuncId,
     pub(crate) clear_error: FuncId,
@@ -71,6 +72,10 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) time_sleep_ms: FuncId,
     pub(crate) rand_seed: FuncId,
     pub(crate) rand_range: FuncId,
+    pub(crate) test_assert: FuncId,
+    pub(crate) test_assert_eq_i64: FuncId,
+    pub(crate) test_assert_eq_bool: FuncId,
+    pub(crate) test_assert_eq_string: FuncId,
     pub(crate) fs_read_text: FuncId,
     pub(crate) fs_write_text: FuncId,
     pub(crate) fs_read_bytes: FuncId,
@@ -451,6 +456,30 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
+        let test_assert = declare_runtime_func(
+            module,
+            "bd_test_assert",
+            &[types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let test_assert_eq_i64 = declare_runtime_func(
+            module,
+            "bd_test_assert_eq_i64",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let test_assert_eq_bool = declare_runtime_func(
+            module,
+            "bd_test_assert_eq_bool",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let test_assert_eq_string = declare_runtime_func(
+            module,
+            "bd_test_assert_eq_string",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[],
+        )?;
         let fs_read_text = declare_runtime_func(
             module,
             "bd_fs_read_text",
@@ -633,6 +662,10 @@ impl RuntimeFuncs {
             time_sleep_ms,
             rand_seed,
             rand_range,
+            test_assert,
+            test_assert_eq_i64,
+            test_assert_eq_bool,
+            test_assert_eq_string,
             fs_read_text,
             fs_write_text,
             fs_read_bytes,

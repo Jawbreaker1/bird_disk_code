@@ -274,16 +274,15 @@ Questions:
 ---
 
 ## 9) Mandatory testing model (separate from production code)
-status: open
-decision: _
-rationale: _
-impact: language spec, parser/typechecker, test runner, docs, examples
+status: decided (v0.x policy)
+date: 2026-01-31
+decision: Tests live in separate files under `tests/`. Test rules are named `test_*` and return `void`; failures `throw` a string. Assertions can be either manual `throw` or helpers in `std::test` (to add). `main`, `init`, and stdlib are exempt. Enforcement is opt-in via flag or manifest setting, and applies to `lint`, `test`, and `build`. Minimum requirement is at least one test per non-test source file (per-file), with future tightening planned. Test files mirror source paths under `tests/` with `_test` suffix (e.g. `src/foo.bd` → `tests/src/foo_test.bd`). A manifest exclude list will be added later for edge cases.
+rationale: Keeps production code clean and LLM-friendly while allowing strict enforcement in CI or LLM workflows without frustrating manual builds.
+impact: CLI/test runner, stdlib (`std::test`), docs, manifest schema, lint rules
 
 Questions:
-- Should BirdDisk require tests for user-defined rules by default?
-- If mandatory, how do we keep tests out of production code (separate files/modules, naming conventions)?
-- Which rules are exempt (`main`, `init`, stdlib)?
-- What is the minimum test syntax and runner workflow that stays LLM-friendly?
+- How strict should the minimum test requirement become (per rule vs per file)?
+- Do we allow additional test discovery mechanisms beyond `tests/`?
 
 ---
 
@@ -374,3 +373,31 @@ Questions:
 - Char type: `char` vs `string` only?
 - Explicit casts: `expr as type` limited to `i64 <-> f64` (v0.1)
 - Literal suffixes: `1i32`, `1u64`, `1f64`?
+
+---
+
+## 14) Concurrency model
+status: decided (partial)
+date: 2026-01-31
+decision: Use OS threads with message passing only (channels) in v0.x; no shared mutable state. VM provides deterministic scheduling as an opt-in for tests/debugging; native stays OS-scheduled (nondeterministic). Minimal primitives are `spawn`, `join`, and channel `send/recv`.
+rationale: Message passing is the most LLM-friendly model (fewer data races). Deterministic VM scheduling improves reproducibility while keeping native performance.
+impact: runtime (VM/WASM/native), stdlib (`std::thread`/`std::channel`), type system, GC roots, tests
+
+Questions:
+- Add `select`/timeouts in v0.x or later?
+- Add shared mutable state primitives (mutex/lock) later?
+- WASM threading story (future)?
+
+---
+
+## 15) Networking model
+status: decided (partial)
+date: 2026-01-31
+decision: Start with blocking sockets in `std::net`, TCP only in v0.x. Add a minimal HTTP client after std::net stabilizes. UDP is required as a follow-up after TCP stabilizes. WASM networking is unsupported (compile-time error) in v0.x.
+rationale: Blocking TCP is the simplest and most portable baseline for LLM-generated programs.
+impact: stdlib, VM/WASM/native IO/runtime, tests, docs
+
+Questions:
+- HTTP client/server layer timing (after `std::net`)?
+- TLS support vs host-provided TLS?
+- WASM networking support (host imports vs compile error)?

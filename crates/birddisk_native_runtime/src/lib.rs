@@ -31,5 +31,7 @@ pub use api_std::{
     bd_json_encode_string, bd_path_basename, bd_path_dirname, bd_path_join, bd_path_normalize,
     bd_rand_range, bd_rand_seed, bd_string_bytes, bd_string_concat, bd_string_contains,
     bd_string_eq, bd_string_from_bytes, bd_string_from_i64, bd_string_index_of, bd_string_len,
-    bd_string_replace, bd_string_slice, bd_string_to_i64, bd_time_now_ms, bd_time_sleep_ms,
+    bd_string_replace, bd_string_slice, bd_string_to_i64, bd_test_assert,
+    bd_test_assert_eq_bool, bd_test_assert_eq_i64, bd_test_assert_eq_string, bd_time_now_ms,
+    bd_time_sleep_ms,
 };

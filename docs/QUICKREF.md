@@ -40,6 +40,7 @@ end
 - `std::string::to_i64(string)` parses a decimal integer; `std::string::from_i64(i64)` formats one
 - JSON helpers live in `std::json` (encode/decode of i64/bool/string)
 - Random helpers live in `std::rand` (`seed`, `range`)
+- Test helpers live in `std::test` (`assert`, `assert_eq_*`)
 - stdlib modules on disk live under `stdlib/` (e.g. `import std::math.`)
 - non-stdlib modules resolve to `<path>.bd` (entry dir first, then project root)
 - book types are declared with `book` and constructed via `new Book(...)`

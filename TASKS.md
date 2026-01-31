@@ -364,12 +364,17 @@ Acceptance:
 
 ## Sprint 16 — Tooling & quality (ongoing)
 Implement:
-- [ ] Linter with opinionated rules for LLM-friendly code
-- [ ] Doc generator (`birddiskc doc` from source)
-- [ ] Reference manual (LLM-friendly semantics lookup)
+- [x] Linter with opinionated rules for LLM-friendly code (initial rules)
+- [ ] Expand linter rules + autofix hints (naming, unused vars, shadowing, complexity)
+- [x] Doc generator (`birddiskc doc` from source)
+- [x] Reference manual (LLM-friendly semantics lookup)
 - [x] Human-readable runtime error output for CLI runs (stacktrace + snippets; non-JSON)
 - [x] `std::rand` (basic RNG with seed + uniform range)
-- [ ] Decide on mandatory testing model (separate test files, exemptions like `main`/`init`, minimal syntax + runner)
+- [x] Decide on mandatory testing model (separate test files, exemptions like `main`/`init`, minimal syntax + runner)
+- [x] Implement require-tests enforcement (flag + manifest setting; lint/test/build)
+- [x] Add `std::test` helpers (assert/eq; throw on failure)
+- [x] Add manifest test exclude list support
+- [ ] Plan stricter test requirements (per rule or threshold-based)
 - [ ] Profiler hooks (GC stats, runtime timers)
 - [ ] Enhanced test runner (parallel, filters, snapshots)
 
@@ -399,6 +404,69 @@ Acceptance:
 
 ---
 
+## Sprint 18 — Concurrency foundation (planning)
+Implement:
+- [ ] Define `std::thread` + `std::channel` API (spawn/join, send/recv)
+- [ ] Decide value ownership across threads (copy/clone rules, allowed types)
+- [ ] VM deterministic scheduler (opt-in, e.g. `--deterministic` or test-only)
+- [ ] Native threading runtime scaffolding (thread registry + join bookkeeping)
+- [ ] WASM behavior: compile-time error for threading (clear diagnostic)
+
+Add tests:
+- [ ] VM: deterministic scheduling fixture tests
+- [ ] Compile-time error tests for WASM threading
+
+Acceptance:
+- Spec + stdlib surface finalized; VM deterministic mode documented
+
+---
+
+## Sprint 19 — Concurrency implementation (VM + native)
+Implement:
+- [ ] VM: spawn/join + channels (message passing only)
+- [ ] Native: spawn/join + channels (OS threads)
+- [ ] CLI/test harness support for concurrency fixtures
+- [ ] Error codes for thread/channel failures (closed channel, join error)
+
+Add tests:
+- [ ] VM vs native parity tests (deterministic mode in VM)
+- [ ] Stress tests with multiple threads + channels
+
+Acceptance:
+- Basic concurrent programs run in VM + native with parity coverage
+
+---
+
+## Sprint 20 — std::net TCP (blocking)
+Implement:
+- [ ] std::net TCP client (connect, read, write, close, timeouts)
+- [ ] std::net TCP server (listen, accept, read, write, close)
+- [ ] Error mapping (IO failures -> stable runtime codes)
+- [ ] WASM: compile-time error when `std::net` is imported/used
+
+Add tests:
+- [ ] VM/native TCP roundtrip tests (localhost)
+- [ ] Error cases (refused connect, timeout)
+- [ ] WASM compile error fixtures for std::net usage
+
+Acceptance:
+- Blocking TCP works in VM + native; WASM rejects net usage clearly
+
+---
+
+## Sprint 21 — std::http (minimal client)
+Implement:
+- [ ] HTTP client on top of std::net (GET/POST, status, headers, body)
+- [ ] Response parsing (status line + headers + body)
+- [ ] Minimal request builder (method, url, headers, body)
+
+Add tests:
+- [ ] Local HTTP server fixtures (VM/native) for GET/POST
+- [ ] Error handling tests (invalid response, timeout)
+
+Acceptance:
+- Minimal HTTP client works in VM + native for local endpoints
+
 ## Future — Full eval suite
 - [ ] Expand `eval/` with mutations, report generation, and cross-language comparison
 - [ ] Expand `eval/` tasks to measure LLM-friendliness
@@ -407,7 +475,9 @@ Acceptance:
 
 ## Future — Native-era features
 - [ ] Parallel execution + threading model (VM, WASM, native backends)
-- [ ] Networking standard library (client/server primitives)
+- [ ] Networking standard library (blocking TCP first)
+- [ ] HTTP client layer (after std::net)
+- [ ] UDP sockets follow-up (after TCP stabilizes)
 - [ ] Graphics/windowing library (cross-platform surface)
 - [ ] Plan stdlib bootstrap: move most stdlib to BirdDisk while keeping a minimal Rust host layer (ABI/layout, build + link order, tests)
 

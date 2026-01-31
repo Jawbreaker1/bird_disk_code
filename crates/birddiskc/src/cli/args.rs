@@ -7,9 +7,11 @@ Usage:
 Commands:
   fmt <file|dir>
   check <file|dir> [--json]
-  build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>]
+  lint <file|dir> [--json]
+  doc [<file|dir>] [--out <file>]
+  build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>] [--require-tests]
   run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
-  test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
+  test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--require-tests]
 
 Options:
   -h, --help     Show this help message
@@ -33,6 +35,25 @@ Options:
   -h, --help     Show this help message
 ";
 
+pub(crate) const LINT_HELP: &str = "\
+Usage:
+  birddiskc lint <file|dir> [--json]
+
+Options:
+  --json         Emit JSON diagnostics
+  --require-tests Enforce test coverage (opt-in)
+  -h, --help     Show this help message
+";
+
+pub(crate) const DOC_HELP: &str = "\
+Usage:
+  birddiskc doc [<file|dir>] [--out <file>]
+
+Options:
+  --out          Write docs to file instead of stdout
+  -h, --help     Show this help message
+";
+
 pub(crate) const RUN_HELP: &str = "\
 Usage:
   birddiskc run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [-- <args>...]
@@ -53,12 +74,13 @@ Notes:
 
 pub(crate) const BUILD_HELP: &str = "\
 Usage:
-  birddiskc build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>]
+  birddiskc build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>] [--require-tests]
 
 Options:
   --engine       Compilation engine (wasm or native)
   --emit         Emit compiled output (wat, wasm, obj, or exe)
   --out          Output file for --emit
+  --require-tests Enforce test coverage (opt-in)
   -h, --help     Show this help message
 Notes:
   If <file|dir> is omitted, `birddiskc build` uses `birddisk.json` (manifest entry).
@@ -66,13 +88,14 @@ Notes:
 
 pub(crate) const TEST_HELP: &str = "\
 Usage:
-  birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>]
+  birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--require-tests]
 
 Options:
   --json         Emit JSON output
   --engine       Execution engine (vm, wasm, or native)
   --dir          Directory to scan for .bd files (repeatable)
   --tag          Filter tests by tag (repeatable)
+  --require-tests Enforce test coverage (opt-in)
   -h, --help     Show this help message
 ";
 
@@ -80,11 +103,14 @@ Options:
 pub(crate) enum Command {
     Fmt { path: String },
     Check { path: String, json: bool },
+    Lint { path: String, json: bool, require_tests: bool },
+    Doc { path: Option<String>, out: Option<String> },
     Build {
         path: Option<String>,
         engine: birddisk_core::Engine,
         emit: Option<EmitFormat>,
         out: Option<String>,
+        require_tests: bool,
     },
     Run {
         path: Option<String>,
@@ -102,6 +128,7 @@ pub(crate) enum Command {
         engine: Option<birddisk_core::Engine>,
         dirs: Vec<String>,
         tags: Vec<String>,
+        require_tests: bool,
     },
 }
 
@@ -121,6 +148,8 @@ pub(crate) fn parse_command(args: &[String]) -> Result<Command, String> {
     match args[0].as_str() {
         "fmt" => parse_fmt(&args[1..]),
         "check" => parse_check(&args[1..]),
+        "lint" => parse_lint(&args[1..]),
+        "doc" => parse_doc(&args[1..]),
         "build" => parse_build(&args[1..]),
         "run" => parse_run(&args[1..]),
         "test" => parse_test(&args[1..]),
@@ -131,7 +160,7 @@ pub(crate) fn parse_command(args: &[String]) -> Result<Command, String> {
 fn parse_fmt(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, false, false, false, false, false, false, false, false, false, false),
+        ParseConfig::new(true, false, false, false, false, false, false, false, false, false, false, false),
     )?;
     let path = parsed
         .path
@@ -142,7 +171,7 @@ fn parse_fmt(args: &[String]) -> Result<Command, String> {
 fn parse_check(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, false, true, false, false, false, false, false, false, false, false),
+        ParseConfig::new(true, false, true, false, false, false, false, false, false, false, false, false),
     )?;
     let path = parsed
         .path
@@ -153,10 +182,36 @@ fn parse_check(args: &[String]) -> Result<Command, String> {
     })
 }
 
+fn parse_lint(args: &[String]) -> Result<Command, String> {
+    let parsed = parse_path_and_flags(
+        args,
+        ParseConfig::new(true, false, true, false, false, false, false, false, false, false, false, true),
+    )?;
+    let path = parsed
+        .path
+        .ok_or_else(|| "missing path for lint".to_string())?;
+    Ok(Command::Lint {
+        path,
+        json: parsed.json,
+        require_tests: parsed.require_tests,
+    })
+}
+
+fn parse_doc(args: &[String]) -> Result<Command, String> {
+    let parsed = parse_path_and_flags(
+        args,
+        ParseConfig::new(true, false, false, false, true, false, false, false, false, false, false, false),
+    )?;
+    Ok(Command::Doc {
+        path: parsed.path,
+        out: parsed.out,
+    })
+}
+
 fn parse_build(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, true, false, true, true, false, false, false, false, false, false),
+        ParseConfig::new(true, true, false, true, true, false, false, false, false, false, false, true),
     )?;
     if parsed.emit.is_none() && parsed.out.is_some() {
         return Err("--out requires --emit".to_string());
@@ -166,13 +221,14 @@ fn parse_build(args: &[String]) -> Result<Command, String> {
         engine: parsed.engine.unwrap_or(birddisk_core::Engine::Native),
         emit: parsed.emit,
         out: parsed.out,
+        require_tests: parsed.require_tests,
     })
 }
 
 fn parse_run(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, true, true, true, true, false, false, true, true, true, true),
+        ParseConfig::new(true, true, true, true, true, false, false, true, true, true, true, false),
     )?;
     if parsed.emit.is_some() && parsed.json {
         return Err("cannot combine --emit with --json".to_string());
@@ -205,7 +261,7 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
 fn parse_test(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(false, true, true, false, false, true, true, false, false, false, false),
+        ParseConfig::new(false, true, true, false, false, true, true, false, false, false, false, true),
     )?;
     if parsed.path.is_some() {
         return Err("unexpected path for test".to_string());
@@ -215,6 +271,7 @@ fn parse_test(args: &[String]) -> Result<Command, String> {
         engine: parsed.engine,
         dirs: parsed.dirs,
         tags: parsed.tags,
+        require_tests: parsed.require_tests,
     })
 }
 
@@ -231,6 +288,7 @@ struct ParseConfig {
     allow_stdout: bool,
     allow_report: bool,
     allow_args: bool,
+    allow_require_tests: bool,
 }
 
 impl ParseConfig {
@@ -246,6 +304,7 @@ impl ParseConfig {
         allow_stdout: bool,
         allow_report: bool,
         allow_args: bool,
+        allow_require_tests: bool,
     ) -> Self {
         Self {
             allow_path,
@@ -259,6 +318,7 @@ impl ParseConfig {
             allow_stdout,
             allow_report,
             allow_args,
+            allow_require_tests,
         }
     }
 }
@@ -275,6 +335,7 @@ struct ParsedArgs {
     stdout: Option<String>,
     report: Option<String>,
     args: Vec<String>,
+    require_tests: bool,
 }
 
 fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedArgs, String> {
@@ -289,6 +350,7 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
     let mut stdout = None;
     let mut report = None;
     let mut arg_values = Vec::new();
+    let mut require_tests = false;
     let mut iter = args.iter();
 
     while let Some(arg) = iter.next() {
@@ -305,6 +367,12 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
                     return Err("unexpected --json".to_string());
                 }
                 json = true;
+            }
+            "--require-tests" => {
+                if !config.allow_require_tests {
+                    return Err("unexpected --require-tests".to_string());
+                }
+                require_tests = true;
             }
             "--engine" => {
                 if !config.allow_engine {
@@ -405,6 +473,7 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
         stdout,
         report,
         args: arg_values,
+        require_tests,
     })
 }
 
