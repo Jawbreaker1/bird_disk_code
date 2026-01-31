@@ -53,15 +53,24 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) string_concat: FuncId,
     pub(crate) string_eq: FuncId,
     pub(crate) string_bytes: FuncId,
+    pub(crate) string_slice: FuncId,
+    pub(crate) string_index_of: FuncId,
+    pub(crate) string_contains: FuncId,
+    pub(crate) string_replace: FuncId,
     pub(crate) string_from_bytes: FuncId,
     pub(crate) string_to_i64: FuncId,
     pub(crate) string_from_i64: FuncId,
     pub(crate) bytes_len: FuncId,
     pub(crate) bytes_eq: FuncId,
+    pub(crate) bytes_slice: FuncId,
+    pub(crate) bytes_index_of: FuncId,
+    pub(crate) bytes_contains: FuncId,
     pub(crate) io_print: FuncId,
     pub(crate) io_read_line: FuncId,
     pub(crate) time_now_ms: FuncId,
     pub(crate) time_sleep_ms: FuncId,
+    pub(crate) rand_seed: FuncId,
+    pub(crate) rand_range: FuncId,
     pub(crate) fs_read_text: FuncId,
     pub(crate) fs_write_text: FuncId,
     pub(crate) fs_read_bytes: FuncId,
@@ -346,6 +355,30 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
+        let string_slice = declare_runtime_func(
+            module,
+            "bd_string_slice",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let string_index_of = declare_runtime_func(
+            module,
+            "bd_string_index_of",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let string_contains = declare_runtime_func(
+            module,
+            "bd_string_contains",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let string_replace = declare_runtime_func(
+            module,
+            "bd_string_replace",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
         let string_from_bytes = declare_runtime_func(
             module,
             "bd_string_from_bytes",
@@ -376,6 +409,24 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
+        let bytes_slice = declare_runtime_func(
+            module,
+            "bd_bytes_slice",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let bytes_index_of = declare_runtime_func(
+            module,
+            "bd_bytes_index_of",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let bytes_contains = declare_runtime_func(
+            module,
+            "bd_bytes_contains",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
         let io_print = declare_runtime_func(
             module,
             "bd_io_print",
@@ -390,6 +441,14 @@ impl RuntimeFuncs {
             module,
             "bd_time_sleep_ms",
             &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let rand_seed =
+            declare_runtime_func(module, "bd_rand_seed", &[types::I64, types::I64], &[])?;
+        let rand_range = declare_runtime_func(
+            module,
+            "bd_rand_range",
+            &[types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
         let fs_read_text = declare_runtime_func(
@@ -556,15 +615,24 @@ impl RuntimeFuncs {
             string_concat,
             string_eq,
             string_bytes,
+            string_slice,
+            string_index_of,
+            string_contains,
+            string_replace,
             string_from_bytes,
             string_to_i64,
             string_from_i64,
             bytes_len,
             bytes_eq,
+            bytes_slice,
+            bytes_index_of,
+            bytes_contains,
             io_print,
             io_read_line,
             time_now_ms,
             time_sleep_ms,
+            rand_seed,
+            rand_range,
             fs_read_text,
             fs_write_text,
             fs_read_bytes,

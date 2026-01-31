@@ -10,6 +10,7 @@ Implement BirdDisk v0.1 incrementally with tight verification loops.
 4) Diagnostics must be machine-readable (JSON) and stable (stable error codes).
 5) Formatting must be deterministic and idempotent.
 6) Prefer portability + correctness over early performance.
+7) Keep files under 1000 LOC; flag and propose refactors before exceeding the limit.
 
 ## BirdDisk v0.1 definition
 ### Keywords and syntax
@@ -38,7 +39,7 @@ No floats, generics, concurrency, exceptions, closures, structs, pattern matchin
   - update `docs/SPEC.md`
   - update `GRAMMAR.md`
   - add/update an example in `docs/COOKBOOK.md`
-  - add tests (VM now; VM+WASM parity once WASM exists)
+  - add tests (VM + WASM + native parity)
 
 ## CLI contracts
 - `birddiskc check --json` returns structured diagnostics per `docs/DIAGNOSTICS.md`

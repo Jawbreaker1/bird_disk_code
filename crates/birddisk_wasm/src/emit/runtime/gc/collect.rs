@@ -1,0 +1,350 @@
+use crate::emit::{
+    WatEmitter,
+    ARRAY_HEADER_SIZE,
+    ARRAY_KIND_REF,
+    HEAP_AUX_OFFSET,
+    HEAP_FLAGS_OFFSET,
+    HEAP_HEADER_SIZE,
+    HEAP_KIND_ARRAY,
+    HEAP_KIND_ENUM,
+    HEAP_KIND_FREE,
+    HEAP_KIND_OBJECT,
+    HEAP_KIND_SHIFT,
+    HEAP_LEN_OFFSET,
+    OBJECT_HEADER_SIZE,
+};
+
+pub(super) fn emit_gc_collect(
+    emitter: &mut WatEmitter,
+    heap_start: i32,
+    root_ptr_offset: i32,
+    root_data_offset: i32,
+    seen_ptr_offset: i32,
+) {
+    emitter.push_line("(func $bd_gc_sweep (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $end i32)");
+    emitter.push_line("(local $kind i32)");
+    emitter.push_line("(local $flags i32)");
+    emitter.push_line("(local $size i32)");
+    emitter.push_line("(local $freed i32)");
+    emitter.push_line("global.get $heap");
+    emitter.push_line("local.set $end");
+    emitter.push_line(format!("i32.const {heap_start}"));
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("local.set $freed");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("global.set $free_list");
+    let sweep_exit = "sweep_exit";
+    let sweep_loop = "sweep_loop";
+    emitter.push_line(format!("block ${sweep_exit}"));
+    emitter.indent();
+    emitter.push_line(format!("loop ${sweep_loop}"));
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $end");
+    emitter.push_line("i32.ge_u");
+    emitter.push_line(format!("br_if ${sweep_exit}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line("local.set $kind");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("call $bd_block_size");
+    emitter.push_line("local.set $size");
+    emitter.push_line("local.get $kind");
+    emitter.push_line(format!("i32.const {HEAP_KIND_FREE}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $size");
+    emitter.push_line("call $bd_free_add");
+    emitter.dedent();
+    emitter.push_line("else");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.load offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.set $flags");
+    emitter.push_line("local.get $flags");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.and");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $size");
+    emitter.push_line("call $bd_free_add");
+    emitter.push_line("local.get $freed");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $freed");
+    emitter.dedent();
+    emitter.push_line("else");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $flags");
+    emitter.push_line("i32.const -2");
+    emitter.push_line("i32.and");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $size");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line(format!("br ${sweep_loop}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $freed");
+    emitter.push_line("global.set $gc_last_freed");
+    emitter.push_line("local.get $freed");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_gc_collect (result i32)");
+    emitter.indent();
+    emitter.push_line("call $bd_gc_mark_objects");
+    emitter.push_line("drop");
+    emitter.push_line("call $bd_gc_sweep");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_gc_mark_objects (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $root_count i32)");
+    emitter.push_line("(local $idx i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("(local $kind i32)");
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $type i32)");
+    emitter.push_line("(local $count i32)");
+    emitter.push_line("(local $field_idx i32)");
+    emitter.push_line("(local $field_off i32)");
+
+    emitter.push_line("call $bd_mark_clear");
+    emitter.push_line(format!("i32.const {root_ptr_offset}"));
+    emitter.push_line("i32.load");
+    emitter.push_line("local.set $root_count");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("local.set $idx");
+    let root_exit = "root_exit";
+    let root_loop = "root_loop";
+    emitter.push_line(format!("block ${root_exit}"));
+    emitter.indent();
+    emitter.push_line(format!("loop ${root_loop}"));
+    emitter.indent();
+    emitter.push_line("local.get $idx");
+    emitter.push_line("local.get $root_count");
+    emitter.push_line("i32.ge_u");
+    emitter.push_line(format!("br_if ${root_exit}"));
+    emitter.push_line(format!("i32.const {root_data_offset}"));
+    emitter.push_line("local.get $idx");
+    emitter.push_line("i32.const 4");
+    emitter.push_line("i32.mul");
+    emitter.push_line("i32.add");
+    emitter.push_line("i32.load");
+    emitter.push_line("call $bd_mark_push");
+    emitter.push_line("local.get $idx");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $idx");
+    emitter.push_line(format!("br ${root_loop}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("global.get $error_kind");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("nop");
+    emitter.dedent();
+    emitter.push_line("else");
+    emitter.indent();
+    emitter.push_line("global.get $error_msg");
+    emitter.push_line("call $bd_mark_push");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    let mark_exit = "mark_exit";
+    let mark_loop = "mark_loop";
+    emitter.push_line(format!("block ${mark_exit}"));
+    emitter.indent();
+    emitter.push_line(format!("loop ${mark_loop}"));
+    emitter.indent();
+    emitter.push_line("call $bd_mark_pop");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.eqz");
+    emitter.push_line(format!("br_if ${mark_exit}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("call $bd_seen_contains");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("br ${mark_loop}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("call $bd_seen_add");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.load offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.or");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line("local.set $kind");
+
+    emitter.push_line("local.get $kind");
+    emitter.push_line(format!("i32.const {HEAP_KIND_OBJECT}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("call $bd_object_type");
+    emitter.push_line("local.set $type");
+    emitter.push_line("local.get $type");
+    emitter.push_line("call $bd_ref_count");
+    emitter.push_line("local.set $count");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("local.set $field_idx");
+    let scan_exit = "scan_exit";
+    let scan_loop = "scan_loop";
+    emitter.push_line(format!("block ${scan_exit}"));
+    emitter.indent();
+    emitter.push_line(format!("loop ${scan_loop}"));
+    emitter.indent();
+    emitter.push_line("local.get $field_idx");
+    emitter.push_line("local.get $count");
+    emitter.push_line("i32.ge_u");
+    emitter.push_line(format!("br_if ${scan_exit}"));
+    emitter.push_line("local.get $type");
+    emitter.push_line("local.get $field_idx");
+    emitter.push_line("call $bd_ref_field");
+    emitter.push_line("local.set $field_off");
+    emitter.push_line("local.get $field_off");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("br ${scan_exit}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $field_off");
+    emitter.push_line("i32.const 8");
+    emitter.push_line("i32.mul");
+    emitter.push_line(format!("i32.const {OBJECT_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("i32.add");
+    emitter.push_line("i64.load");
+    emitter.push_line("i32.wrap_i64");
+    emitter.push_line("call $bd_mark_push");
+    emitter.push_line("local.get $field_idx");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $field_idx");
+    emitter.push_line(format!("br ${scan_loop}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $kind");
+    emitter.push_line(format!("i32.const {HEAP_KIND_ARRAY}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.load offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line(format!("i32.const {ARRAY_KIND_REF}"));
+    emitter.push_line("i32.eq");
+    let arr_exit = "arr_exit";
+    let arr_loop = "arr_loop";
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("local.set $idx");
+    emitter.push_line(format!("block ${arr_exit}"));
+    emitter.indent();
+    emitter.push_line(format!("loop ${arr_loop}"));
+    emitter.indent();
+    emitter.push_line("local.get $idx");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.ge_u");
+    emitter.push_line(format!("br_if ${arr_exit}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $idx");
+    emitter.push_line("i32.const 4");
+    emitter.push_line("i32.mul");
+    emitter.push_line("i32.add");
+    emitter.push_line("i32.load");
+    emitter.push_line("call $bd_mark_push");
+    emitter.push_line("local.get $idx");
+    emitter.push_line("i32.const 1");
+    emitter.push_line("i32.add");
+    emitter.push_line("local.set $idx");
+    emitter.push_line(format!("br ${arr_loop}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line("local.get $kind");
+    emitter.push_line(format!("i32.const {HEAP_KIND_ENUM}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.load offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line(format!("i32.const {ARRAY_KIND_REF}"));
+    emitter.push_line("i32.eq");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {HEAP_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("i64.load");
+    emitter.push_line("i32.wrap_i64");
+    emitter.push_line("call $bd_mark_push");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line(format!("br ${mark_loop}"));
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+
+    emitter.push_line(format!("i32.const {seen_ptr_offset}"));
+    emitter.push_line("i32.load");
+    emitter.dedent();
+    emitter.push_line(")");
+
+}

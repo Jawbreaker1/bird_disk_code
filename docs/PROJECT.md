@@ -34,4 +34,4 @@ birddisk.json      # optional project manifest (entry + deps)
   - `docs/SPEC.md`
   - `GRAMMAR.md`
   - `docs/COOKBOOK.md`
-  - tests (VM + WASM parity once WASM exists)
+  - tests (VM + WASM + native parity)

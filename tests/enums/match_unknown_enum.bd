@@ -1,0 +1,13 @@
+enum Choice:
+  case One.
+end
+
+rule main() -> i64:
+  set value: Choice = Choice::One.
+  match value:
+    case Missing::One:
+      yield 1.
+    otherwise:
+      yield 0.
+  end
+end

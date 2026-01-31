@@ -136,9 +136,9 @@ Runtime error messages (E0400) include:
 
 E0404 uses the thrown message string as its diagnostic message.
 
-E0500: VM/WASM mismatch
+E0500: Backend mismatch (VM/WASM/native)
 E0501: Test harness error
-E0502: Test output mismatch
+E0502: Test output mismatch (VM/WASM/native)
 E0503: Expected error mismatch
 
 Minimum required fields
@@ -164,3 +164,19 @@ Trace format (runtime errors)
   - `file`: source file path for the function
   - `span`: line/col of the function declaration
   - `source`: source line snippet for the function declaration
+
+## Human-readable CLI output (non-JSON)
+When running `birddiskc run` without `--json`, diagnostics are printed in a
+human-readable format:
+```
+error[E0403]: Array index out of bounds.
+  --> examples/oob.bd:4:3
+  in boom
+  | rule boom() -> i64:
+  stack trace:
+    0: boom (examples/oob.bd:4:3)
+    1: main (examples/oob.bd:1:1)
+  notes:
+    - Runtime error
+  see: SPEC.md#8-4-indexing
+```

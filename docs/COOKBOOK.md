@@ -1,7 +1,7 @@
 # BirdDisk Cookbook (v0.1)
 
 All examples must parse, typecheck, and run in the VM (golden).
-Unless noted, they should also run in WASM.
+Unless noted, they should also run in WASM + native.
 
 ---
 
@@ -141,6 +141,40 @@ rule main() -> i64:
 end
 ```
 
+```birddisk
+import std::string.
+
+rule main() -> i64:
+  set text: string = "banana".
+  set part: string = std::string::slice(text, 1, 3).
+  set idx: i64 = std::string::index_of(text, "na").
+  set ok: bool = std::string::contains(text, "nan").
+  set replaced: string = std::string::replace(text, "na", "NA").
+  when std::string::eq(part, "ana") && idx == 2 && ok && std::string::eq(replaced, "baNANA"):
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+
+```birddisk
+import std::bytes.
+
+rule main() -> i64:
+  set xs: u8[] = [1, 2, 3, 4, 2].
+  set part: u8[] = std::bytes::slice(xs, 1, 3).
+  set ok_part: bool = std::bytes::eq(part, [2, 3, 4]).
+  set idx: i64 = std::bytes::index_of(xs, 2).
+  set has: bool = std::bytes::contains(xs, 5).
+  when ok_part && idx == 1 && has == false:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+
 ## 11) JSON (std::json)
 ```birddisk
 import std::json.
@@ -212,7 +246,23 @@ rule main() -> i64:
 end
 ```
 
-## 16) Files (std::fs)
+## 16) Random (std::rand)
+```birddisk
+import std::rand.
+
+rule main() -> i64:
+  std::rand::seed(123).
+  set a: i64 = std::rand::range(0, 10).
+  set b: i64 = std::rand::range(0, 10).
+  when a == 4 && b == 7:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end
+```
+
+## 17) Files (std::fs)
 ```birddisk
 import std::fs.
 import std::string.
@@ -223,7 +273,7 @@ rule main() -> i64:
 end
 ```
 
-## 17) Paths (std::path)
+## 18) Paths (std::path)
 ```birddisk
 import std::path.
 import std::string.
@@ -239,7 +289,7 @@ rule main() -> i64:
 end
 ```
 
-## 18) Environment (std::env)
+## 19) Environment (std::env)
 ```birddisk
 import std::env.
 import std::string.
@@ -258,7 +308,7 @@ Pass program args after `--`:
 ./target/debug/birddiskc run examples/main.bd --json -- alpha beta
 ```
 
-## 19) Error handling (try/catch/throw)
+## 20) Error handling (try/catch/throw)
 ```birddisk
 import std::io.
 import std::string.
@@ -285,7 +335,7 @@ rule main() -> i64:
 end
 ```
 
-## 20) Native AOT (emit exe)
+## 21) Native AOT (emit exe)
 ```birddisk
 rule main() -> i64:
   yield 0.
@@ -320,13 +370,13 @@ Test note (optional):
 BIRDDISK_RUN_NATIVE_AOT_TEST=1 cargo test -p birddiskc --bin birddiskc native_aot_json_trace_smoke
 ```
 
-## 21) Large example (Yahtzee)
+## 22) Large example (Yahtzee)
 See `examples/yahtzee/` for a multi-file terminal demo.
 ```sh
 cargo run -p birddiskc -- run examples/yahtzee/main.bd --engine vm --json --stdin examples/yahtzee/demo.stdin
 ```
 
-## 22) Enums and match
+## 23) Enums and match
 ```birddisk
 enum Result:
   case Ok(value: i64).
@@ -347,7 +397,7 @@ end
 ```
 See `examples/enum_result.bd` for a runnable file example.
 
-## 23) Floats (f64)
+## 24) Floats (f64)
 ```birddisk
 rule main() -> i64:
   set a: f64 = 1.5.
@@ -362,7 +412,7 @@ end
 ```
 See `tests/floats/float_basic.bd` for a runnable file example.
 
-## 24) Explicit casts (i64 <-> f64)
+## 25) Explicit casts (i64 <-> f64)
 ```birddisk
 rule main() -> i64:
   set a: i64 = 5.

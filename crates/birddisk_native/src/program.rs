@@ -169,6 +169,22 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::Array(Box::new(Type::U8)),
         }),
+        "std::string::slice" => Some(FunctionSig {
+            params: vec![Type::String, Type::I64, Type::I64],
+            return_type: Type::String,
+        }),
+        "std::string::index_of" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::I64,
+        }),
+        "std::string::contains" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::Bool,
+        }),
+        "std::string::replace" => Some(FunctionSig {
+            params: vec![Type::String, Type::String, Type::String],
+            return_type: Type::String,
+        }),
         "std::string::from_bytes" => Some(FunctionSig {
             params: vec![Type::Array(Box::new(Type::U8))],
             return_type: Type::String,
@@ -189,6 +205,18 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::Array(Box::new(Type::U8)), Type::Array(Box::new(Type::U8))],
             return_type: Type::Bool,
         }),
+        "std::bytes::slice" => Some(FunctionSig {
+            params: vec![Type::Array(Box::new(Type::U8)), Type::I64, Type::I64],
+            return_type: Type::Array(Box::new(Type::U8)),
+        }),
+        "std::bytes::index_of" => Some(FunctionSig {
+            params: vec![Type::Array(Box::new(Type::U8)), Type::U8],
+            return_type: Type::I64,
+        }),
+        "std::bytes::contains" => Some(FunctionSig {
+            params: vec![Type::Array(Box::new(Type::U8)), Type::U8],
+            return_type: Type::Bool,
+        }),
         "std::io::print" => Some(FunctionSig {
             params: vec![Type::String],
             return_type: Type::Void,
@@ -203,6 +231,14 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
         }),
         "std::time::sleep_ms" => Some(FunctionSig {
             params: vec![Type::I64],
+            return_type: Type::I64,
+        }),
+        "std::rand::seed" => Some(FunctionSig {
+            params: vec![Type::I64],
+            return_type: Type::Void,
+        }),
+        "std::rand::range" => Some(FunctionSig {
+            params: vec![Type::I64, Type::I64],
             return_type: Type::I64,
         }),
         "std::fs::read_text" => Some(FunctionSig {

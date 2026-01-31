@@ -1,0 +1,12 @@
+import std::rand.
+
+rule main() -> i64:
+  std::rand::seed(123).
+  set a: i64 = std::rand::range(0, 10).
+  set b: i64 = std::rand::range(-5, 5).
+  when a == 5 && b == 1:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

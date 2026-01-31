@@ -1,0 +1,17 @@
+import std::bytes.
+
+rule main() -> i64:
+  set xs: u8[] = [1, 2, 3, 4, 2].
+  set part: u8[] = std::bytes::slice(xs, 1, 3).
+  set expected: u8[] = [2, 3, 4].
+  set ok_part: bool = std::bytes::eq(part, expected).
+  set needle: u8 = 2.
+  set missing: u8 = 5.
+  set idx: i64 = std::bytes::index_of(xs, needle).
+  set has: bool = std::bytes::contains(xs, missing).
+  when ok_part && idx == 1 && has == false:
+    yield 1.
+  otherwise:
+    yield 0.
+  end
+end

@@ -194,6 +194,7 @@ fn is_builtin_std_module(path: &[String]) -> bool {
                     || module == "bytes"
                     || module == "io"
                     || module == "time"
+                    || module == "rand"
                     || module == "fs"
                     || module == "path"
                     || module == "env"

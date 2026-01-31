@@ -31,11 +31,30 @@ Modules (BirdDisk)
 
 Runtime modules (implemented in Rust)
 - std::string
+  - len(text: string) -> i64
+  - concat(left: string, right: string) -> string
+  - eq(left: string, right: string) -> bool
+  - bytes(text: string) -> u8[]
+  - slice(text: string, start: i64, len: i64) -> string
+  - index_of(text: string, needle: string) -> i64
+  - contains(text: string, needle: string) -> bool
+  - replace(text: string, needle: string, replacement: string) -> string
+  - from_bytes(bytes: u8[]) -> string
+  - to_i64(text: string) -> i64
+  - from_i64(value: i64) -> string
 - std::bytes
+  - len(bytes: u8[]) -> i64
+  - eq(left: u8[], right: u8[]) -> bool
+  - slice(bytes: u8[], start: i64, len: i64) -> u8[]
+  - index_of(bytes: u8[], needle: u8) -> i64
+  - contains(bytes: u8[], needle: u8) -> bool
 - std::io
 - std::time
   - now_ms() -> i64
   - sleep_ms(ms: i64) -> i64
+- std::rand
+  - seed(seed: i64) -> void
+  - range(min: i64, max: i64) -> i64
 - std::fs
   - read_text(path: string) -> string
   - write_text(path: string, text: string) -> i64

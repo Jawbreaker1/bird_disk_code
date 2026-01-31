@@ -16,7 +16,7 @@ BirdDisk focuses on:
 - **Golden reference execution** (VM/interpreter)
 - **Native compilation** (host JIT + AOT object/exe)
 - **WASM as a portable baseline**
-- **Differential testing**: VM output == WASM/native output
+- **Differential testing**: VM/WASM/native parity (default `birddiskc test`)
 
 How it works
 ```

@@ -5,7 +5,7 @@ mod types;
 use crate::analysis::{
     program_uses_arrays, program_uses_bytes, program_uses_env, program_uses_fs,
     program_uses_io, program_uses_json, program_uses_objects, program_uses_path,
-    program_uses_string_from_bytes, program_uses_strings, program_uses_time,
+    program_uses_rand, program_uses_string_from_bytes, program_uses_strings, program_uses_time,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -61,6 +61,9 @@ pub(crate) const TRAP_KIND_ARRAY: i32 = 411;
 pub(crate) const TRAP_KIND_OBJECT: i32 = 412;
 pub(crate) const TRAP_KIND_BYTES: i32 = 413;
 pub(crate) const TRAP_KIND_ENUM: i32 = 420;
+pub(crate) const TRAP_STRING_OOB: i32 = 421;
+pub(crate) const TRAP_STRING_UTF8: i32 = 422;
+pub(crate) const TRAP_RAND_RANGE: i32 = 423;
 pub(crate) const TRAP_HEAP_HEADER: i32 = 414;
 pub(crate) const TRAP_TIME_NEG: i32 = 415;
 pub(crate) const TRAP_FS_IO: i32 = 416;
@@ -110,13 +113,14 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
     let uses_io = program_uses_io(program);
     let uses_objects = program_uses_objects(program);
     let uses_time = program_uses_time(program);
+    let uses_rand = program_uses_rand(program);
     let uses_fs = program_uses_fs(program);
     let uses_path = program_uses_path(program);
     let uses_env = program_uses_env(program);
     let uses_json = program_uses_json(program);
     let uses_trace = true;
     let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace;
-    let needs_validate_utf8 = uses_from_bytes || uses_fs || uses_path || uses_env;
+    let needs_validate_utf8 = uses_strings || uses_from_bytes || uses_fs || uses_path || uses_env;
     let export_memory =
         uses_from_bytes || uses_io || uses_fs || uses_path || uses_env || uses_trace;
     let trace_table = build_trace_table(program);
@@ -224,6 +228,9 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
             uses_io,
             heap_start,
         );
+    }
+    if uses_rand {
+        runtime::emit_rand_runtime(&mut emitter);
     }
     if uses_fs {
         runtime::emit_fs_runtime(&mut emitter);

@@ -23,7 +23,7 @@ LLM-safe workflow
 1) Generate code + tests (use `docs/COOKBOOK.md` patterns).
 2) Run `birddiskc check --json` first to get structured diagnostics.
 3) Run `birddiskc run --engine vm --json` to validate execution.
-4) If parity matters, run `--engine wasm` and `--engine native`.
+4) For parity, run `birddiskc test --json` (defaults to VM + WASM + native).
 
 Project template (preferred for multi-file)
 `birddisk.json`:

@@ -16,7 +16,7 @@ This document lists the current CLI commands, flags, and runtime notes.
 Notes:
 - JSON output is supported for `check`, `run`, and `test`.
 - Non-JSON `run` is supported for VM interactive mode and native AOT executables.
-- `test` compares VM vs WASM outputs by default.
+- `test` compares VM vs WASM vs native outputs by default.
 - If a `birddisk.json` manifest is present, `run`/`build` can omit the file path and will use the manifest entry.
 
 Manifest (`birddisk.json`)

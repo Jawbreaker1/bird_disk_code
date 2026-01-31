@@ -1,0 +1,9 @@
+enum Choice:
+  case One.
+  case Two(value: i64).
+end
+
+rule main() -> i64:
+  set value: Choice = Choice::Two(true).
+  yield 0.
+end

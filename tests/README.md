@@ -26,7 +26,7 @@ VM-only programs live under `vm_tests/`. Run them with the VM engine:
 ```sh
 ./target/debug/birddiskc test --json --engine vm --dir vm_tests
 ```
-Currently, array fixtures are in `tests/arrays/` and run in VM + WASM.
+Currently, array fixtures are in `tests/arrays/` and run in VM + WASM + native.
 
 ## VM error fixtures
 Programs expected to fail live under `vm_error_tests/`. They are not part
@@ -48,4 +48,4 @@ For IO tests, place optional companion files alongside the `.bd` source:
 To assert a compile-time or runtime error, add a companion `.error` file:
 - `<name>.error` contains one or more diagnostic codes (whitespace-separated).
 - The test harness passes if any reported diagnostic matches one of the codes.
-- If the program typechecks, both VM and WASM must report a matching error code.
+- If the program typechecks, VM, WASM, and native must report a matching error code.

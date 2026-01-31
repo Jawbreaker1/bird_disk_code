@@ -110,6 +110,17 @@ pub(crate) fn program_uses_time(program: &Program) -> bool {
     false
 }
 
+pub(crate) fn program_uses_rand(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_rand(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub(crate) fn program_uses_fs(program: &Program) -> bool {
     for func in all_functions(program) {
         for stmt in &func.body {
@@ -396,7 +407,12 @@ fn stmt_has_string_from_bytes(stmt: &Stmt) -> bool {
 fn expr_has_string_from_bytes(expr: &Expr) -> bool {
     match &expr.kind {
         ExprKind::Call { name, args } => {
-            name == "std::string::from_bytes" || args.iter().any(expr_has_string_from_bytes)
+            matches!(
+                name.as_str(),
+                "std::string::from_bytes"
+                    | "std::string::slice"
+                    | "std::string::replace"
+            ) || args.iter().any(expr_has_string_from_bytes)
         }
         ExprKind::New { args, .. } => args.iter().any(expr_has_string_from_bytes),
         ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_string_from_bytes),
@@ -571,6 +587,59 @@ fn expr_has_time(expr: &Expr) -> bool {
         ExprKind::Binary { left, right, .. } => {
             expr_has_time(left) || expr_has_time(right)
         }
+        _ => false,
+    }
+}
+
+fn stmt_has_rand(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_rand(expr),
+        Stmt::Expr { expr, .. } => expr_has_rand(expr),
+        Stmt::Put { expr, .. } => expr_has_rand(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_rand(index) || expr_has_rand(expr),
+        Stmt::PutField { expr, .. } => expr_has_rand(expr),
+        Stmt::Yield { expr, .. } => expr_has_rand(expr),
+        Stmt::Throw { expr, .. } => expr_has_rand(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_rand) || catch_body.iter().any(stmt_has_rand),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_rand(cond)
+                || then_body.iter().any(stmt_has_rand)
+                || else_body.iter().any(stmt_has_rand)
+        }
+        Stmt::Repeat { cond, body, .. } => expr_has_rand(cond) || body.iter().any(stmt_has_rand),
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_rand(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_rand))
+                || otherwise.iter().any(stmt_has_rand)
+        }
+    }
+}
+
+fn expr_has_rand(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::rand::") || args.iter().any(expr_has_rand)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_rand),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_rand),
+        ExprKind::ArrayNew { len } => expr_has_rand(len),
+        ExprKind::Index { base, index } => expr_has_rand(base) || expr_has_rand(index),
+        ExprKind::Unary { expr, .. } => expr_has_rand(expr),
+        ExprKind::Binary { left, right, .. } => expr_has_rand(left) || expr_has_rand(right),
         _ => false,
     }
 }

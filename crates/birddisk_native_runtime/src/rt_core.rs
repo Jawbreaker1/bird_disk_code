@@ -259,6 +259,7 @@ pub struct Runtime {
     start_time: Instant,
     stdin_fallback: bool,
     stdout_live: bool,
+    pub(crate) rand_state: u64,
 }
 
 impl Runtime {
@@ -277,6 +278,7 @@ impl Runtime {
             start_time: Instant::now(),
             stdin_fallback: false,
             stdout_live: false,
+            rand_state: 0x9E37_79B9_7F4A_7C15,
         }
     }
 

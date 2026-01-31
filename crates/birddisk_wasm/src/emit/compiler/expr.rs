@@ -62,6 +62,9 @@ impl<'a> FuncCompiler<'a> {
                 if self.emit_time_call(name, args)? {
                     return Ok(());
                 }
+                if self.emit_rand_call(name, args)? {
+                    return Ok(());
+                }
                 if self.emit_fs_call(name, args)? {
                     return Ok(());
                 }
@@ -286,6 +289,8 @@ impl<'a> FuncCompiler<'a> {
                     (BinaryOp::Mod, Type::F64, Type::F64) => "f64.rem",
                     (BinaryOp::EqEq, Type::F64, Type::F64) => "f64.eq",
                     (BinaryOp::NotEq, Type::F64, Type::F64) => "f64.ne",
+                    (BinaryOp::EqEq, Type::Bool, Type::Bool) => "i32.eq",
+                    (BinaryOp::NotEq, Type::Bool, Type::Bool) => "i32.ne",
                     (BinaryOp::Lt, Type::F64, Type::F64) => "f64.lt",
                     (BinaryOp::LtEq, Type::F64, Type::F64) => "f64.le",
                     (BinaryOp::Gt, Type::F64, Type::F64) => "f64.gt",
@@ -630,6 +635,64 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_string_bytes");
                 Ok(true)
             }
+            "std::string::slice" => {
+                if args.len() != 3 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::string::slice expects 3 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::I64, Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line(format!("local.get {}", arg_locals[2]));
+                self.push_line("call $bd_string_slice");
+                Ok(true)
+            }
+            "std::string::index_of" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::string::index_of expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_string_index_of");
+                Ok(true)
+            }
+            "std::string::contains" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::string::contains expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_string_contains");
+                Ok(true)
+            }
+            "std::string::replace" => {
+                if args.len() != 3 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::string::replace expects 3 arguments",
+                    ));
+                }
+                let param_types = [Type::String, Type::String, Type::String];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line(format!("local.get {}", arg_locals[2]));
+                self.push_line("call $bd_string_replace");
+                Ok(true)
+            }
             "std::string::from_bytes" => {
                 if args.len() != 1 {
                     return Err(wasm_error(
@@ -786,6 +849,49 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_bytes_eq");
                 Ok(true)
             }
+            "std::bytes::slice" => {
+                if args.len() != 3 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::bytes::slice expects 3 arguments",
+                    ));
+                }
+                let param_types = [Type::Array(Box::new(Type::U8)), Type::I64, Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line(format!("local.get {}", arg_locals[2]));
+                self.push_line("call $bd_bytes_slice");
+                Ok(true)
+            }
+            "std::bytes::index_of" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::bytes::index_of expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::Array(Box::new(Type::U8)), Type::U8];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_bytes_index_of");
+                Ok(true)
+            }
+            "std::bytes::contains" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::bytes::contains expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::Array(Box::new(Type::U8)), Type::U8];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_bytes_contains");
+                Ok(true)
+            }
             _ => Ok(false),
         }
     }
@@ -842,6 +948,39 @@ impl<'a> FuncCompiler<'a> {
                 let arg_locals = self.emit_call_args(args, &param_types)?;
                 self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_time_sleep_ms");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn emit_rand_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::rand::seed" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::rand::seed expects 1 argument",
+                    ));
+                }
+                let param_types = [Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line("call $bd_rand_seed");
+                Ok(true)
+            }
+            "std::rand::range" => {
+                if args.len() != 2 {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::rand::range expects 2 arguments",
+                    ));
+                }
+                let param_types = [Type::I64, Type::I64];
+                let arg_locals = self.emit_call_args(args, &param_types)?;
+                self.push_line(format!("local.get {}", arg_locals[0]));
+                self.push_line(format!("local.get {}", arg_locals[1]));
+                self.push_line("call $bd_rand_range");
                 Ok(true)
             }
             _ => Ok(false),
@@ -1213,15 +1352,24 @@ impl<'a> FuncCompiler<'a> {
             "std::string::concat" => Some(Type::String),
             "std::string::eq" => Some(Type::Bool),
             "std::string::bytes" => Some(Type::Array(Box::new(Type::U8))),
+            "std::string::slice" => Some(Type::String),
+            "std::string::index_of" => Some(Type::I64),
+            "std::string::contains" => Some(Type::Bool),
+            "std::string::replace" => Some(Type::String),
             "std::string::from_bytes" => Some(Type::String),
             "std::string::to_i64" => Some(Type::I64),
             "std::string::from_i64" => Some(Type::String),
             "std::bytes::len" => Some(Type::I64),
             "std::bytes::eq" => Some(Type::Bool),
+            "std::bytes::slice" => Some(Type::Array(Box::new(Type::U8))),
+            "std::bytes::index_of" => Some(Type::I64),
+            "std::bytes::contains" => Some(Type::Bool),
             "std::io::print" => Some(Type::Void),
             "std::io::read_line" => Some(Type::String),
             "std::time::now_ms" => Some(Type::I64),
             "std::time::sleep_ms" => Some(Type::I64),
+            "std::rand::seed" => Some(Type::Void),
+            "std::rand::range" => Some(Type::I64),
             "std::fs::read_text" => Some(Type::String),
             "std::fs::write_text" => Some(Type::I64),
             "std::fs::read_bytes" => Some(Type::Array(Box::new(Type::U8))),

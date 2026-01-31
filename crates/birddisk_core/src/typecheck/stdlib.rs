@@ -43,6 +43,11 @@ impl<'a> Checker<'a> {
                 && import.path[0] == "std"
                 && import.path[1] == "json"
         });
+        let has_std_rand = program.imports.iter().any(|import| {
+            import.path.len() == 2
+                && import.path[0] == "std"
+                && import.path[1] == "rand"
+        });
         if has_std_string {
             self.insert_function(
                 "std::string::len",
@@ -63,6 +68,26 @@ impl<'a> Checker<'a> {
                 "std::string::bytes",
                 vec![Ty::String],
                 Ty::Array(Box::new(Ty::U8)),
+            );
+            self.insert_function(
+                "std::string::slice",
+                vec![Ty::String, Ty::I64, Ty::I64],
+                Ty::String,
+            );
+            self.insert_function(
+                "std::string::index_of",
+                vec![Ty::String, Ty::String],
+                Ty::I64,
+            );
+            self.insert_function(
+                "std::string::contains",
+                vec![Ty::String, Ty::String],
+                Ty::Bool,
+            );
+            self.insert_function(
+                "std::string::replace",
+                vec![Ty::String, Ty::String, Ty::String],
+                Ty::String,
             );
             self.insert_function(
                 "std::string::from_bytes",
@@ -86,6 +111,22 @@ impl<'a> Checker<'a> {
             self.insert_function(
                 "std::bytes::eq",
                 vec![bytes.clone(), bytes],
+                Ty::Bool,
+            );
+            let bytes = Ty::Array(Box::new(Ty::U8));
+            self.insert_function(
+                "std::bytes::slice",
+                vec![bytes.clone(), Ty::I64, Ty::I64],
+                bytes.clone(),
+            );
+            self.insert_function(
+                "std::bytes::index_of",
+                vec![bytes.clone(), Ty::U8],
+                Ty::I64,
+            );
+            self.insert_function(
+                "std::bytes::contains",
+                vec![bytes, Ty::U8],
                 Ty::Bool,
             );
         }
@@ -151,6 +192,10 @@ impl<'a> Checker<'a> {
             self.insert_function("std::json::decode_i64", vec![Ty::String], Ty::I64);
             self.insert_function("std::json::decode_bool", vec![Ty::String], Ty::Bool);
             self.insert_function("std::json::decode_string", vec![Ty::String], Ty::String);
+        }
+        if has_std_rand {
+            self.insert_function("std::rand::seed", vec![Ty::I64], Ty::Void);
+            self.insert_function("std::rand::range", vec![Ty::I64, Ty::I64], Ty::I64);
         }
     }
 

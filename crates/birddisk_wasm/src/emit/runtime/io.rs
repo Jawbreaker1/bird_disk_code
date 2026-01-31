@@ -1,0 +1,103 @@
+use crate::emit::{
+    WatEmitter,
+    HEAP_AUX_OFFSET,
+    HEAP_FLAGS_OFFSET,
+    HEAP_KIND_SHIFT,
+    HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET,
+    STRING_HEADER_SIZE,
+    TRAP_KIND_STRING,
+    TRAP_NULL_DEREF,
+};
+
+pub(in crate::emit) fn emit_io_runtime(emitter: &mut WatEmitter) {
+    emitter.push_line("(func $bd_io_print (param $str i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("local.get $str");
+    emitter.push_line("i32.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_NULL_DEREF}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $str");
+    emitter.push_line("i32.load");
+    emitter.push_line(format!("i32.const {HEAP_KIND_SHIFT}"));
+    emitter.push_line("i32.shr_u");
+    emitter.push_line(format!("i32.const {HEAP_KIND_STRING}"));
+    emitter.push_line("i32.ne");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_KIND_STRING}"));
+    emitter.push_line("call $bd_trap");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $str");
+    emitter.push_line(format!("i32.load offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $str");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_print");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_io_read_line (result i32)");
+    emitter.indent();
+    emitter.push_line("(local $len i32)");
+    emitter.push_line("(local $ptr i32)");
+    emitter.push_line("call $bd_read_line_len");
+    emitter.push_line("local.set $len");
+    emitter.push_line("local.get $len");
+    emitter.push_line("i32.const 0");
+    emitter.push_line("i32.lt_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("return");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("call $bd_alloc");
+    emitter.push_line("local.set $ptr");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {}", HEAP_KIND_STRING << HEAP_KIND_SHIFT));
+    emitter.push_line("i32.store");
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_FLAGS_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("i32.const 0");
+    emitter.push_line(format!("i32.store offset={HEAP_AUX_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line("local.get $len");
+    emitter.push_line(format!("i32.store offset={HEAP_LEN_OFFSET}"));
+    emitter.push_line("local.get $ptr");
+    emitter.push_line(format!("i32.const {STRING_HEADER_SIZE}"));
+    emitter.push_line("i32.add");
+    emitter.push_line("local.get $len");
+    emitter.push_line("call $bd_read_line_fill");
+    emitter.push_line("local.get $ptr");
+    emitter.dedent();
+    emitter.push_line(")");
+}

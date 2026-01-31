@@ -1,0 +1,7 @@
+import std::bytes.
+
+rule main() -> i64:
+  set data: string = "hi".
+  set len: i64 = std::bytes::len(data).
+  yield len.
+end

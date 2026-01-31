@@ -8,8 +8,8 @@ use crate::emit::{
     STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
     TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER,
     TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_ENUM, TRAP_KIND_OBJECT,
-    TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_PATH, TRAP_STRING_PARSE, TRAP_TIME_NEG,
-    TRAP_TRACE_OOM, TRAP_UTF8_INVALID,
+    TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_PATH, TRAP_RAND_RANGE, TRAP_STRING_OOB,
+    TRAP_STRING_PARSE, TRAP_STRING_UTF8, TRAP_TIME_NEG, TRAP_TRACE_OOM, TRAP_UTF8_INVALID,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -89,7 +89,7 @@ pub fn run_with_io(
     let uses_fs = program_uses_fs(program);
     let uses_path = program_uses_path(program);
     let uses_env = program_uses_env(program);
-    let needs_validate_utf8 = uses_from_bytes || uses_fs || uses_path || uses_env;
+    let needs_validate_utf8 = uses_strings || uses_from_bytes || uses_fs || uses_path || uses_env;
     let uses_trace = true;
     let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace;
     let trace_table = build_trace_table(program);
@@ -858,8 +858,11 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
             TRAP_KIND_OBJECT => wasm_error("E0400", "Expected book handle."),
             TRAP_KIND_BYTES => wasm_error("E0400", "std::bytes expects u8 array."),
             TRAP_KIND_ENUM => wasm_error("E0400", "Expected enum handle."),
+            TRAP_STRING_OOB => wasm_error("E0400", "std::string::slice out of bounds."),
+            TRAP_STRING_UTF8 => wasm_error("E0400", "Invalid UTF-8 in string operation."),
             TRAP_HEAP_HEADER => wasm_error("E0400", "Invalid heap header."),
             TRAP_TIME_NEG => wasm_error("E0400", "Sleep duration must be >= 0."),
+            TRAP_RAND_RANGE => wasm_error("E0400", "std::rand::range expects min < max."),
             TRAP_FS_IO => wasm_error("E0400", "std::fs operation failed."),
             TRAP_PATH => wasm_error("E0400", "std::path operation failed."),
             TRAP_ENV => wasm_error("E0400", "std::env operation failed."),

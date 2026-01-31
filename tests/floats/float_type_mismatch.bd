@@ -1,0 +1,5 @@
+rule main() -> i64:
+  set value: f64 = 1.5.
+  set out: i64 = value.
+  yield out.
+end

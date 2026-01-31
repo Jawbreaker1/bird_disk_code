@@ -1,0 +1,95 @@
+use crate::emit::{
+    WatEmitter,
+    TRAP_RAND_RANGE,
+};
+
+pub(in crate::emit) fn emit_rand_runtime(emitter: &mut WatEmitter) {
+    emitter.push_line("(global $rand_state (mut i64) (i64.const 0x9E3779B97F4A7C15))");
+    emitter.push_line("(func $bd_rand_seed (param $seed i64)");
+    emitter.indent();
+    emitter.push_line("local.get $seed");
+    emitter.push_line("i64.eqz");
+    emitter.push_line("if (result i64)");
+    emitter.indent();
+    emitter.push_line("i64.const 0x9E3779B97F4A7C15");
+    emitter.dedent();
+    emitter.push_line("else");
+    emitter.indent();
+    emitter.push_line("local.get $seed");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("global.set $rand_state");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_rand_next (result i64)");
+    emitter.indent();
+    emitter.push_line("(local $x i64)");
+    emitter.push_line("global.get $rand_state");
+    emitter.push_line("local.set $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("i64.eqz");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("i64.const 0x9E3779B97F4A7C15");
+    emitter.push_line("local.set $x");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("i64.const 12");
+    emitter.push_line("i64.shr_u");
+    emitter.push_line("i64.xor");
+    emitter.push_line("local.set $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("i64.const 25");
+    emitter.push_line("i64.shl");
+    emitter.push_line("i64.xor");
+    emitter.push_line("local.set $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("i64.const 27");
+    emitter.push_line("i64.shr_u");
+    emitter.push_line("i64.xor");
+    emitter.push_line("local.set $x");
+    emitter.push_line("local.get $x");
+    emitter.push_line("global.set $rand_state");
+    emitter.push_line("local.get $x");
+    emitter.push_line("i64.const 0x2545F4914F6CDD1D");
+    emitter.push_line("i64.mul");
+    emitter.dedent();
+    emitter.push_line(")");
+
+    emitter.push_line("(func $bd_rand_range (param $min i64) (param $max i64) (result i64)");
+    emitter.indent();
+    emitter.push_line("(local $span i64)");
+    emitter.push_line("(local $rnd i64)");
+    emitter.push_line("(local $offset i64)");
+    emitter.push_line("local.get $min");
+    emitter.push_line("local.get $max");
+    emitter.push_line("i64.ge_s");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line(format!("i32.const {TRAP_RAND_RANGE}"));
+    emitter.push_line("call $bd_trap");
+    emitter.push_line("i64.const 0");
+    emitter.push_line("return");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("local.get $max");
+    emitter.push_line("local.get $min");
+    emitter.push_line("i64.sub");
+    emitter.push_line("local.set $span");
+    emitter.push_line("call $bd_rand_next");
+    emitter.push_line("local.set $rnd");
+    emitter.push_line("local.get $rnd");
+    emitter.push_line("local.get $span");
+    emitter.push_line("i64.rem_u");
+    emitter.push_line("local.set $offset");
+    emitter.push_line("local.get $min");
+    emitter.push_line("local.get $offset");
+    emitter.push_line("i64.add");
+    emitter.dedent();
+    emitter.push_line(")");
+}

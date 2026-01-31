@@ -131,7 +131,7 @@ Add tests:
 
 Acceptance:
 - `birddiskc run --engine wasm` works
-- `birddiskc test` compares VM vs WASM outputs
+- `birddiskc test` compares VM vs WASM vs native outputs
 
 ---
 
@@ -159,6 +159,7 @@ Implement:
 - [x] Split `crates/birddisk_core/src/typecheck.rs` into submodules (stdlib, oo, core)
 - [x] Split `crates/birddisk_native/src/lib.rs` (currently ~2.7k LOC)
 - [x] Split `crates/birddisk_native_runtime/src/lib.rs` (currently ~2.6k LOC)
+- [x] Split VM eval + builtins; split WASM runtime modules (string/json/gc/env/path/bytes)
 
 Add tests:
 - [x] Ensure existing tests still pass after module moves
@@ -350,11 +351,11 @@ Implement (small slices, one per PR):
 - [x] Pattern matching for enums (VM + WASM + native done)
 - [x] Floats (f64) (no implicit casts)
 - [x] Explicit float conversions (i64 <-> f64)
-- [ ] Improved string/bytes APIs (slice, search, replace)
+- [x] Improved string/bytes APIs (slice, search, replace)
 
 Add tests:
-- [ ] Typecheck + runtime tests for each feature
-- [ ] VM + WASM parity per feature
+- [x] Typecheck + runtime tests for each feature
+- [x] VM + WASM + native parity per feature
 
 Acceptance:
 - Core data modeling is practical for small apps
@@ -366,7 +367,8 @@ Implement:
 - [ ] Linter with opinionated rules for LLM-friendly code
 - [ ] Doc generator (`birddiskc doc` from source)
 - [ ] Reference manual (LLM-friendly semantics lookup)
-- [ ] `std::rand` (basic RNG with seed + uniform range)
+- [x] Human-readable runtime error output for CLI runs (stacktrace + snippets; non-JSON)
+- [x] `std::rand` (basic RNG with seed + uniform range)
 - [ ] Decide on mandatory testing model (separate test files, exemptions like `main`/`init`, minimal syntax + runner)
 - [ ] Profiler hooks (GC stats, runtime timers)
 - [ ] Enhanced test runner (parallel, filters, snapshots)
@@ -412,6 +414,8 @@ Acceptance:
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)
 - [ ] Keep the VSCode extension (syntax/LSP) updated as the language surface grows
+- [ ] Refactor large files into feature modules (see `docs/REFACTOR.md`, ongoing)
+- [ ] Streamline CLI defaults/flags for common workflows (make compile/run simpler)
 
 ## Future — Quality gates (exploration)
 - [ ] Evaluate a test-required policy (lint/tooling first, not compiler), with clear opt-outs and minimal friction
