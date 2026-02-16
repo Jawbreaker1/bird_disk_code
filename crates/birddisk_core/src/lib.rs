@@ -4,6 +4,7 @@ pub mod ast;
 mod diagnostics;
 mod fmt;
 mod lint;
+mod optimize;
 pub mod lexer;
 pub mod parser;
 pub mod runtime;
@@ -52,6 +53,7 @@ pub struct RunReport {
 
 pub use diagnostics::{Diagnostic, Edit, FixIt, Position, Span, TraceFrame};
 pub use lint::lint_program;
+pub use optimize::optimize_program;
 
 pub fn check_json(path: &str) -> String {
     let report = match parse_and_typecheck(path) {
@@ -196,12 +198,15 @@ fn is_builtin_std_module(path: &[String]) -> bool {
                     || module == "bytes"
                     || module == "io"
                     || module == "time"
+                    || module == "profiler"
                     || module == "rand"
                     || module == "test"
                     || module == "fs"
                     || module == "path"
                     || module == "env"
-                    || module == "json")
+                    || module == "json"
+                    || module == "thread"
+                    || module == "channel")
     )
 }
 
@@ -630,7 +635,7 @@ pub fn parse_and_typecheck(path: &str) -> Result<ast::Program, Vec<Diagnostic>> 
     parse_and_typecheck_with_config(path, &ModuleConfig::default())
 }
 
-pub fn parse_and_typecheck_with_config(
+pub fn load_program_with_config(
     path: &str,
     config: &ModuleConfig,
 ) -> Result<ast::Program, Vec<Diagnostic>> {
@@ -652,6 +657,14 @@ pub fn parse_and_typecheck_with_config(
     program.functions.extend(loader.functions);
     program.books.extend(loader.books);
     program.enums.extend(loader.enums);
+    Ok(program)
+}
+
+pub fn parse_and_typecheck_with_config(
+    path: &str,
+    config: &ModuleConfig,
+) -> Result<ast::Program, Vec<Diagnostic>> {
+    let program = load_program_with_config(path, config)?;
     let diagnostics = typecheck::typecheck(&program, path);
     if diagnostics.is_empty() {
         Ok(program)

@@ -2,8 +2,65 @@ use super::NativeCompiler;
 use crate::error::{native_error, NativeError};
 use crate::program::{stdlib_signature, type_name};
 use birddisk_core::ast::{Expr, Type};
-use cranelift_codegen::ir::{InstBuilder, Value};
+use cranelift_codegen::ir::{types, InstBuilder, Value};
 use cranelift_module::Module;
+
+#[derive(Clone, Copy, Debug)]
+enum ChannelKind {
+    I64,
+    Bool,
+    F64,
+    U8,
+    String,
+    Bytes,
+}
+
+impl ChannelKind {
+    fn from_book(book: &str) -> Option<Self> {
+        match book {
+            "ChannelI64" => Some(ChannelKind::I64),
+            "ChannelBool" => Some(ChannelKind::Bool),
+            "ChannelF64" => Some(ChannelKind::F64),
+            "ChannelU8" => Some(ChannelKind::U8),
+            "ChannelString" => Some(ChannelKind::String),
+            "ChannelBytes" => Some(ChannelKind::Bytes),
+            _ => None,
+        }
+    }
+
+    fn payload_type(self) -> Type {
+        match self {
+            ChannelKind::I64 => Type::I64,
+            ChannelKind::Bool => Type::Bool,
+            ChannelKind::F64 => Type::F64,
+            ChannelKind::U8 => Type::U8,
+            ChannelKind::String => Type::String,
+            ChannelKind::Bytes => Type::Array(Box::new(Type::U8)),
+        }
+    }
+
+    fn book_name(self) -> &'static str {
+        match self {
+            ChannelKind::I64 => "ChannelI64",
+            ChannelKind::Bool => "ChannelBool",
+            ChannelKind::F64 => "ChannelF64",
+            ChannelKind::U8 => "ChannelU8",
+            ChannelKind::String => "ChannelString",
+            ChannelKind::Bytes => "ChannelBytes",
+        }
+    }
+
+    fn recv_enum(self) -> &'static str {
+        match self {
+            ChannelKind::I64 => "RecvI64",
+            ChannelKind::Bool => "RecvBool",
+            ChannelKind::F64 => "RecvF64",
+            ChannelKind::U8 => "RecvU8",
+            ChannelKind::String => "RecvString",
+            ChannelKind::Bytes => "RecvBytes",
+        }
+    }
+}
 
 impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     pub(super) fn emit_call(
@@ -72,6 +129,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         args: &[Expr],
         expected: Option<&Type>,
     ) -> Result<Option<Value>, NativeError> {
+        if let Some(kind) = ChannelKind::from_book(book) {
+            return self.emit_channel_method(kind, base, method, args, expected);
+        }
         let full_name = format!("{book}::{method}");
         let sig = self
             .functions
@@ -124,6 +184,188 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             Ok(None)
         } else {
             Ok(Some(self.builder.inst_results(call)[0]))
+        }
+    }
+
+    fn emit_channel_method(
+        &mut self,
+        kind: ChannelKind,
+        base: &str,
+        method: &str,
+        args: &[Expr],
+        expected: Option<&Type>,
+    ) -> Result<Option<Value>, NativeError> {
+        let base_info = self
+            .vars
+            .get(base)
+            .cloned()
+            .ok_or_else(|| native_error(format!("unknown name '{base}'.")))?;
+        let base_val = self.builder.use_var(base_info.var);
+        match method {
+            "send" => {
+                if args.len() != 1 {
+                    return Err(native_error(format!(
+                        "wrong number of arguments for '{}::send': expected 1, got {}.",
+                        kind.book_name(),
+                        args.len()
+                    )));
+                }
+                if let Some(expected) = expected {
+                    if !matches!(expected, Type::Bool) {
+                        return Err(native_error(format!(
+                            "type mismatch: expected {}, got bool.",
+                            type_name(expected)
+                        )));
+                    }
+                }
+                let payload_ty = kind.payload_type();
+                let value = self.emit_expr(&args[0], Some(&payload_ty))?;
+                let result = match kind {
+                    ChannelKind::I64 => self.call_runtime_value(
+                        self.runtime.channel_send_i64,
+                        &[self.rt_ptr, base_val, value],
+                    ),
+                    ChannelKind::Bool => self.call_runtime_value(
+                        self.runtime.channel_send_bool,
+                        &[self.rt_ptr, base_val, value],
+                    ),
+                    ChannelKind::F64 => self.call_runtime_value(
+                        self.runtime.channel_send_f64,
+                        &[self.rt_ptr, base_val, value],
+                    ),
+                    ChannelKind::U8 => self.call_runtime_value(
+                        self.runtime.channel_send_u8,
+                        &[self.rt_ptr, base_val, value],
+                    ),
+                    ChannelKind::String => self.call_runtime_value(
+                        self.runtime.channel_send_string,
+                        &[self.rt_ptr, base_val, value],
+                    ),
+                    ChannelKind::Bytes => self.call_runtime_value(
+                        self.runtime.channel_send_bytes,
+                        &[self.rt_ptr, base_val, value],
+                    ),
+                };
+                Ok(Some(result))
+            }
+            "recv" => {
+                if !args.is_empty() {
+                    return Err(native_error(format!(
+                        "wrong number of arguments for '{}::recv': expected 0, got {}.",
+                        kind.book_name(),
+                        args.len()
+                    )));
+                }
+                let recv_name = kind.recv_enum();
+                if let Some(expected) = expected {
+                    if expected != &Type::Book(recv_name.to_string()) {
+                        return Err(native_error(format!(
+                            "type mismatch: expected {}, got {}.",
+                            type_name(expected),
+                            recv_name
+                        )));
+                    }
+                }
+                let enum_info = self.enums.get(recv_name).ok_or_else(|| {
+                    native_error(format!("missing enum info for '{recv_name}'."))
+                })?;
+                let ok_id = enum_info
+                    .variants
+                    .get("Ok")
+                    .ok_or_else(|| native_error(format!("missing {recv_name}::Ok variant")))?;
+                let closed_id = enum_info
+                    .variants
+                    .get("Closed")
+                    .ok_or_else(|| native_error(format!("missing {recv_name}::Closed variant")))?;
+                let enum_id_val = self
+                    .builder
+                    .ins()
+                    .iconst(types::I64, enum_info.id as i64);
+                let ok_val = self
+                    .builder
+                    .ins()
+                    .iconst(types::I64, ok_id.id as i64);
+                let closed_val = self
+                    .builder
+                    .ins()
+                    .iconst(types::I64, closed_id.id as i64);
+                let result = match kind {
+                    ChannelKind::I64 => self.call_runtime_value(
+                        self.runtime.channel_recv_i64,
+                        &[self.rt_ptr, base_val, enum_id_val, ok_val, closed_val],
+                    ),
+                    ChannelKind::Bool => self.call_runtime_value(
+                        self.runtime.channel_recv_bool,
+                        &[self.rt_ptr, base_val, enum_id_val, ok_val, closed_val],
+                    ),
+                    ChannelKind::F64 => self.call_runtime_value(
+                        self.runtime.channel_recv_f64,
+                        &[self.rt_ptr, base_val, enum_id_val, ok_val, closed_val],
+                    ),
+                    ChannelKind::U8 => self.call_runtime_value(
+                        self.runtime.channel_recv_u8,
+                        &[self.rt_ptr, base_val, enum_id_val, ok_val, closed_val],
+                    ),
+                    ChannelKind::String => self.call_runtime_value(
+                        self.runtime.channel_recv_string,
+                        &[self.rt_ptr, base_val, enum_id_val, ok_val, closed_val],
+                    ),
+                    ChannelKind::Bytes => self.call_runtime_value(
+                        self.runtime.channel_recv_bytes,
+                        &[self.rt_ptr, base_val, enum_id_val, ok_val, closed_val],
+                    ),
+                };
+                Ok(Some(result))
+            }
+            "close" => {
+                if !args.is_empty() {
+                    return Err(native_error(format!(
+                        "wrong number of arguments for '{}::close': expected 0, got {}.",
+                        kind.book_name(),
+                        args.len()
+                    )));
+                }
+                if let Some(expected) = expected {
+                    if !matches!(expected, Type::Void) {
+                        return Err(native_error(format!(
+                            "type mismatch: expected {}, got void.",
+                            type_name(expected)
+                        )));
+                    }
+                }
+                match kind {
+                    ChannelKind::I64 => self.call_runtime_void(
+                        self.runtime.channel_close_i64,
+                        &[self.rt_ptr, base_val],
+                    ),
+                    ChannelKind::Bool => self.call_runtime_void(
+                        self.runtime.channel_close_bool,
+                        &[self.rt_ptr, base_val],
+                    ),
+                    ChannelKind::F64 => self.call_runtime_void(
+                        self.runtime.channel_close_f64,
+                        &[self.rt_ptr, base_val],
+                    ),
+                    ChannelKind::U8 => self.call_runtime_void(
+                        self.runtime.channel_close_u8,
+                        &[self.rt_ptr, base_val],
+                    ),
+                    ChannelKind::String => self.call_runtime_void(
+                        self.runtime.channel_close_string,
+                        &[self.rt_ptr, base_val],
+                    ),
+                    ChannelKind::Bytes => self.call_runtime_void(
+                        self.runtime.channel_close_bytes,
+                        &[self.rt_ptr, base_val],
+                    ),
+                };
+                Ok(None)
+            }
+            _ => Err(native_error(format!(
+                "unknown channel method '{}::{}'.",
+                kind.book_name(),
+                method
+            ))),
         }
     }
 
@@ -235,6 +477,46 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             "std::time::sleep_ms" => Some(self.call_runtime_value(
                 self.runtime.time_sleep_ms,
                 &[self.rt_ptr, arg_vals[0]],
+            )),
+            "std::profiler::uptime_ms" => Some(self.call_runtime_value(
+                self.runtime.profiler_uptime_ms,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::alloc_count" => Some(self.call_runtime_value(
+                self.runtime.profiler_alloc_count,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::bytes_allocated" => Some(self.call_runtime_value(
+                self.runtime.profiler_bytes_allocated,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::bytes_in_use" => Some(self.call_runtime_value(
+                self.runtime.profiler_bytes_in_use,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::peak_bytes_in_use" => Some(self.call_runtime_value(
+                self.runtime.profiler_peak_bytes_in_use,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::gc_runs" => Some(self.call_runtime_value(
+                self.runtime.profiler_gc_runs,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::last_freed" => Some(self.call_runtime_value(
+                self.runtime.profiler_last_freed,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::last_live" => Some(self.call_runtime_value(
+                self.runtime.profiler_last_live,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::last_freed_bytes" => Some(self.call_runtime_value(
+                self.runtime.profiler_last_freed_bytes,
+                &[self.rt_ptr],
+            )),
+            "std::profiler::last_live_bytes" => Some(self.call_runtime_value(
+                self.runtime.profiler_last_live_bytes,
+                &[self.rt_ptr],
             )),
             "std::rand::seed" => {
                 self.call_runtime_void(self.runtime.rand_seed, &[self.rt_ptr, arg_vals[0]]);
@@ -348,6 +630,72 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.json_decode_string,
                 &[self.rt_ptr, arg_vals[0]],
             )),
+            "std::channel::i64" => {
+                let layout = self
+                    .books
+                    .get("ChannelI64")
+                    .ok_or_else(|| native_error("missing layout for ChannelI64"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.channel_i64,
+                    &[self.rt_ptr, book_id],
+                ))
+            }
+            "std::channel::bool" => {
+                let layout = self
+                    .books
+                    .get("ChannelBool")
+                    .ok_or_else(|| native_error("missing layout for ChannelBool"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.channel_bool,
+                    &[self.rt_ptr, book_id],
+                ))
+            }
+            "std::channel::f64" => {
+                let layout = self
+                    .books
+                    .get("ChannelF64")
+                    .ok_or_else(|| native_error("missing layout for ChannelF64"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.channel_f64,
+                    &[self.rt_ptr, book_id],
+                ))
+            }
+            "std::channel::u8" => {
+                let layout = self
+                    .books
+                    .get("ChannelU8")
+                    .ok_or_else(|| native_error("missing layout for ChannelU8"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.channel_u8,
+                    &[self.rt_ptr, book_id],
+                ))
+            }
+            "std::channel::string" => {
+                let layout = self
+                    .books
+                    .get("ChannelString")
+                    .ok_or_else(|| native_error("missing layout for ChannelString"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.channel_string,
+                    &[self.rt_ptr, book_id],
+                ))
+            }
+            "std::channel::bytes" => {
+                let layout = self
+                    .books
+                    .get("ChannelBytes")
+                    .ok_or_else(|| native_error("missing layout for ChannelBytes"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.channel_bytes,
+                    &[self.rt_ptr, book_id],
+                ))
+            }
             _ => return Err(native_error(format!("unknown function '{name}'."))),
         };
         Ok(value)

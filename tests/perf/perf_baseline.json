@@ -1,0 +1,14 @@
+{
+  "engine": "native",
+  "iterations": 10,
+  "cases": [
+    {
+      "path": "tests/perf/array_scan.bd",
+      "mean_ms": 4.165008500000001
+    },
+    {
+      "path": "tests/perf/loop_sum.bd",
+      "mean_ms": 0.8792458
+    }
+  ]
+}

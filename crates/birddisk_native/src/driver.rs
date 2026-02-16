@@ -119,6 +119,46 @@ pub fn run_with_io(
     builder.symbol("bd_io_read_line", runtime::bd_io_read_line as *const u8);
     builder.symbol("bd_time_now_ms", runtime::bd_time_now_ms as *const u8);
     builder.symbol("bd_time_sleep_ms", runtime::bd_time_sleep_ms as *const u8);
+    builder.symbol(
+        "bd_profiler_uptime_ms",
+        runtime::bd_profiler_uptime_ms as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_alloc_count",
+        runtime::bd_profiler_alloc_count as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_bytes_allocated",
+        runtime::bd_profiler_bytes_allocated as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_bytes_in_use",
+        runtime::bd_profiler_bytes_in_use as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_peak_bytes_in_use",
+        runtime::bd_profiler_peak_bytes_in_use as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_gc_runs",
+        runtime::bd_profiler_gc_runs as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_last_freed",
+        runtime::bd_profiler_last_freed as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_last_live",
+        runtime::bd_profiler_last_live as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_last_freed_bytes",
+        runtime::bd_profiler_last_freed_bytes as *const u8,
+    );
+    builder.symbol(
+        "bd_profiler_last_live_bytes",
+        runtime::bd_profiler_last_live_bytes as *const u8,
+    );
     builder.symbol("bd_rand_seed", runtime::bd_rand_seed as *const u8);
     builder.symbol("bd_rand_range", runtime::bd_rand_range as *const u8);
     builder.symbol("bd_test_assert", runtime::bd_test_assert as *const u8);

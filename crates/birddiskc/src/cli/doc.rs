@@ -148,6 +148,7 @@ mod tests {
     use super::render_docs;
     use std::env;
     use std::fs;
+    use std::path::Path;
 
     #[test]
     fn render_docs_contains_functions() {
@@ -164,5 +165,33 @@ mod tests {
         assert!(output.contains("rule add_one"));
 
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn render_docs_snapshot() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = find_repo_root(manifest_dir).expect("workspace root");
+        let entry_path = root.join("docs/fixtures/docgen/sample.bd");
+        let expected_path = root.join("docs/fixtures/docgen/sample.md");
+        let output =
+            render_docs(entry_path.to_str().unwrap(), &birddisk_core::ModuleConfig::default())
+                .expect("docs");
+        let normalized = output.replace(
+            entry_path.to_str().unwrap(),
+            "docs/fixtures/docgen/sample.bd",
+        );
+        let expected = fs::read_to_string(expected_path).expect("read expected docs");
+        assert_eq!(normalized.trim(), expected.trim());
+    }
+
+    fn find_repo_root(start: &Path) -> Option<std::path::PathBuf> {
+        let mut current = Some(start);
+        while let Some(path) = current {
+            if path.join("docs/fixtures/docgen/sample.bd").is_file() {
+                return Some(path.to_path_buf());
+            }
+            current = path.parent();
+        }
+        None
     }
 }

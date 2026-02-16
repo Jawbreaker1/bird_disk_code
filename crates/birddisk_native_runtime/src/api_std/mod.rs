@@ -1,15 +1,25 @@
 mod bytes;
+mod channel;
 mod env;
 mod fs;
 mod io;
 mod json;
 mod path;
+mod profiler;
 mod rand;
 mod string;
 mod test;
 mod time;
 
 pub use bytes::{bd_bytes_contains, bd_bytes_eq, bd_bytes_index_of, bd_bytes_len, bd_bytes_slice};
+pub use channel::{
+    bd_channel_bool, bd_channel_bytes, bd_channel_close_bool, bd_channel_close_bytes,
+    bd_channel_close_f64, bd_channel_close_i64, bd_channel_close_string, bd_channel_close_u8,
+    bd_channel_f64, bd_channel_i64, bd_channel_recv_bool, bd_channel_recv_bytes,
+    bd_channel_recv_f64, bd_channel_recv_i64, bd_channel_recv_string, bd_channel_recv_u8,
+    bd_channel_send_bool, bd_channel_send_bytes, bd_channel_send_f64, bd_channel_send_i64,
+    bd_channel_send_string, bd_channel_send_u8, bd_channel_string, bd_channel_u8,
+};
 pub use env::{bd_env_args, bd_env_cwd, bd_env_get, bd_env_set, bd_env_set_cwd};
 pub use fs::{bd_fs_read_bytes, bd_fs_read_text, bd_fs_write_bytes, bd_fs_write_text};
 pub use io::{bd_io_print, bd_io_read_line};
@@ -18,6 +28,12 @@ pub use json::{
     bd_json_encode_i64, bd_json_encode_string,
 };
 pub use path::{bd_path_basename, bd_path_dirname, bd_path_join, bd_path_normalize};
+pub use profiler::{
+    bd_profiler_alloc_count, bd_profiler_bytes_allocated, bd_profiler_bytes_in_use,
+    bd_profiler_gc_runs, bd_profiler_last_freed, bd_profiler_last_freed_bytes,
+    bd_profiler_last_live, bd_profiler_last_live_bytes, bd_profiler_peak_bytes_in_use,
+    bd_profiler_uptime_ms,
+};
 pub use rand::{bd_rand_range, bd_rand_seed};
 pub use string::{
     bd_string_bytes, bd_string_concat, bd_string_contains, bd_string_eq, bd_string_from_bytes,

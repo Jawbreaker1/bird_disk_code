@@ -2,10 +2,13 @@ pub(crate) mod args;
 pub(crate) mod build;
 pub(crate) mod doc;
 pub(crate) mod diagnostics;
+pub(crate) mod harness;
 pub(crate) mod manifest;
+pub(crate) mod perf;
 pub(crate) mod require_tests;
 pub(crate) mod run;
 pub(crate) mod test;
+pub(crate) mod threading;
 
 use args::Command;
 use diagnostics::format_diagnostics_human;
@@ -90,10 +93,14 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
             stdout,
             report,
             args,
+            deterministic,
         } => {
             let context = manifest::resolve_project_context(path.as_deref())?;
             let path = context.entry;
             let config = context.config;
+            if deterministic && engine != birddisk_core::Engine::Vm {
+                return Err("--deterministic is only supported with --engine vm".to_string());
+            }
             if let Some(format) = emit {
                 return build::emit_compiled(&path, &config, engine, format, out);
             }
@@ -103,7 +110,8 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                         .map_err(|err| format!("unable to read --stdin file '{path}': {err}"))?,
                     None => String::new(),
                 };
-                let run_report = run::run_report(&path, &config, engine, &input, &args);
+                let run_report =
+                    run::run_report(&path, &config, engine, &input, &args, deterministic);
                 let report_json =
                     serde_json::to_string_pretty(&run_report).unwrap_or_else(|_| "{}".to_string());
                 if let Some(path) = report.as_deref() {
@@ -135,11 +143,12 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                 };
                 let program = birddisk_core::parse_and_typecheck_with_config(&path, &config)
                     .map_err(|diags| format_diagnostics_human(&diags))?;
-                match birddisk_vm::eval_with_io_streaming(
+                match birddisk_vm::eval_with_io_streaming_options(
                     &program,
                     &input,
                     &args,
                     std::io::stdin().is_terminal(),
+                    birddisk_vm::VmOptions { deterministic },
                 ) {
                     Ok(_) => Ok(()),
                     Err(err) => {
@@ -163,7 +172,8 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                         .map_err(|err| format!("unable to read stdin: {err}"))?;
                     buf
                 };
-                let run_report = run::run_report(&path, &config, engine, &input, &args);
+                let run_report =
+                    run::run_report(&path, &config, engine, &input, &args, deterministic);
                 if let Some(output) = run_report.stdout.as_deref() {
                     print!("{output}");
                 }
@@ -181,9 +191,18 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
             engine,
             dirs,
             tags,
+            filters,
+            jobs,
+            snapshot,
             require_tests,
+            deterministic,
         } => {
             if json {
+                if matches!(engine, Some(e) if e != birddisk_core::Engine::Vm) && deterministic {
+                    return Err(
+                        "--deterministic is only supported with --engine vm".to_string(),
+                    );
+                }
                 let manifest_requires = manifest::resolve_project_context(None)
                     .ok()
                     .map(|ctx| ctx.require_tests)
@@ -197,10 +216,85 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                     println!("{}", test::report_with_diagnostics(diagnostics));
                     return Ok(());
                 }
-                println!("{}", test::run_tests_json(engine, &dirs, &tags));
+                println!(
+                    "{}",
+                    test::run_tests_json(engine, &dirs, &tags, &filters, jobs, snapshot, deterministic)
+                );
                 Ok(())
             } else {
                 Err("test is JSON-only for now".to_string())
+            }
+        }
+        Command::Perf {
+            json,
+            engine,
+            dirs,
+            tags,
+            filters,
+            baseline,
+            update_baseline,
+            iterations,
+            warmup,
+            max_regression,
+        } => {
+            let baseline = baseline.or_else(|| {
+                let default_path = perf::DEFAULT_BASELINE_PATH;
+                if std::path::Path::new(default_path).exists() {
+                    Some(default_path.to_string())
+                } else {
+                    None
+                }
+            });
+            let compare_baseline = if update_baseline {
+                None
+            } else {
+                baseline.as_deref()
+            };
+            let report = perf::run_perf_report(
+                engine,
+                &dirs,
+                &tags,
+                &filters,
+                compare_baseline,
+                iterations,
+                warmup,
+                max_regression,
+            );
+            if update_baseline {
+                let baseline_path = baseline
+                    .as_deref()
+                    .unwrap_or(perf::DEFAULT_BASELINE_PATH);
+                if !report.ok {
+                    return Err("perf run failed; baseline not written".to_string());
+                }
+                perf::write_baseline(
+                    baseline_path,
+                    &report,
+                    engine,
+                    report.iterations,
+                )?;
+            }
+            if json {
+                let output =
+                    serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string());
+                println!("{output}");
+                if report.ok {
+                    Ok(())
+                } else if report.diagnostics.is_empty() {
+                    Err("performance regression detected".to_string())
+                } else {
+                    Err(format_diagnostics_human(&report.diagnostics))
+                }
+            } else {
+                let summary = perf::format_perf_report(&report);
+                if report.ok {
+                    print!("{summary}");
+                    Ok(())
+                } else if report.diagnostics.is_empty() {
+                    Err(summary)
+                } else {
+                    Err(format!("{summary}\n{}", format_diagnostics_human(&report.diagnostics)))
+                }
             }
         }
     }
@@ -231,6 +325,8 @@ fn lint_report(path: &str, require_tests: bool) -> Result<LintReport, String> {
 mod tests {
     use super::args::{parse_command, Command, EmitFormat};
     use super::{build, diagnostics, manifest, run};
+    use serde_json::Value;
+    use std::path::Path;
     use std::{env, fs, process};
 
     fn cmd(args: &[&str]) -> Result<Command, String> {
@@ -253,6 +349,7 @@ mod tests {
                 stdout: None,
                 report: None,
                 args: Vec::new(),
+                deterministic: false,
             }
         );
     }
@@ -272,6 +369,7 @@ mod tests {
                 stdout: None,
                 report: None,
                 args: Vec::new(),
+                deterministic: false,
             }
         );
     }
@@ -301,6 +399,47 @@ mod tests {
                 stdout: None,
                 report: None,
                 args: Vec::new(),
+                deterministic: false,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_run_with_deterministic() {
+        let command = cmd(&["run", "main.bd", "--deterministic"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Run {
+                path: Some("main.bd".to_string()),
+                engine: birddisk_core::Engine::Vm,
+                json: false,
+                emit: None,
+                out: None,
+                stdin: None,
+                stdout: None,
+                report: None,
+                args: Vec::new(),
+                deterministic: true,
+            }
+        );
+    }
+
+    #[test]
+    fn parse_perf_defaults() {
+        let command = cmd(&["perf"]).unwrap();
+        assert_eq!(
+            command,
+            Command::Perf {
+                json: false,
+                engine: birddisk_core::Engine::Native,
+                dirs: Vec::new(),
+                tags: Vec::new(),
+                filters: Vec::new(),
+                baseline: None,
+                update_baseline: false,
+                iterations: None,
+                warmup: None,
+                max_regression: None,
             }
         );
     }
@@ -350,6 +489,7 @@ mod tests {
                 stdout: Some("output.txt".to_string()),
                 report: None,
                 args: Vec::new(),
+                deterministic: false,
             }
         );
     }
@@ -381,6 +521,7 @@ mod tests {
                 stdout: None,
                 report: Some("report.json".to_string()),
                 args: Vec::new(),
+                deterministic: false,
             }
         );
     }
@@ -400,6 +541,7 @@ mod tests {
                 stdout: None,
                 report: None,
                 args: vec!["alpha".to_string(), "beta".to_string()],
+                deterministic: false,
             }
         );
     }
@@ -419,6 +561,7 @@ mod tests {
                 stdout: None,
                 report: None,
                 args: vec!["alpha".to_string()],
+                deterministic: false,
             }
         );
     }
@@ -510,7 +653,11 @@ mod tests {
                 engine: None,
                 dirs: vec!["examples".to_string()],
                 tags: vec!["loop".to_string()],
+                filters: Vec::new(),
+                jobs: None,
+                snapshot: false,
                 require_tests: false,
+                deterministic: false,
             }
         );
     }
@@ -525,7 +672,11 @@ mod tests {
                 engine: Some(birddisk_core::Engine::Vm),
                 dirs: Vec::new(),
                 tags: Vec::new(),
+                filters: Vec::new(),
+                jobs: None,
+                snapshot: false,
                 require_tests: false,
+                deterministic: false,
             }
         );
     }
@@ -579,6 +730,49 @@ mod tests {
             .any(|diag| diag["code"] == "L1007"));
 
         let _ = fs::remove_file(&path);
+    }
+
+    fn normalize_paths(value: &mut Value, target: &str, replacement: &str) {
+        match value {
+            Value::String(text) => {
+                if text == target {
+                    *text = replacement.to_string();
+                }
+            }
+            Value::Array(values) => {
+                for entry in values {
+                    normalize_paths(entry, target, replacement);
+                }
+            }
+            Value::Object(map) => {
+                for entry in map.values_mut() {
+                    normalize_paths(entry, target, replacement);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn lint_json_output_golden() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir
+            .parent()
+            .and_then(|path| path.parent())
+            .expect("workspace root");
+        let lint_path = root.join("tests/lint/basic.bd");
+        let expected_path = root.join("tests/lint/basic.json");
+        let report = super::lint_report(lint_path.to_str().unwrap(), false)
+            .expect("lint report");
+        let mut value = serde_json::to_value(report).expect("lint json value");
+        normalize_paths(
+            &mut value,
+            lint_path.to_str().unwrap(),
+            "tests/lint/basic.bd",
+        );
+        let expected = fs::read_to_string(expected_path).expect("read expected lint json");
+        let expected_value: Value = serde_json::from_str(&expected).expect("parse expected json");
+        assert_eq!(value, expected_value);
     }
 
     #[test]
@@ -678,6 +872,7 @@ mod tests {
             birddisk_core::Engine::Vm,
             "",
             &[],
+            false,
         );
         assert!(!report.ok);
         let output = diagnostics::format_diagnostics_human(&report.diagnostics);

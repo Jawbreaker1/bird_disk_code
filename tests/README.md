@@ -18,6 +18,7 @@ Examples:
 ```sh
 ./target/debug/birddiskc test --json --tag loops
 ./target/debug/birddiskc test --json --tag repeat
+./target/debug/birddiskc test --json --filter stdlib
 ./target/debug/birddiskc test --json --dir tests --tag unary
 ```
 
@@ -33,6 +34,18 @@ Programs expected to fail live under `vm_error_tests/`. They are not part
 of the test harness; run them directly with `check` or `run` to inspect
 diagnostics.
 
+## WASM error fixtures
+WASM-specific compile-time failures live under `wasm_error_tests/`. Run them with:
+```sh
+./target/debug/birddiskc test --json --engine wasm --dir wasm_error_tests
+```
+
+## Native error fixtures
+Native-specific compile-time failures live under `native_error_tests/`. Run them with:
+```sh
+./target/debug/birddiskc test --json --engine native --dir native_error_tests
+```
+
 ## Adding a test
 1) Pick a folder or create a new tag folder.
 2) Add a `.bd` file with a `rule main() -> i64:` entry point.
@@ -44,8 +57,23 @@ For IO tests, place optional companion files alongside the `.bd` source:
 - `<name>.stdout` is the expected stdout string.
 - `<name>.args` supplies command-line args (one per line) for `std::env::args()`.
 
+Snapshot helpers:
+- `birddiskc test --json --snapshot` writes `.stdout` files from actual output.
+- Use `--engine` to choose the snapshot source (VM is default).
+
 ## Expected error fixtures
 To assert a compile-time or runtime error, add a companion `.error` file:
 - `<name>.error` contains one or more diagnostic codes (whitespace-separated).
 - The test harness passes if any reported diagnostic matches one of the codes.
 - If the program typechecks, VM, WASM, and native must report a matching error code.
+
+## Perf harness
+Performance fixtures live under `tests/perf/` and are executed with:
+```sh
+./target/debug/birddiskc perf --engine native
+```
+
+Notes:
+- Keep perf fixtures deterministic and avoid stdout (use the normal test harness for correctness).
+- `perf --update-baseline` writes `tests/perf/perf_baseline.json`.
+- `perf` compares against the baseline only when one exists (or when `--baseline` is provided).

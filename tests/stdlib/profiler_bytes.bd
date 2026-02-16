@@ -1,0 +1,12 @@
+import std::profiler.
+
+rule main() -> i64:
+  set xs: i64[] = [1, 2, 3, 4].
+  set in_use: i64 = std::profiler::bytes_in_use().
+  set peak: i64 = std::profiler::peak_bytes_in_use().
+  when in_use > 0 && peak >= in_use:
+    yield 0.
+  otherwise:
+    yield 1.
+  end
+end

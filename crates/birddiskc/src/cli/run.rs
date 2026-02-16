@@ -1,4 +1,5 @@
 use super::diagnostics::{runtime_diagnostic, runtime_spec_refs};
+use super::threading::{native_threading_guard, wasm_threading_guard};
 
 pub(crate) fn run_report(
     path: &str,
@@ -6,6 +7,7 @@ pub(crate) fn run_report(
     engine: birddisk_core::Engine,
     input: &str,
     args: &[String],
+    deterministic: bool,
 ) -> birddisk_core::RunReport {
     if engine == birddisk_core::Engine::Wasm {
         let bytes = match std::fs::read(path) {
@@ -53,10 +55,39 @@ pub(crate) fn run_report(
                 },
             };
         }
+        if let Some(diag) = wasm_threading_guard(path, config) {
+            return birddisk_core::RunReport {
+                tool: birddisk_core::TOOL_NAME,
+                version: birddisk_core::VERSION,
+                ok: false,
+                result: None,
+                stdout: None,
+                diagnostics: vec![diag],
+            };
+        }
+    }
+    if engine == birddisk_core::Engine::Native {
+        if let Some(diag) = native_threading_guard(path, config) {
+            return birddisk_core::RunReport {
+                tool: birddisk_core::TOOL_NAME,
+                version: birddisk_core::VERSION,
+                ok: false,
+                result: None,
+                stdout: None,
+                diagnostics: vec![diag],
+            };
+        }
     }
     match birddisk_core::parse_and_typecheck_with_config(path, config) {
-        Ok(program) => match engine {
-            birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io(&program, input, args) {
+        Ok(mut program) => {
+            birddisk_core::optimize_program(&mut program);
+            match engine {
+                birddisk_core::Engine::Vm => match birddisk_vm::eval_with_io_options(
+                    &program,
+                    input,
+                    args,
+                    birddisk_vm::VmOptions { deterministic },
+                ) {
                 Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
@@ -80,7 +111,7 @@ pub(crate) fn run_report(
                     )],
                 },
             },
-            birddisk_core::Engine::Wasm => match birddisk_wasm::run_with_io(&program, input, args) {
+                birddisk_core::Engine::Wasm => match birddisk_wasm::run_with_io(&program, input, args) {
                 Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
@@ -104,7 +135,7 @@ pub(crate) fn run_report(
                     )],
                 },
             },
-            birddisk_core::Engine::Native => match birddisk_native::run_with_io(&program, input, args) {
+                birddisk_core::Engine::Native => match birddisk_native::run_with_io(&program, input, args) {
                 Ok((result, stdout)) => birddisk_core::RunReport {
                     tool: birddisk_core::TOOL_NAME,
                     version: birddisk_core::VERSION,
@@ -127,8 +158,9 @@ pub(crate) fn run_report(
                         err.trace,
                     )],
                 },
-            },
-        },
+                },
+            }
+        }
         Err(diagnostics) => birddisk_core::RunReport {
             tool: birddisk_core::TOOL_NAME,
             version: birddisk_core::VERSION,

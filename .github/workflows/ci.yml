@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, macos-13, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --workspace --all-targets
+      - name: Test
+        run: cargo test --workspace
+      - name: Stdlib harness
+        run: cargo run -p birddiskc -- test --json --dir tests --tag stdlib
+
+  test-linux-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Run tests (arm64 via QEMU)
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "$PWD":/repo \
+            -w /repo \
+            rust:1.76 \
+            bash -lc "cargo test --workspace && cargo run -p birddiskc -- test --json --dir tests --tag stdlib"

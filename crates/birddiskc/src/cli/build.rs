@@ -1,4 +1,6 @@
 use super::args::EmitFormat;
+use super::diagnostics::format_diagnostics_human;
+use super::threading::{native_threading_guard, wasm_threading_guard};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -10,8 +12,19 @@ pub(crate) fn emit_compiled(
     format: EmitFormat,
     out: Option<String>,
 ) -> Result<(), String> {
-    let program = birddisk_core::parse_and_typecheck_with_config(path, config)
+    if engine == birddisk_core::Engine::Wasm {
+        if let Some(diag) = wasm_threading_guard(path, config) {
+            return Err(format_diagnostics_human(&[diag]));
+        }
+    }
+    if engine == birddisk_core::Engine::Native {
+        if let Some(diag) = native_threading_guard(path, config) {
+            return Err(format_diagnostics_human(&[diag]));
+        }
+    }
+    let mut program = birddisk_core::parse_and_typecheck_with_config(path, config)
         .map_err(|_| "emit failed; run `birddiskc check --json` for diagnostics".to_string())?;
+    birddisk_core::optimize_program(&mut program);
     match engine {
         birddisk_core::Engine::Wasm => {
             let out_path = out.or_else(|| match format {

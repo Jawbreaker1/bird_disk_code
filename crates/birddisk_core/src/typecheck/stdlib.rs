@@ -1,5 +1,6 @@
-use super::{Checker, FunctionSig, Ty};
+use super::{BookInfo, Checker, EnumInfo, EnumVariantInfo, FunctionSig, Ty};
 use crate::ast::Program;
+use std::collections::HashMap;
 
 impl<'a> Checker<'a> {
     pub(super) fn register_stdlib(&mut self, program: &Program) {
@@ -22,6 +23,11 @@ impl<'a> Checker<'a> {
             import.path.len() == 2
                 && import.path[0] == "std"
                 && import.path[1] == "time"
+        });
+        let has_std_profiler = program.imports.iter().any(|import| {
+            import.path.len() == 2
+                && import.path[0] == "std"
+                && import.path[1] == "profiler"
         });
         let has_std_fs = program.imports.iter().any(|import| {
             import.path.len() == 2
@@ -52,6 +58,11 @@ impl<'a> Checker<'a> {
             import.path.len() == 2
                 && import.path[0] == "std"
                 && import.path[1] == "test"
+        });
+        let has_std_channel = program.imports.iter().any(|import| {
+            import.path.len() == 2
+                && import.path[0] == "std"
+                && import.path[1] == "channel"
         });
         if has_std_string {
             self.insert_function(
@@ -143,6 +154,18 @@ impl<'a> Checker<'a> {
             self.insert_function("std::time::now_ms", Vec::new(), Ty::I64);
             self.insert_function("std::time::sleep_ms", vec![Ty::I64], Ty::I64);
         }
+        if has_std_profiler {
+            self.insert_function("std::profiler::uptime_ms", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::alloc_count", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::bytes_allocated", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::bytes_in_use", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::peak_bytes_in_use", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::gc_runs", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::last_freed", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::last_live", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::last_freed_bytes", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::last_live_bytes", Vec::new(), Ty::I64);
+        }
         if has_std_fs {
             self.insert_function("std::fs::read_text", vec![Ty::String], Ty::String);
             self.insert_function(
@@ -221,6 +244,69 @@ impl<'a> Checker<'a> {
             self.insert_function(
                 "std::test::assert_eq_string",
                 vec![Ty::String, Ty::String, Ty::String],
+                Ty::Void,
+            );
+        }
+        if has_std_channel {
+            self.register_channel_stdlib();
+        }
+    }
+
+    fn register_channel_stdlib(&mut self) {
+        let channels = [
+            ("I64", "i64", Ty::I64),
+            ("Bool", "bool", Ty::Bool),
+            ("F64", "f64", Ty::F64),
+            ("U8", "u8", Ty::U8),
+            ("String", "string", Ty::String),
+            ("Bytes", "bytes", Ty::Array(Box::new(Ty::U8))),
+        ];
+        for (suffix, ctor, payload) in channels {
+            let channel_name = format!("Channel{suffix}");
+            if !self.books.contains_key(&channel_name) {
+                self.books.insert(
+                    channel_name.clone(),
+                    BookInfo {
+                        fields: HashMap::new(),
+                    },
+                );
+            }
+
+            let recv_name = format!("Recv{suffix}");
+            if !self.enums.contains_key(&recv_name) {
+                let mut variants = HashMap::new();
+                variants.insert(
+                    "Ok".to_string(),
+                    EnumVariantInfo {
+                        payload: Some(payload.clone()),
+                    },
+                );
+                variants.insert(
+                    "Closed".to_string(),
+                    EnumVariantInfo { payload: None },
+                );
+                self.enums.insert(recv_name.clone(), EnumInfo { variants });
+            }
+
+            let channel_ty = Ty::Book(channel_name.clone());
+            self.insert_function(
+                &format!("std::channel::{ctor}"),
+                Vec::new(),
+                channel_ty.clone(),
+            );
+            self.insert_function(
+                &format!("{channel_name}::send"),
+                vec![channel_ty.clone(), payload.clone()],
+                Ty::Bool,
+            );
+            self.insert_function(
+                &format!("{channel_name}::recv"),
+                vec![channel_ty.clone()],
+                Ty::Enum(recv_name.clone()),
+            );
+            self.insert_function(
+                &format!("{channel_name}::close"),
+                vec![channel_ty],
                 Ty::Void,
             );
         }

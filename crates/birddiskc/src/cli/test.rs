@@ -1,9 +1,15 @@
 use super::diagnostics::{
     expected_error_diagnostic, harness_diagnostic, mismatch_diagnostic, output_expected_diagnostic,
-    output_mismatch_diagnostic, runtime_diagnostic, runtime_spec_refs, test_harness_diagnostic,
+    output_mismatch_diagnostic, runtime_diagnostic, runtime_spec_refs,
 };
+use super::harness::{
+    collect_test_paths, companion_path, read_expected_error, read_expected_output, read_test_args,
+    read_test_input,
+};
+use super::threading::{native_threading_guard, wasm_threading_guard};
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 #[derive(Serialize)]
 pub(crate) struct TestCase {
@@ -42,6 +48,10 @@ pub(crate) fn run_tests_json(
     engine: Option<birddisk_core::Engine>,
     dirs: &[String],
     tags: &[String],
+    filters: &[String],
+    jobs: Option<usize>,
+    snapshot: bool,
+    deterministic: bool,
 ) -> String {
     let mut report = TestReport {
         tool: birddisk_core::TOOL_NAME,
@@ -51,7 +61,7 @@ pub(crate) fn run_tests_json(
         diagnostics: Vec::new(),
     };
 
-    let paths = match collect_test_paths(dirs, tags) {
+    let paths = match collect_test_paths(dirs, tags, filters) {
         Ok(paths) => paths,
         Err(diag) => {
             report.ok = false;
@@ -59,181 +69,67 @@ pub(crate) fn run_tests_json(
             return serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string());
         }
     };
-
-    for path in paths {
-        let case = run_test_case(&path, engine);
-        if !case.ok {
-            report.ok = false;
+    let job_count = jobs.unwrap_or(1).max(1);
+    if job_count <= 1 || paths.len() <= 1 {
+        for path in paths {
+            let case = run_test_case(&path, engine, snapshot, deterministic);
+            if !case.ok {
+                report.ok = false;
+            }
+            report.cases.push(case);
         }
-        report.cases.push(case);
+    } else {
+        let queue: Arc<Mutex<VecDeque<(usize, String)>>> =
+            Arc::new(Mutex::new(paths.into_iter().enumerate().collect()));
+        let len = queue.lock().unwrap().len();
+        let results: Arc<Mutex<Vec<Option<TestCase>>>> =
+            Arc::new(Mutex::new((0..len).map(|_| None).collect()));
+        let mut handles = Vec::new();
+        let worker_count = job_count.min(results.lock().unwrap().len());
+        for _ in 0..worker_count {
+            let queue = Arc::clone(&queue);
+            let results = Arc::clone(&results);
+            let engine = engine;
+            let deterministic = deterministic;
+            let handle = std::thread::spawn(move || loop {
+                let next = {
+                    let mut guard = queue.lock().unwrap();
+                    guard.pop_front()
+                };
+                let Some((idx, path)) = next else {
+                    break;
+                };
+                let case = run_test_case(&path, engine, snapshot, deterministic);
+                let mut out = results.lock().unwrap();
+                if idx < out.len() {
+                    out[idx] = Some(case);
+                }
+            });
+            handles.push(handle);
+        }
+        for handle in handles {
+            let _ = handle.join();
+        }
+        let mut out = results.lock().unwrap();
+        for case in out.iter_mut() {
+            if let Some(case) = case.take() {
+                if !case.ok {
+                    report.ok = false;
+                }
+                report.cases.push(case);
+            }
+        }
     }
 
     serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string())
 }
 
-fn collect_test_paths(
-    dirs: &[String],
-    tags: &[String],
-) -> Result<Vec<String>, birddisk_core::Diagnostic> {
-    let roots = if dirs.is_empty() {
-        default_test_dirs()
-    } else {
-        dirs.to_vec()
-    };
-
-    if roots.is_empty() {
-        return Err(test_harness_diagnostic(
-            "No default test directories found (expected examples/ or tests/)",
-        ));
-    }
-
-    let mut paths = Vec::new();
-    for dir in roots {
-        let root = std::path::Path::new(&dir);
-        if !root.exists() {
-            return Err(test_harness_diagnostic(format!(
-                "Test directory not found: {dir}"
-            )));
-        }
-        collect_bd_files(root, &mut paths).map_err(test_harness_diagnostic)?;
-    }
-
-    let mut paths: Vec<String> = paths
-        .into_iter()
-        .filter(|path| matches_tags(path, tags))
-        .collect();
-    paths.sort();
-    if paths.is_empty() {
-        let message = if tags.is_empty() {
-            "No .bd files found in test directories".to_string()
-        } else {
-            format!("No .bd files matched tags: {}", tags.join(", "))
-        };
-        return Err(test_harness_diagnostic(message));
-    }
-    Ok(paths)
-}
-
-fn default_test_dirs() -> Vec<String> {
-    let mut roots = Vec::new();
-    for candidate in ["examples", "tests"] {
-        if std::path::Path::new(candidate).exists() {
-            roots.push(candidate.to_string());
-        }
-    }
-    roots
-}
-
-fn collect_bd_files(dir: &std::path::Path, paths: &mut Vec<String>) -> Result<(), String> {
-    let entries = std::fs::read_dir(dir).map_err(|err| err.to_string())?;
-    for entry in entries {
-        let entry = entry.map_err(|err| err.to_string())?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_bd_files(&path, paths)?;
-        } else if path.extension().and_then(|ext| ext.to_str()) == Some("bd") {
-            paths.push(path.to_string_lossy().to_string());
-        }
-    }
-    Ok(())
-}
-
-fn companion_path(path: &str, extension: &str) -> String {
-    let mut output = std::path::PathBuf::from(path);
-    output.set_extension(extension);
-    output.to_string_lossy().to_string()
-}
-
-fn read_optional_file(path: &str) -> Result<Option<String>, String> {
-    if std::path::Path::new(path).exists() {
-        std::fs::read_to_string(path)
-            .map(Some)
-            .map_err(|err| err.to_string())
-    } else {
-        Ok(None)
-    }
-}
-
-fn read_test_input(path: &str) -> Result<String, String> {
-    let stdin_path = companion_path(path, "stdin");
-    Ok(read_optional_file(&stdin_path)?.unwrap_or_default())
-}
-
-fn read_test_args(path: &str) -> Result<Vec<String>, String> {
-    let args_path = companion_path(path, "args");
-    let Some(contents) = read_optional_file(&args_path)? else {
-        return Ok(Vec::new());
-    };
-    Ok(contents
-        .lines()
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .map(|line| line.to_string())
-        .collect())
-}
-
-fn read_expected_output(path: &str) -> Result<Option<String>, String> {
-    let stdout_path = companion_path(path, "stdout");
-    read_optional_file(&stdout_path)
-}
-
-fn read_expected_error(path: &str) -> Result<Option<Vec<String>>, String> {
-    let error_path = companion_path(path, "error");
-    match read_optional_file(&error_path)? {
-        Some(contents) => Ok(Some(parse_expected_error(&contents)?)),
-        None => Ok(None),
-    }
-}
-
-fn parse_expected_error(contents: &str) -> Result<Vec<String>, String> {
-    let mut codes = Vec::new();
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        for token in trimmed.split_whitespace() {
-            if token.starts_with('#') {
-                break;
-            }
-            codes.push(token.to_string());
-        }
-    }
-    if codes.is_empty() {
-        Err("expected error file did not contain any codes".to_string())
-    } else {
-        Ok(codes)
-    }
-}
-
-fn matches_tags(path: &str, tags: &[String]) -> bool {
-    if tags.is_empty() {
-        return true;
-    }
-    let tokens = tag_tokens(std::path::Path::new(path));
-    tags.iter().all(|tag| tokens.contains(&tag.to_lowercase()))
-}
-
-fn tag_tokens(path: &std::path::Path) -> HashSet<String> {
-    let mut tokens = HashSet::new();
-    for component in path.components() {
-        if let std::path::Component::Normal(name) = component {
-            if let Some(name) = name.to_str() {
-                tokens.insert(name.to_lowercase());
-            }
-        }
-    }
-    if let Some(stem) = path.file_stem().and_then(|name| name.to_str()) {
-        for token in stem.split(|ch: char| !ch.is_ascii_alphanumeric()) {
-            if !token.is_empty() {
-                tokens.insert(token.to_lowercase());
-            }
-        }
-    }
-    tokens
-}
-
-fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase {
+fn run_test_case(
+    path: &str,
+    engine: Option<birddisk_core::Engine>,
+    snapshot: bool,
+    deterministic: bool,
+) -> TestCase {
     let mut case = TestCase {
         path: path.to_string(),
         ok: true,
@@ -283,8 +179,52 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
         }
     };
 
+    if matches!(engine, Some(birddisk_core::Engine::Wasm)) {
+        if let Some(diag) = wasm_threading_guard(path, &birddisk_core::ModuleConfig::default()) {
+            case.ok = false;
+            case.diagnostics.push(diag);
+            if let Some(expected) = expected_error.as_ref() {
+                if diagnostics_match(expected, &case.diagnostics) {
+                    case.ok = true;
+                } else {
+                    case.diagnostics.push(expected_error_diagnostic(
+                        path,
+                        format!(
+                            "Expected error code(s) {}, but wasm reported different codes.",
+                            expected.join(", ")
+                        ),
+                    ));
+                }
+            }
+            return case;
+        }
+    }
+    if matches!(engine, Some(birddisk_core::Engine::Native)) {
+        if let Some(diag) = native_threading_guard(path, &birddisk_core::ModuleConfig::default()) {
+            case.ok = false;
+            case.diagnostics.push(diag);
+            if let Some(expected) = expected_error.as_ref() {
+                if diagnostics_match(expected, &case.diagnostics) {
+                    case.ok = true;
+                } else {
+                    case.diagnostics.push(expected_error_diagnostic(
+                        path,
+                        format!(
+                            "Expected error code(s) {}, but native reported different codes.",
+                            expected.join(", ")
+                        ),
+                    ));
+                }
+            }
+            return case;
+        }
+    }
+
     let program = match birddisk_core::parse_and_typecheck(path) {
-        Ok(program) => program,
+        Ok(mut program) => {
+            birddisk_core::optimize_program(&mut program);
+            program
+        }
         Err(diagnostics) => {
             if let Some(expected) = expected_error.as_ref() {
                 if diagnostics_match(expected, &diagnostics) {
@@ -310,7 +250,12 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
     if let Some(expected) = expected_error.as_ref() {
         match engine {
             Some(birddisk_core::Engine::Vm) => {
-                let vm = birddisk_vm::eval_with_io(&program, &input, &args);
+                let vm = birddisk_vm::eval_with_io_options(
+                    &program,
+                    &input,
+                    &args,
+                    birddisk_vm::VmOptions { deterministic },
+                );
                 if !check_expected_vm_error(vm, expected, &mut case) {
                     return case;
                 }
@@ -328,7 +273,12 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                 }
             }
             None => {
-                let vm = birddisk_vm::eval_with_io(&program, &input, &args);
+                let vm = birddisk_vm::eval_with_io_options(
+                    &program,
+                    &input,
+                    &args,
+                    birddisk_vm::VmOptions { deterministic },
+                );
                 let wasm = birddisk_wasm::run_with_io(&program, &input, &args);
                 let native = birddisk_native::run_with_io(&program, &input, &args);
                 let vm_ok = check_expected_vm_error(vm, expected, &mut case);
@@ -344,7 +294,12 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
 
     match engine {
         Some(birddisk_core::Engine::Vm) => {
-            let vm = birddisk_vm::eval_with_io(&program, &input, &args);
+            let vm = birddisk_vm::eval_with_io_options(
+                &program,
+                &input,
+                &args,
+                birddisk_vm::VmOptions { deterministic },
+            );
             match vm {
                 Ok((result, stdout)) => {
                     case.vm_result = Some(result);
@@ -401,7 +356,12 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
             }
         }
         None => {
-            let vm = birddisk_vm::eval_with_io(&program, &input, &args);
+            let vm = birddisk_vm::eval_with_io_options(
+                &program,
+                &input,
+                &args,
+                birddisk_vm::VmOptions { deterministic },
+            );
             let wasm = birddisk_wasm::run_with_io(&program, &input, &args);
             let native = birddisk_native::run_with_io(&program, &input, &args);
 
@@ -524,38 +484,77 @@ fn run_test_case(path: &str, engine: Option<birddisk_core::Engine>) -> TestCase 
                 ));
             }
         }
+        let snapshot_stdout = if snapshot {
+            select_snapshot_stdout(&case, engine)
+        } else {
+            None
+        };
         if let Some(expected) = expected_output.as_ref() {
             if let Some(vm_stdout) = case.vm_stdout.as_ref() {
                 if vm_stdout != expected {
-                    case.ok = false;
-                    case.diagnostics.push(output_expected_diagnostic(
-                        path,
-                        "vm",
-                        expected,
-                        vm_stdout,
-                    ));
+                    if snapshot {
+                        if let Some(value) = snapshot_stdout.as_deref() {
+                            if let Err(err) = write_snapshot_stdout(path, value) {
+                                case.ok = false;
+                                case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                            }
+                        }
+                    } else {
+                        case.ok = false;
+                        case.diagnostics.push(output_expected_diagnostic(
+                            path,
+                            "vm",
+                            expected,
+                            vm_stdout,
+                        ));
+                    }
                 }
             }
             if let Some(wasm_stdout) = case.wasm_stdout.as_ref() {
                 if wasm_stdout != expected {
-                    case.ok = false;
-                    case.diagnostics.push(output_expected_diagnostic(
-                        path,
-                        "wasm",
-                        expected,
-                        wasm_stdout,
-                    ));
+                    if snapshot {
+                        if let Some(value) = snapshot_stdout.as_deref() {
+                            if let Err(err) = write_snapshot_stdout(path, value) {
+                                case.ok = false;
+                                case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                            }
+                        }
+                    } else {
+                        case.ok = false;
+                        case.diagnostics.push(output_expected_diagnostic(
+                            path,
+                            "wasm",
+                            expected,
+                            wasm_stdout,
+                        ));
+                    }
                 }
             }
             if let Some(native_stdout) = case.native_stdout.as_ref() {
                 if native_stdout != expected {
+                    if snapshot {
+                        if let Some(value) = snapshot_stdout.as_deref() {
+                            if let Err(err) = write_snapshot_stdout(path, value) {
+                                case.ok = false;
+                                case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                            }
+                        }
+                    } else {
+                        case.ok = false;
+                        case.diagnostics.push(output_expected_diagnostic(
+                            path,
+                            "native",
+                            expected,
+                            native_stdout,
+                        ));
+                    }
+                }
+            }
+        } else if snapshot {
+            if let Some(value) = snapshot_stdout.as_deref() {
+                if let Err(err) = write_snapshot_stdout(path, value) {
                     case.ok = false;
-                    case.diagnostics.push(output_expected_diagnostic(
-                        path,
-                        "native",
-                        expected,
-                        native_stdout,
-                    ));
+                    case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
                 }
             }
         }
@@ -568,6 +567,27 @@ fn diagnostics_match(expected: &[String], diagnostics: &[birddisk_core::Diagnost
     diagnostics
         .iter()
         .any(|diag| expected.iter().any(|code| code == diag.code))
+}
+
+fn select_snapshot_stdout(
+    case: &TestCase,
+    engine: Option<birddisk_core::Engine>,
+) -> Option<String> {
+    match engine {
+        Some(birddisk_core::Engine::Vm) => case.vm_stdout.clone(),
+        Some(birddisk_core::Engine::Wasm) => case.wasm_stdout.clone(),
+        Some(birddisk_core::Engine::Native) => case.native_stdout.clone(),
+        None => case
+            .vm_stdout
+            .clone()
+            .or_else(|| case.wasm_stdout.clone())
+            .or_else(|| case.native_stdout.clone()),
+    }
+}
+
+fn write_snapshot_stdout(path: &str, stdout: &str) -> Result<(), String> {
+    let output_path = companion_path(path, "stdout");
+    std::fs::write(&output_path, stdout).map_err(|err| err.to_string())
 }
 
 fn check_expected_vm_error(

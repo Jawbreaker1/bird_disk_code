@@ -276,13 +276,17 @@ Questions:
 ## 9) Mandatory testing model (separate from production code)
 status: decided (v0.x policy)
 date: 2026-01-31
-decision: Tests live in separate files under `tests/`. Test rules are named `test_*` and return `void`; failures `throw` a string. Assertions can be either manual `throw` or helpers in `std::test` (to add). `main`, `init`, and stdlib are exempt. Enforcement is opt-in via flag or manifest setting, and applies to `lint`, `test`, and `build`. Minimum requirement is at least one test per non-test source file (per-file), with future tightening planned. Test files mirror source paths under `tests/` with `_test` suffix (e.g. `src/foo.bd` → `tests/src/foo_test.bd`). A manifest exclude list will be added later for edge cases.
+decision: Tests live in separate files under `tests/`. Test rules are named `test_*` and return `void`; failures `throw` a string. Assertions can be either manual `throw` or helpers in `std::test`. `main`, `init`, and stdlib are exempt. Enforcement is opt-in via flag or manifest setting, and applies to `lint`, `test`, and `build`. Requirement is per rule: each non-exempt rule must have a matching test rule in its test file. Test files mirror source paths under `tests/` with `_test` suffix (e.g. `src/foo.bd` → `tests/src/foo_test.bd`). A manifest exclude list is supported for edge cases.
 rationale: Keeps production code clean and LLM-friendly while allowing strict enforcement in CI or LLM workflows without frustrating manual builds.
 impact: CLI/test runner, stdlib (`std::test`), docs, manifest schema, lint rules
 
 Questions:
-- How strict should the minimum test requirement become (per rule vs per file)?
 - Do we allow additional test discovery mechanisms beyond `tests/`?
+
+Potential future tightening (optional):
+- Per-file minimum test count (N tests).
+- Ratio-based enforcement.
+- Manifest overrides (`test_min`, `test_ratio`, `test_rules`).
 
 ---
 
@@ -380,6 +384,30 @@ Questions:
 status: decided (partial)
 date: 2026-01-31
 decision: Use OS threads with message passing only (channels) in v0.x; no shared mutable state. VM provides deterministic scheduling as an opt-in for tests/debugging; native stays OS-scheduled (nondeterministic). Minimal primitives are `spawn`, `join`, and channel `send/recv`.
+
+API surface (v0.x initial):
+- `std::thread::spawn(entry: string, args...) -> Thread`
+  - `entry` must be a **string literal** containing a fully-qualified rule path (e.g. `"app::worker"`).
+  - Entry rule must be top-level (not a book method) and must return `i64`.
+  - All args must be **sendable** types (see below).
+- `std::thread::join(handle: Thread) -> i64` (blocks until completion; joining twice is a runtime error).
+
+Channel types (v0.x initial):
+- `std::channel::i64() -> ChannelI64`
+- `std::channel::string() -> ChannelString`
+- `ChannelI64::send(value: i64) -> bool`, `ChannelI64::recv() -> RecvI64`, `ChannelI64::close() -> void`
+- `ChannelString::send(value: string) -> bool`, `ChannelString::recv() -> RecvString`, `ChannelString::close() -> void`
+- `RecvI64` / `RecvString` are enums: `Ok(value)` or `Closed`.
+
+Semantics:
+- Channels are unbounded FIFO queues.
+- `send` returns `false` if the channel is closed.
+- `recv` blocks until a value is available or the channel is closed; if closed and empty, returns `Closed`.
+
+Sendable types (v0.x initial):
+- `i64`, `f64`, `bool`, `u8`, `string`
+- `ChannelI64`, `ChannelString` (channel handles are thread-safe)
+- Not sendable yet: arrays, books/objects, enums (compile-time error when passed to `spawn`).
 rationale: Message passing is the most LLM-friendly model (fewer data races). Deterministic VM scheduling improves reproducibility while keeping native performance.
 impact: runtime (VM/WASM/native), stdlib (`std::thread`/`std::channel`), type system, GC roots, tests
 

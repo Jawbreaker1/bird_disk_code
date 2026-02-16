@@ -38,9 +38,18 @@ L1007 — Unused import
 - Warns when an `import` is never referenced in the file.
 - Reason: unused imports add noise for LLMs.
 
+L1008 — Constant condition
+- Warns on `when true/false` and `repeat while true/false`.
+- Reason: constant conditions hide intent and often indicate a bug.
+
+L1009 — Self-assignment
+- Warns on `put name = name.` (no-op assignment).
+- Reason: self-assignments add noise and often indicate a mistake.
+
 Notes
 - Lints are warnings (non-fatal) but `birddiskc lint` exits non-zero if any
   warnings are emitted.
 - Rules are expected to expand as the language grows.
+- Some lints include fix-it suggestions (edits) to simplify automated repairs.
 - Names starting with `_` are treated as intentionally unused and will not
   trigger unused warnings.

@@ -1,7 +1,7 @@
 use birddisk_core::runtime as abi;
 use birddisk_core::TraceFrame;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
 use std::time::Instant;
 
@@ -36,6 +36,42 @@ pub(crate) enum ElemKind {
     U8 = abi::ARRAY_KIND_U8 as u8,
     Ref = abi::ARRAY_KIND_REF as u8,
     F64 = abi::ARRAY_KIND_F64 as u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChannelKind {
+    I64,
+    Bool,
+    F64,
+    U8,
+    String,
+    Bytes,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ChannelValue {
+    I64(i64),
+    Bool(bool),
+    F64(f64),
+    U8(u8),
+    Ref(HeapHandle),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ChannelState {
+    pub(crate) kind: ChannelKind,
+    pub(crate) queue: VecDeque<ChannelValue>,
+    pub(crate) closed: bool,
+}
+
+impl ChannelState {
+    fn new(kind: ChannelKind) -> Self {
+        Self {
+            kind,
+            queue: VecDeque::new(),
+            closed: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -260,6 +296,7 @@ pub struct Runtime {
     stdin_fallback: bool,
     stdout_live: bool,
     pub(crate) rand_state: u64,
+    pub(crate) channels: HashMap<u32, ChannelState>,
 }
 
 impl Runtime {
@@ -273,17 +310,32 @@ impl Runtime {
             output: String::new(),
             layout: Vec::new(),
             trace_frames: Vec::new(),
-            gc_threshold: usize::MAX,
+            gc_threshold: GC_MIN_THRESHOLD,
             error: RefCell::new(None),
             start_time: Instant::now(),
             stdin_fallback: false,
             stdout_live: false,
             rand_state: 0x9E37_79B9_7F4A_7C15,
+            channels: HashMap::new(),
         }
     }
 
     pub(crate) fn heap_mut(&mut self) -> &mut Heap {
         &mut self.heap
+    }
+
+    pub(crate) fn heap_stats(&self) -> HeapStats {
+        self.heap.stats()
+    }
+
+    pub(crate) fn channel_state_mut(&mut self, handle: HeapHandle) -> Option<&mut ChannelState> {
+        self.channels.get_mut(&handle.as_u32())
+    }
+
+    pub(crate) fn register_channel(&mut self, handle: HeapHandle, kind: ChannelKind) {
+        self.channels
+            .entry(handle.as_u32())
+            .or_insert_with(|| ChannelState::new(kind));
     }
 
     fn heap_ref(&self) -> &Heap {
@@ -804,6 +856,14 @@ pub(crate) fn maybe_collect(rt: &mut Runtime) {
             roots.set_slot(base, RootValue::Ptr(handle));
         }
     }
+    let extra_roots = rt.channel_ref_handles();
+    if !extra_roots.is_empty() {
+        if let Some(base) = roots.push_frame(extra_roots.len()) {
+            for (offset, handle) in extra_roots.iter().enumerate() {
+                roots.set_slot(base + offset, RootValue::Ptr(*handle));
+            }
+        }
+    }
     let layout_snapshot = rt.layout.clone();
     let layout = RuntimeLayout {
         ref_fields: &layout_snapshot,
@@ -814,6 +874,20 @@ pub(crate) fn maybe_collect(rt: &mut Runtime) {
         next = GC_MIN_THRESHOLD;
     }
     rt.gc_threshold = next;
+}
+
+impl Runtime {
+    fn channel_ref_handles(&self) -> Vec<HeapHandle> {
+        let mut handles = Vec::new();
+        for state in self.channels.values() {
+            for value in &state.queue {
+                if let ChannelValue::Ref(handle) = value {
+                    handles.push(*handle);
+                }
+            }
+        }
+        handles
+    }
 }
 
 struct RuntimeLayout<'a> {

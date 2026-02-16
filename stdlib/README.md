@@ -52,6 +52,17 @@ Runtime modules (implemented in Rust)
 - std::time
   - now_ms() -> i64
   - sleep_ms(ms: i64) -> i64
+- std::profiler
+  - uptime_ms() -> i64
+  - alloc_count() -> i64
+  - bytes_allocated() -> i64
+  - bytes_in_use() -> i64
+  - peak_bytes_in_use() -> i64
+  - gc_runs() -> i64
+  - last_freed() -> i64
+  - last_live() -> i64
+  - last_freed_bytes() -> i64
+  - last_live_bytes() -> i64
 - std::rand
   - seed(seed: i64) -> void
   - range(min: i64, max: i64) -> i64
@@ -80,7 +91,7 @@ Runtime modules (implemented in Rust)
   - decode_string(text: string) -> string
 
 Notes
-- std::string, std::bytes, std::io, std::time, std::fs, std::path, std::env, and std::json are still implemented in Rust.
+- std::string, std::bytes, std::io, std::time, std::profiler, std::fs, std::path, std::env, and std::json are still implemented in Rust.
 - BirdDisk stdlib modules are currently self-contained and should not
   import other modules yet.
 - Stdlib versioning is tied to the compiler version during v0.x.

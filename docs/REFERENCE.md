@@ -1,7 +1,7 @@
 # BirdDisk reference manual (LLM-friendly)
 
 This is a concise, machine-readable summary of the v0.1 language behavior.
-If there is a conflict, `SPEC.md` is the source of truth.
+If there is a conflict, the repo-root `SPEC.md` is the source of truth.
 
 ## 1) File + module model
 - Source files are `.bd`.
@@ -30,6 +30,11 @@ When the parser sees `name::member`:
 - Failures should `throw` a string (directly or via `std::test`).
 - Expected test file path mirrors the source file path under `tests/` with a `_test` suffix.
   - Example: `src/foo/bar.bd` → `tests/src/foo/bar_test.bd`.
+- Per-rule enforcement (when `--require-tests` is enabled):
+  - Free rule `rule add(...)` → test `rule test_add() -> void:`
+  - Method `book Counter::inc` → test `rule test_Counter_inc() -> void:`
+  - `main` and `init` are exempt.
+  - If a file only contains exempt rules, no test file is required.
 - A manifest can include `test_exclude` paths to skip test requirements for specific files or folders.
 
 ## 2) Types
@@ -178,6 +183,18 @@ See `docs/DIAGNOSTICS.md` for full error list.
 ### std::time
 - `now_ms() -> i64`
 - `sleep_ms(ms: i64) -> i64`
+
+### std::profiler
+- `uptime_ms() -> i64`
+- `alloc_count() -> i64`
+- `bytes_allocated() -> i64`
+- `bytes_in_use() -> i64`
+- `peak_bytes_in_use() -> i64`
+- `gc_runs() -> i64`
+- `last_freed() -> i64`
+- `last_live() -> i64`
+- `last_freed_bytes() -> i64`
+- `last_live_bytes() -> i64`
 
 ### std::rand
 - `seed(value: i64) -> void`

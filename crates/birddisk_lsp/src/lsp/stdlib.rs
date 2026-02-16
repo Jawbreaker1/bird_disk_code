@@ -166,6 +166,29 @@ pub(crate) fn stdlib_signatures(
             },
         );
     }
+    if has_import(program, &["std", "profiler"]) {
+        let entries = [
+            "uptime_ms",
+            "alloc_count",
+            "bytes_allocated",
+            "bytes_in_use",
+            "peak_bytes_in_use",
+            "gc_runs",
+            "last_freed",
+            "last_live",
+            "last_freed_bytes",
+            "last_live_bytes",
+        ];
+        for name in entries {
+            signatures.insert(
+                format!("std::profiler::{name}"),
+                CallSignature {
+                    params: Vec::new(),
+                    return_type: Type::I64,
+                },
+            );
+        }
+    }
     if has_import(program, &["std", "rand"]) {
         signatures.insert(
             "std::rand::seed".to_string(),
@@ -323,6 +346,25 @@ pub(crate) fn stdlib_signatures(
             },
         );
     }
+    if has_import(program, &["std", "channel"]) {
+        let entries = [
+            ("i64", "ChannelI64"),
+            ("bool", "ChannelBool"),
+            ("f64", "ChannelF64"),
+            ("u8", "ChannelU8"),
+            ("string", "ChannelString"),
+            ("bytes", "ChannelBytes"),
+        ];
+        for (ctor, book) in entries {
+            signatures.insert(
+                format!("std::channel::{ctor}"),
+                CallSignature {
+                    params: Vec::new(),
+                    return_type: Type::Book(book.to_string()),
+                },
+            );
+        }
+    }
     if let Some(root) = root {
         for import in &program.imports {
             let module_name = import.path.join("::");
@@ -330,6 +372,7 @@ pub(crate) fn stdlib_signatures(
                 || module_name.starts_with("std::bytes")
                 || module_name.starts_with("std::io")
                 || module_name.starts_with("std::time")
+                || module_name.starts_with("std::profiler")
                 || module_name.starts_with("std::rand")
                 || module_name.starts_with("std::fs")
                 || module_name.starts_with("std::path")
@@ -419,6 +462,18 @@ pub(crate) fn builtin_stdlib_functions(module: &str) -> Vec<String> {
         "std::bytes" => vec!["len", "eq", "slice", "index_of", "contains"],
         "std::io" => vec!["print", "read_line"],
         "std::time" => vec!["now_ms", "sleep_ms"],
+        "std::profiler" => vec![
+            "uptime_ms",
+            "alloc_count",
+            "bytes_allocated",
+            "bytes_in_use",
+            "peak_bytes_in_use",
+            "gc_runs",
+            "last_freed",
+            "last_live",
+            "last_freed_bytes",
+            "last_live_bytes",
+        ],
         "std::rand" => vec!["seed", "range"],
         "std::fs" => vec!["read_text", "write_text", "read_bytes", "write_bytes"],
         "std::path" => vec!["join", "normalize", "basename", "dirname"],
@@ -431,6 +486,7 @@ pub(crate) fn builtin_stdlib_functions(module: &str) -> Vec<String> {
             "decode_bool",
             "decode_string",
         ],
+        "std::channel" => vec!["i64", "bool", "f64", "u8", "string", "bytes"],
         _ => Vec::new(),
     }
     .into_iter()

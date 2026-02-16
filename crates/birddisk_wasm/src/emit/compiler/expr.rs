@@ -62,6 +62,9 @@ impl<'a> FuncCompiler<'a> {
                 if self.emit_time_call(name, args)? {
                     return Ok(());
                 }
+                if self.emit_profiler_call(name, args)? {
+                    return Ok(());
+                }
                 if self.emit_rand_call(name, args)? {
                     return Ok(());
                 }
@@ -75,6 +78,9 @@ impl<'a> FuncCompiler<'a> {
                     return Ok(());
                 }
                 if self.emit_path_call(name, args)? {
+                    return Ok(());
+                }
+                if self.emit_channel_call(name, args)? {
                     return Ok(());
                 }
                 if self.emit_enum_constructor(name, args)? {
@@ -110,6 +116,15 @@ impl<'a> FuncCompiler<'a> {
                     if base != "std" {
                         if let Some(info) = self.lookup(base) {
                             if let Type::Book(book_name) = &info.ty {
+                                if self.emit_channel_method_call(
+                                    book_name,
+                                    info.idx,
+                                    method,
+                                    args,
+                                    expected,
+                                )? {
+                                    return Ok(());
+                                }
                                 let full_name = format!("{book_name}::{method}");
                                 let sig = self.functions.get(&full_name).ok_or_else(|| {
                                     wasm_error("E0400", format!("Unknown function '{full_name}'"))
@@ -957,6 +972,40 @@ impl<'a> FuncCompiler<'a> {
         }
     }
 
+    fn emit_profiler_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        if !name.starts_with("std::profiler::") {
+            return Ok(false);
+        }
+        if !args.is_empty() {
+            return Err(wasm_error(
+                "E0400",
+                "std::profiler functions expect 0 arguments",
+            ));
+        }
+        match name {
+            "std::profiler::uptime_ms" => self.push_line("call $bd_profiler_uptime_ms"),
+            "std::profiler::alloc_count" => self.push_line("call $bd_profiler_alloc_count"),
+            "std::profiler::bytes_allocated" => {
+                self.push_line("call $bd_profiler_bytes_allocated")
+            }
+            "std::profiler::bytes_in_use" => self.push_line("call $bd_profiler_bytes_in_use"),
+            "std::profiler::peak_bytes_in_use" => {
+                self.push_line("call $bd_profiler_peak_bytes_in_use")
+            }
+            "std::profiler::gc_runs" => self.push_line("call $bd_profiler_gc_runs"),
+            "std::profiler::last_freed" => self.push_line("call $bd_profiler_last_freed"),
+            "std::profiler::last_live" => self.push_line("call $bd_profiler_last_live"),
+            "std::profiler::last_freed_bytes" => {
+                self.push_line("call $bd_profiler_last_freed_bytes")
+            }
+            "std::profiler::last_live_bytes" => {
+                self.push_line("call $bd_profiler_last_live_bytes")
+            }
+            _ => return Ok(false),
+        }
+        Ok(true)
+    }
+
     fn emit_rand_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
             "std::rand::seed" => {
@@ -1193,6 +1242,147 @@ impl<'a> FuncCompiler<'a> {
                 let arg_locals = self.emit_call_args(args, &param_types)?;
                 self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line("call $bd_path_dirname");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn emit_channel_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
+        match name {
+            "std::channel::i64" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::channel::i64 expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_channel_i64");
+                Ok(true)
+            }
+            "std::channel::bool" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::channel::bool expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_channel_bool");
+                Ok(true)
+            }
+            "std::channel::f64" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::channel::f64 expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_channel_f64");
+                Ok(true)
+            }
+            "std::channel::u8" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::channel::u8 expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_channel_u8");
+                Ok(true)
+            }
+            "std::channel::string" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::channel::string expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_channel_string");
+                Ok(true)
+            }
+            "std::channel::bytes" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        "std::channel::bytes expects 0 arguments",
+                    ));
+                }
+                self.push_line("call $bd_channel_bytes");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn emit_channel_method_call(
+        &mut self,
+        book: &str,
+        base_local: u32,
+        method: &str,
+        args: &[Expr],
+        expected: Option<&Type>,
+    ) -> Result<bool, WasmError> {
+        let (suffix, payload_ty, recv_ty) = match book {
+            "ChannelI64" => ("i64", Type::I64, Type::Book("RecvI64".to_string())),
+            "ChannelBool" => ("bool", Type::Bool, Type::Book("RecvBool".to_string())),
+            "ChannelF64" => ("f64", Type::F64, Type::Book("RecvF64".to_string())),
+            "ChannelU8" => ("u8", Type::U8, Type::Book("RecvU8".to_string())),
+            "ChannelString" => ("string", Type::String, Type::Book("RecvString".to_string())),
+            "ChannelBytes" => (
+                "bytes",
+                Type::Array(Box::new(Type::U8)),
+                Type::Book("RecvBytes".to_string()),
+            ),
+            _ => return Ok(false),
+        };
+        match method {
+            "send" => {
+                if args.len() != 1 {
+                    return Err(wasm_error(
+                        "E0400",
+                        format!("{book}::send expects 1 argument"),
+                    ));
+                }
+                if let Some(expected) = expected {
+                    if !matches!(expected, Type::Bool) {
+                        return Err(wasm_error("E0400", "Type mismatch in channel send."));
+                    }
+                }
+                self.push_line(format!("local.get {base_local}"));
+                self.emit_expr(&args[0], Some(&payload_ty))?;
+                self.push_line(format!("call $bd_channel_send_{suffix}"));
+                Ok(true)
+            }
+            "recv" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        format!("{book}::recv expects 0 arguments"),
+                    ));
+                }
+                if let Some(expected) = expected {
+                    if expected != &recv_ty {
+                        return Err(wasm_error("E0400", "Type mismatch in channel recv."));
+                    }
+                }
+                self.push_line(format!("local.get {base_local}"));
+                self.push_line(format!("call $bd_channel_recv_{suffix}"));
+                Ok(true)
+            }
+            "close" => {
+                if !args.is_empty() {
+                    return Err(wasm_error(
+                        "E0400",
+                        format!("{book}::close expects 0 arguments"),
+                    ));
+                }
+                if let Some(expected) = expected {
+                    if !matches!(expected, Type::Void) {
+                        return Err(wasm_error("E0400", "Type mismatch in channel close."));
+                    }
+                }
+                self.push_line(format!("local.get {base_local}"));
+                self.push_line(format!("call $bd_channel_close_{suffix}"));
                 Ok(true)
             }
             _ => Ok(false),
@@ -1461,6 +1651,16 @@ impl<'a> FuncCompiler<'a> {
             "std::io::read_line" => Some(Type::String),
             "std::time::now_ms" => Some(Type::I64),
             "std::time::sleep_ms" => Some(Type::I64),
+            "std::profiler::uptime_ms" => Some(Type::I64),
+            "std::profiler::alloc_count" => Some(Type::I64),
+            "std::profiler::bytes_allocated" => Some(Type::I64),
+            "std::profiler::bytes_in_use" => Some(Type::I64),
+            "std::profiler::peak_bytes_in_use" => Some(Type::I64),
+            "std::profiler::gc_runs" => Some(Type::I64),
+            "std::profiler::last_freed" => Some(Type::I64),
+            "std::profiler::last_live" => Some(Type::I64),
+            "std::profiler::last_freed_bytes" => Some(Type::I64),
+            "std::profiler::last_live_bytes" => Some(Type::I64),
             "std::rand::seed" => Some(Type::Void),
             "std::rand::range" => Some(Type::I64),
             "std::test::assert" => Some(Type::Void),
@@ -1486,6 +1686,30 @@ impl<'a> FuncCompiler<'a> {
             "std::json::decode_i64" => Some(Type::I64),
             "std::json::decode_bool" => Some(Type::Bool),
             "std::json::decode_string" => Some(Type::String),
+            "std::channel::i64" => Some(Type::Book("ChannelI64".to_string())),
+            "std::channel::bool" => Some(Type::Book("ChannelBool".to_string())),
+            "std::channel::f64" => Some(Type::Book("ChannelF64".to_string())),
+            "std::channel::u8" => Some(Type::Book("ChannelU8".to_string())),
+            "std::channel::string" => Some(Type::Book("ChannelString".to_string())),
+            "std::channel::bytes" => Some(Type::Book("ChannelBytes".to_string())),
+            "ChannelI64::send" => Some(Type::Bool),
+            "ChannelI64::recv" => Some(Type::Book("RecvI64".to_string())),
+            "ChannelI64::close" => Some(Type::Void),
+            "ChannelBool::send" => Some(Type::Bool),
+            "ChannelBool::recv" => Some(Type::Book("RecvBool".to_string())),
+            "ChannelBool::close" => Some(Type::Void),
+            "ChannelF64::send" => Some(Type::Bool),
+            "ChannelF64::recv" => Some(Type::Book("RecvF64".to_string())),
+            "ChannelF64::close" => Some(Type::Void),
+            "ChannelU8::send" => Some(Type::Bool),
+            "ChannelU8::recv" => Some(Type::Book("RecvU8".to_string())),
+            "ChannelU8::close" => Some(Type::Void),
+            "ChannelString::send" => Some(Type::Bool),
+            "ChannelString::recv" => Some(Type::Book("RecvString".to_string())),
+            "ChannelString::close" => Some(Type::Void),
+            "ChannelBytes::send" => Some(Type::Bool),
+            "ChannelBytes::recv" => Some(Type::Book("RecvBytes".to_string())),
+            "ChannelBytes::close" => Some(Type::Void),
             _ => self.functions.get(name).map(|sig| sig.return_type.clone()),
         }
     }

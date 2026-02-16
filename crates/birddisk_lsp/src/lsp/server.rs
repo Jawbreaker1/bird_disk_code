@@ -252,7 +252,7 @@ impl Server {
             return Ok(());
         };
         let diagnostics = match birddisk_core::parse_and_typecheck(path.to_string_lossy().as_ref()) {
-            Ok(_) => Vec::new(),
+            Ok(program) => birddisk_core::lint_program(&program),
             Err(diags) => diags,
         };
         let lsp_diags: Vec<Value> = diagnostics

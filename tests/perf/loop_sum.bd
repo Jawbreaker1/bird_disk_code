@@ -1,0 +1,9 @@
+rule main() -> i64:
+  set total: i64 = 0.
+  set i: i64 = 0.
+  repeat while i < 200000:
+    put total = total + i.
+    put i = i + 1.
+  end
+  yield total.
+end

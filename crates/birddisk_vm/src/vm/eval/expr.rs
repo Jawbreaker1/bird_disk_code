@@ -38,6 +38,11 @@ impl<'a> Vm<'a> {
                             ));
                         };
                         if let Value::Object { ref book, .. } = base_value {
+                            if let Some(value) =
+                                self.eval_channel_method(&base_value, method, &values)?
+                            {
+                                return Ok(value);
+                            }
                             let full_name = format!("{book}::{method}");
                             let function = *self.functions.get(&full_name).ok_or_else(|| {
                                 runtime_error(

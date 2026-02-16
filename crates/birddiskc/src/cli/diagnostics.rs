@@ -112,6 +112,54 @@ pub(crate) fn test_harness_diagnostic(message: impl Into<String>) -> birddisk_co
     }
 }
 
+pub(crate) fn perf_harness_diagnostic(
+    path: &str,
+    message: impl Into<String>,
+) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "E0504",
+        severity: "error",
+        message: message.into(),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Performance harness error.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+pub(crate) fn wasm_threading_diagnostic(path: &str) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "E0325",
+        severity: "error",
+        message: "WASM backend does not support std::thread.".to_string(),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Threading is supported only in the VM backend for now.".to_string()],
+        spec_refs: vec!["SPEC.md#14-concurrency-planned-not-implemented-in-v0-1".to_string()],
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+pub(crate) fn native_threading_diagnostic(path: &str) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "E0326",
+        severity: "error",
+        message: "Native backend does not support std::thread yet.".to_string(),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Threading is supported only in the VM backend for now.".to_string()],
+        spec_refs: vec!["SPEC.md#14-concurrency-planned-not-implemented-in-v0-1".to_string()],
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
 pub(crate) fn runtime_diagnostic(
     path: &str,
     message: String,
@@ -156,7 +204,26 @@ pub(crate) fn require_tests_diagnostic(path: &str, expected: &str) -> birddisk_c
         notes: vec![format!("Expected test file at '{expected}'.")],
         spec_refs: Vec::new(),
         fixits: Vec::new(),
-        help: Some("Add at least one `rule test_*() -> void` in the test file.".to_string()),
+        help: Some("Add the test file with matching `rule test_*() -> void` rules.".to_string()),
+    }
+}
+
+pub(crate) fn require_tests_rule_diagnostic(
+    path: &str,
+    rule: &str,
+    expected: &str,
+) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: "L2002",
+        severity: "error",
+        message: format!("Missing test rule '{expected}' for '{rule}'."),
+        file: path.to_string(),
+        span: default_span(),
+        trace: Vec::new(),
+        notes: vec!["Per-rule tests are required when --require-tests is enabled.".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: Some("Add the missing test rule to the test file.".to_string()),
     }
 }
 

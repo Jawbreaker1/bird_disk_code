@@ -365,7 +365,7 @@ Acceptance:
 ## Sprint 16 — Tooling & quality (ongoing)
 Implement:
 - [x] Linter with opinionated rules for LLM-friendly code (initial rules)
-- [ ] Expand linter rules + autofix hints (naming, unused vars, shadowing, complexity)
+- [x] Expand linter rules + autofix hints (naming, unused vars, shadowing, complexity)
 - [x] Doc generator (`birddiskc doc` from source)
 - [x] Reference manual (LLM-friendly semantics lookup)
 - [x] Human-readable runtime error output for CLI runs (stacktrace + snippets; non-JSON)
@@ -374,13 +374,15 @@ Implement:
 - [x] Implement require-tests enforcement (flag + manifest setting; lint/test/build)
 - [x] Add `std::test` helpers (assert/eq; throw on failure)
 - [x] Add manifest test exclude list support
-- [ ] Plan stricter test requirements (per rule or threshold-based)
-- [ ] Profiler hooks (GC stats, runtime timers)
-- [ ] Enhanced test runner (parallel, filters, snapshots)
+- [x] Plan stricter test requirements (per rule or threshold-based)
+  - options: per-file minimum tests, ratio-based, manifest overrides
+- [x] Require-tests per-rule mapping (test_<rule> / test_<book>_<rule>)
+- [x] Profiler hooks (GC stats, runtime timers)
+- [x] Enhanced test runner (parallel, filters, snapshots)
 
 Add tests:
-- [ ] Golden tests for linter output
-- [ ] Doc generation snapshots
+- [x] Golden tests for linter output
+- [x] Doc generation snapshots
 
 Acceptance:
 - Tooling supports larger projects and debugging
@@ -389,15 +391,23 @@ Acceptance:
 
 ## Sprint 17 — Performance & portability (ongoing)
 Implement:
-- [ ] Native backend coverage for arm64/x86_64 (macOS/Linux/Windows)
-- [ ] Optimization passes (const fold, dead code, inlining)
-- [ ] GC tuning + performance metrics
-- [ ] Concurrency model decision + minimal primitives
+- [x] Native backend coverage for arm64/x86_64 (macOS/Linux/Windows)
+  - [x] CI: macOS arm64 (macos-14)
+  - [x] CI: macOS x86_64 (macos-13)
+  - [x] CI: Linux x86_64 (ubuntu-latest)
+  - [x] CI: Linux arm64 (QEMU)
+  - [x] CI: Windows x86_64 (windows-latest)
+- [x] Optimization passes (const fold, dead code, inlining)
+  - [x] Const folding + basic branch pruning
+  - [x] Basic DCE (drop statements after yield/throw)
+  - [x] Inlining (small leaf rules)
+- [x] GC tuning + performance metrics
+- [x] Concurrency model decision + minimal primitives
 - [x] LSP: Go-to-definition across imported modules (multi-file symbol index)
 
 Add tests:
-- [ ] Cross-platform build checks
-- [ ] Performance regression harness
+- [x] Cross-platform build checks (CI matrix)
+- [x] Performance regression harness
 
 Acceptance:
 - Native builds work across major platforms with stable performance
@@ -406,11 +416,14 @@ Acceptance:
 
 ## Sprint 18 — Concurrency foundation (planning)
 Implement:
-- [ ] Define `std::thread` + `std::channel` API (spawn/join, send/recv)
-- [ ] Decide value ownership across threads (copy/clone rules, allowed types)
+- [x] Define `std::thread` + `std::channel` API (spawn/join, send/recv)
+- [x] Decide value ownership across threads (copy/clone rules, allowed types)
 - [ ] VM deterministic scheduler (opt-in, e.g. `--deterministic` or test-only)
+  - [x] CLI flag + docs (virtual time + deterministic clock)
+  - [ ] Deterministic thread scheduling (once threads exist)
 - [ ] Native threading runtime scaffolding (thread registry + join bookkeeping)
 - [ ] WASM behavior: compile-time error for threading (clear diagnostic)
+  - [x] WASM compile-time error for std::thread/std::channel + tests
 
 Add tests:
 - [ ] VM: deterministic scheduling fixture tests
@@ -467,6 +480,12 @@ Add tests:
 Acceptance:
 - Minimal HTTP client works in VM + native for local endpoints
 
+---
+
+## Future — Language features
+- [ ] Add generics/type parameters (types + functions + enums)
+- [ ] Use generics to replace typed channels with `Channel<T>` + `Recv<T>`
+
 ## Future — Full eval suite
 - [ ] Expand `eval/` with mutations, report generation, and cross-language comparison
 - [ ] Expand `eval/` tasks to measure LLM-friendliness
@@ -483,9 +502,10 @@ Acceptance:
 
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)
-- [ ] Keep the VSCode extension (syntax/LSP) updated as the language surface grows
+- [ ] Keep the VSCode extension (syntax/LSP + lint/diagnostics) updated as the language surface grows
 - [ ] Refactor large files into feature modules (see `docs/REFACTOR.md`, ongoing)
 - [ ] Streamline CLI defaults/flags for common workflows (make compile/run simpler)
+ - [ ] Monitor file sizes and refactor when any file exceeds ~1000 LOC (ongoing)
 
 ## Future — Quality gates (exploration)
 - [ ] Evaluate a test-required policy (lint/tooling first, not compiler), with clear opt-outs and minimal friction

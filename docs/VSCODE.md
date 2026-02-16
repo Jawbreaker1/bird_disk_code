@@ -12,7 +12,8 @@ The extension activates for `.bd` files.
 
 Notes:
 - Comments are reserved in the language today; the editor config uses `//` for convenience.
-- By default, diagnostics are provided by `birddiskc check --json`.
+- By default, diagnostics include `birddiskc check --json` plus `birddiskc lint --json`.
+- You can disable lint warnings via `birddisk.enableLintDiagnostics: false`.
 - Configure the compiler path via the `birddisk.compilerPath` setting if needed.
 - Use `birddisk.entryFile` to suppress missing-main diagnostics in module files.
 - Formatting uses `birddiskc fmt` on the current document.
@@ -23,6 +24,7 @@ BirdDisk ships with a minimal LSP server (`birddisk-lsp`) that adds hover, go-to
 go-to type definition, rename, references, signature help, document/workspace symbols, LSP-driven
 completions/diagnostics, semantic tokens, and inlay hints. Completions are file-local; go-to-definition
 and references follow imported modules when available (open files are included too).
+LSP diagnostics include lint warnings as well.
 
 Build the server:
 ```sh

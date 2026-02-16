@@ -1,0 +1,22 @@
+import std::channel.
+import std::io.
+import std::string.
+
+rule main() -> i64:
+  set ch: ChannelString = std::channel::string().
+  set ok: bool = ch::send("hi").
+  set got: RecvString = ch::recv().
+  ch::close().
+  set out: string = "none".
+  match got:
+    case RecvString::Ok(value):
+      put out = value.
+    case RecvString::Closed:
+      put out = "closed".
+    otherwise:
+      put out = "none".
+  end
+  set line: string = std::string::concat(out, "\n").
+  std::io::print(line).
+  yield 0.
+end

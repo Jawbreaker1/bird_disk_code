@@ -1,0 +1,27 @@
+import std::channel.
+
+rule main() -> i64:
+  set ch: ChannelI64 = std::channel::i64().
+  set ignored: bool = ch::send(2).
+  set ignored2: bool = ch::send(4).
+  set sum: i64 = 0.
+  set one: RecvI64 = ch::recv().
+  match one:
+    case RecvI64::Ok(v):
+      put sum = sum + v.
+    case RecvI64::Closed:
+      put sum = sum + 100.
+    otherwise:
+      put sum = sum + 0.
+  end
+  set two: RecvI64 = ch::recv().
+  match two:
+    case RecvI64::Ok(v):
+      put sum = sum + v.
+    case RecvI64::Closed:
+      put sum = sum + 100.
+    otherwise:
+      put sum = sum + 0.
+  end
+  yield sum.
+end

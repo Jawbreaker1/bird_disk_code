@@ -16,6 +16,11 @@ use std::time::Instant;
 const RAND_SEED_DEFAULT: u64 = 0x9E37_79B9_7F4A_7C15;
 const RAND_MULT: u64 = 0x2545_F491_4F6C_DD1D;
 
+#[derive(Clone, Copy, Default)]
+pub struct VmOptions {
+    pub deterministic: bool,
+}
+
 pub fn eval(program: &Program) -> Result<i64, RuntimeError> {
     let (result, _) = eval_with_io(program, "", &[])?;
     Ok(result)
@@ -26,7 +31,16 @@ pub fn eval_with_io(
     input: &str,
     args: &[String],
 ) -> Result<(i64, String), RuntimeError> {
-    let mut vm = Vm::new(program, input, args);
+    eval_with_io_options(program, input, args, VmOptions::default())
+}
+
+pub fn eval_with_io_options(
+    program: &Program,
+    input: &str,
+    args: &[String],
+    options: VmOptions,
+) -> Result<(i64, String), RuntimeError> {
+    let mut vm = Vm::new(program, input, args, options);
     let result = vm.eval_main()?;
     Ok((result, vm.output))
 }
@@ -37,7 +51,17 @@ pub fn eval_with_io_streaming(
     args: &[String],
     stdin_fallback: bool,
 ) -> Result<(i64, String), RuntimeError> {
-    let mut vm = Vm::new(program, input, args);
+    eval_with_io_streaming_options(program, input, args, stdin_fallback, VmOptions::default())
+}
+
+pub fn eval_with_io_streaming_options(
+    program: &Program,
+    input: &str,
+    args: &[String],
+    stdin_fallback: bool,
+    options: VmOptions,
+) -> Result<(i64, String), RuntimeError> {
+    let mut vm = Vm::new(program, input, args, options);
     vm.set_stdout_live(true);
     vm.set_stdin_fallback(stdin_fallback);
     let result = vm.eval_main()?;
@@ -56,11 +80,14 @@ pub(crate) struct Vm<'a> {
     start_time: Instant,
     heap: Heap,
     roots: RootStack,
+    channels: HashMap<u32, ChannelState>,
     gc_layout: GcLayout,
     gc_threshold: usize,
     stdin_fallback: bool,
     stdout_live: bool,
     rng_state: u64,
+    deterministic: bool,
+    virtual_time_ms: i64,
 }
 
 pub(crate) struct BookInfo {
@@ -79,6 +106,100 @@ pub(crate) struct EnumInfo {
 pub(crate) struct EnumVariantInfo {
     id: u32,
     payload: Option<Type>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChannelKind {
+    I64,
+    Bool,
+    F64,
+    U8,
+    String,
+    Bytes,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ChannelValue {
+    I64(i64),
+    Bool(bool),
+    F64(f64),
+    U8(u8),
+    Ref(HeapHandle),
+}
+
+pub(crate) struct ChannelState {
+    pub(crate) kind: ChannelKind,
+    pub(crate) queue: VecDeque<ChannelValue>,
+    pub(crate) closed: bool,
+}
+
+impl ChannelState {
+    fn new(kind: ChannelKind) -> Self {
+        Self {
+            kind,
+            queue: VecDeque::new(),
+            closed: false,
+        }
+    }
+}
+
+impl ChannelKind {
+    pub(crate) fn from_book(book: &str) -> Option<Self> {
+        match book {
+            "ChannelI64" => Some(ChannelKind::I64),
+            "ChannelBool" => Some(ChannelKind::Bool),
+            "ChannelF64" => Some(ChannelKind::F64),
+            "ChannelU8" => Some(ChannelKind::U8),
+            "ChannelString" => Some(ChannelKind::String),
+            "ChannelBytes" => Some(ChannelKind::Bytes),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn from_ctor(name: &str) -> Option<Self> {
+        match name {
+            "std::channel::i64" => Some(ChannelKind::I64),
+            "std::channel::bool" => Some(ChannelKind::Bool),
+            "std::channel::f64" => Some(ChannelKind::F64),
+            "std::channel::u8" => Some(ChannelKind::U8),
+            "std::channel::string" => Some(ChannelKind::String),
+            "std::channel::bytes" => Some(ChannelKind::Bytes),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn book_name(self) -> &'static str {
+        match self {
+            ChannelKind::I64 => "ChannelI64",
+            ChannelKind::Bool => "ChannelBool",
+            ChannelKind::F64 => "ChannelF64",
+            ChannelKind::U8 => "ChannelU8",
+            ChannelKind::String => "ChannelString",
+            ChannelKind::Bytes => "ChannelBytes",
+        }
+    }
+
+    pub(crate) fn recv_name(self) -> &'static str {
+        match self {
+            ChannelKind::I64 => "RecvI64",
+            ChannelKind::Bool => "RecvBool",
+            ChannelKind::F64 => "RecvF64",
+            ChannelKind::U8 => "RecvU8",
+            ChannelKind::String => "RecvString",
+            ChannelKind::Bytes => "RecvBytes",
+        }
+    }
+
+    pub(crate) fn payload_type(self) -> Type {
+        match self {
+            ChannelKind::I64 => Type::I64,
+            ChannelKind::Bool => Type::Bool,
+            ChannelKind::F64 => Type::F64,
+            ChannelKind::U8 => Type::U8,
+            ChannelKind::String => Type::String,
+            ChannelKind::Bytes => Type::Array(Box::new(Type::U8)),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -111,7 +232,7 @@ impl Scope {
 }
 
 impl<'a> Vm<'a> {
-    fn new(program: &'a Program, input: &str, args: &[String]) -> Self {
+    fn new(program: &'a Program, input: &str, args: &[String], options: VmOptions) -> Self {
         let mut functions = HashMap::new();
         for func in &program.functions {
             functions.insert(func.name.clone(), func);
@@ -122,6 +243,9 @@ impl<'a> Vm<'a> {
                 functions.insert(name, method);
             }
         }
+        let has_std_channel = program.imports.iter().any(|import| {
+            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
+        });
         let mut books = HashMap::new();
         let mut ref_fields = Vec::new();
         for (book_id, book) in program.books.iter().enumerate() {
@@ -145,6 +269,31 @@ impl<'a> Vm<'a> {
             );
             ref_fields.push(book_ref_fields);
         }
+        if has_std_channel {
+            for kind in [
+                ChannelKind::I64,
+                ChannelKind::Bool,
+                ChannelKind::F64,
+                ChannelKind::U8,
+                ChannelKind::String,
+                ChannelKind::Bytes,
+            ] {
+                let name = kind.book_name();
+                if books.contains_key(name) {
+                    continue;
+                }
+                let book_id = ref_fields.len() as u32;
+                books.insert(
+                    name.to_string(),
+                    BookInfo {
+                        id: book_id,
+                        field_types: Vec::new(),
+                        field_index: HashMap::new(),
+                    },
+                );
+                ref_fields.push(Vec::new());
+            }
+        }
         let mut enums = HashMap::new();
         for (enum_id, enum_decl) in program.enums.iter().enumerate() {
             let mut variants = HashMap::new();
@@ -163,6 +312,44 @@ impl<'a> Vm<'a> {
                 },
             );
         }
+        if has_std_channel {
+            for kind in [
+                ChannelKind::I64,
+                ChannelKind::Bool,
+                ChannelKind::F64,
+                ChannelKind::U8,
+                ChannelKind::String,
+                ChannelKind::Bytes,
+            ] {
+                let name = kind.recv_name();
+                if enums.contains_key(name) {
+                    continue;
+                }
+                let enum_id = enums.len() as u32;
+                let mut variants = HashMap::new();
+                variants.insert(
+                    "Ok".to_string(),
+                    EnumVariantInfo {
+                        id: 0,
+                        payload: Some(kind.payload_type()),
+                    },
+                );
+                variants.insert(
+                    "Closed".to_string(),
+                    EnumVariantInfo {
+                        id: 1,
+                        payload: None,
+                    },
+                );
+                enums.insert(
+                    name.to_string(),
+                    EnumInfo {
+                        id: enum_id,
+                        variants,
+                    },
+                );
+            }
+        }
         Self {
             functions,
             books,
@@ -175,11 +362,14 @@ impl<'a> Vm<'a> {
             start_time: Instant::now(),
             heap: Heap::new(),
             roots: RootStack::new(),
+            channels: HashMap::new(),
             gc_layout: GcLayout { ref_fields },
             gc_threshold: GC_MIN_THRESHOLD,
             stdin_fallback: false,
             stdout_live: false,
             rng_state: RAND_SEED_DEFAULT,
+            deterministic: options.deterministic,
+            virtual_time_ms: 0,
         }
     }
 
@@ -230,6 +420,15 @@ impl<'a> Vm<'a> {
         ))
     }
 
+    pub(crate) fn channel_state_mut(
+        &mut self,
+        handle: HeapHandle,
+    ) -> Result<&mut ChannelState, RuntimeError> {
+        self.channels
+            .get_mut(&handle.as_u32())
+            .ok_or_else(|| runtime_error("E0400", "Channel state missing at runtime."))
+    }
+
     fn update_root_slot(&mut self, slot: usize, value: &Value) {
         let root_value = match value.heap_handle() {
             Some(handle) => RootValue::Ptr(handle),
@@ -243,7 +442,24 @@ impl<'a> Vm<'a> {
         if stats.bytes_in_use < self.gc_threshold {
             return;
         }
+        let extra_roots = self.channel_ref_handles();
+        let extra_count = extra_roots.len();
+        let base = if extra_count == 0 {
+            None
+        } else {
+            Some(self.roots.push_frame(extra_count))
+        };
+        if let Some(base) = base {
+            for (offset, handle) in extra_roots.iter().enumerate() {
+                self.roots
+                    .set_slot(base + offset, RootValue::Ptr(*handle));
+            }
+        }
         let report = self.heap.gc_with_layout(&self.roots, &self.gc_layout);
+        if let Some(base) = base {
+            let _ = base;
+            self.roots.pop_frame(extra_count);
+        }
         let next = report
             .live_bytes
             .saturating_mul(2)
@@ -268,6 +484,18 @@ impl<'a> Vm<'a> {
             }
         }
         None
+    }
+
+    fn channel_ref_handles(&self) -> Vec<HeapHandle> {
+        let mut handles = Vec::new();
+        for state in self.channels.values() {
+            for value in &state.queue {
+                if let ChannelValue::Ref(handle) = value {
+                    handles.push(*handle);
+                }
+            }
+        }
+        handles
     }
 }
 
@@ -326,7 +554,7 @@ mod tests {
     fn run_with_gc(source: &str, threshold: usize) -> (i64, usize) {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        let mut vm = Vm::new(&program, "", &[]);
+        let mut vm = Vm::new(&program, "", &[], VmOptions::default());
         vm.gc_threshold = threshold;
         let result = vm.eval_main().unwrap();
         let gc_runs = vm.heap.stats().gc_runs;
@@ -336,7 +564,7 @@ mod tests {
     fn run_with_gc_stats(source: &str, threshold: usize) -> (i64, crate::heap::HeapStats) {
         let tokens = lexer::lex(source).unwrap();
         let program = parser::parse(&tokens).unwrap();
-        let mut vm = Vm::new(&program, "", &[]);
+        let mut vm = Vm::new(&program, "", &[], VmOptions::default());
         vm.gc_threshold = threshold;
         let result = vm.eval_main().unwrap();
         let stats = vm.heap.stats();
@@ -348,6 +576,21 @@ mod tests {
         let lines = split_lines("123\r\n456\r\n");
         let collected: Vec<String> = lines.into_iter().collect();
         assert_eq!(collected, vec!["123".to_string(), "456".to_string(), "".to_string()]);
+    }
+
+    #[test]
+    fn eval_time_deterministic_virtual_clock() {
+        let source = "import std::time.\n\nrule main() -> i64:\n  set start: i64 = std::time::now_ms().\n  set ignored: i64 = std::time::sleep_ms(5).\n  set finish: i64 = std::time::now_ms().\n  yield finish - start.\nend\n";
+        let tokens = lexer::lex(source).unwrap();
+        let program = parser::parse(&tokens).unwrap();
+        let (result, _) = eval_with_io_options(
+            &program,
+            "",
+            &[],
+            VmOptions { deterministic: true },
+        )
+        .unwrap();
+        assert_eq!(result, 5);
     }
 
     #[test]

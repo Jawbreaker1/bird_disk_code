@@ -5,6 +5,24 @@ use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Type, UnaryOp};
 use cranelift_frontend::Variable;
 use cranelift_module::Module;
 
+fn channel_method_return_type(book: &str, method: &str) -> Option<Type> {
+    let recv = match book {
+        "ChannelI64" => "RecvI64",
+        "ChannelBool" => "RecvBool",
+        "ChannelF64" => "RecvF64",
+        "ChannelU8" => "RecvU8",
+        "ChannelString" => "RecvString",
+        "ChannelBytes" => "RecvBytes",
+        _ => return None,
+    };
+    match method {
+        "send" => Some(Type::Bool),
+        "recv" => Some(Type::Book(recv.to_string())),
+        "close" => Some(Type::Void),
+        _ => None,
+    }
+}
+
 impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     pub(super) fn lookup_local_type(&self, name: &str) -> Option<Type> {
         self.vars
@@ -88,10 +106,12 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     if base != "std" {
                         if let Some(Type::Book(book)) = self.lookup_local_type(base) {
                             let full_name = format!("{book}::{method}");
-                            return self
-                                .functions
-                                .get(&full_name)
-                                .map(|sig| sig.return_type.clone());
+                            if let Some(sig) = self.functions.get(&full_name) {
+                                return Some(sig.return_type.clone());
+                            }
+                            if let Some(ret) = channel_method_return_type(&book, method) {
+                                return Some(ret);
+                            }
                         }
                     }
                 }

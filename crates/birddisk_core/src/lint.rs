@@ -1,5 +1,5 @@
 use crate::ast::{Expr, ExprKind, Function, MatchCase, Program, Stmt};
-use crate::diagnostics::diagnostic;
+use crate::diagnostics::{diagnostic, Edit, FixIt};
 use crate::{Diagnostic, Span};
 
 const SHORT_NAME_ALLOWLIST: &[&str] = &["i", "j", "k"];
@@ -31,12 +31,13 @@ pub fn lint_program(program: &Program) -> Vec<Diagnostic> {
         .unwrap_or("<module>");
     for import in &import_usage {
         if !import.used {
-            diagnostics.push(warn(
+            diagnostics.push(warn_with_fix(
                 "L1007",
                 format!("Unused import '{}'.", import.path.join("::")),
                 module_file,
                 import.span,
                 vec!["Unused imports add noise for LLMs.".to_string()],
+                remove_span_fix(module_file, import.span, "Remove unused import."),
                 Some("Remove the import or use it.".to_string()),
             ));
         }
@@ -122,10 +123,21 @@ fn lint_stmt(
             }
         }
         Stmt::When {
+            cond,
             then_body,
             else_body,
             ..
         } => {
+            if let ExprKind::Bool(value) = cond.kind {
+                diagnostics.push(warn(
+                    "L1008",
+                    format!("Constant condition ({value}) in 'when'."),
+                    &context.file,
+                    cond.span,
+                    vec!["Constant conditions hide intent for LLMs.".to_string()],
+                    Some("Use a variable or comparison for the condition.".to_string()),
+                ));
+            }
             context.with_scope(|ctx| {
                 for stmt in then_body {
                     lint_stmt(stmt, ctx, import_usage, diagnostics);
@@ -137,7 +149,17 @@ fn lint_stmt(
                 }
             });
         }
-        Stmt::Repeat { body, .. } => {
+        Stmt::Repeat { cond, body, .. } => {
+            if let ExprKind::Bool(value) = cond.kind {
+                diagnostics.push(warn(
+                    "L1008",
+                    format!("Constant condition ({value}) in 'repeat'."),
+                    &context.file,
+                    cond.span,
+                    vec!["Constant conditions hide intent for LLMs.".to_string()],
+                    Some("Use a variable or comparison for the condition.".to_string()),
+                ));
+            }
             context.with_scope(|ctx| {
                 for stmt in body {
                     lint_stmt(stmt, ctx, import_usage, diagnostics);
@@ -157,7 +179,22 @@ fn lint_stmt(
             });
         }
         Stmt::Expr { expr, .. } => lint_expr(context, import_usage, diagnostics, expr),
-        Stmt::Put { expr, .. } => lint_expr(context, import_usage, diagnostics, expr),
+        Stmt::Put { name, expr, span } => {
+            if let ExprKind::Ident(ident) = &expr.kind {
+                if ident == name {
+                    diagnostics.push(warn_with_fix(
+                        "L1009",
+                        format!("Self-assignment to '{name}' has no effect."),
+                        &context.file,
+                        *span,
+                        vec!["Self-assignment adds noise for LLMs.".to_string()],
+                        remove_span_fix(&context.file, *span, "Remove redundant assignment."),
+                        Some("Remove the assignment or change the value.".to_string()),
+                    ));
+                }
+            }
+            lint_expr(context, import_usage, diagnostics, expr);
+        }
         Stmt::PutIndex {
             name, index, expr, ..
         } => {
@@ -443,6 +480,40 @@ fn warn(
     )
 }
 
+fn warn_with_fix(
+    code: &'static str,
+    message: String,
+    file: &str,
+    span: Span,
+    notes: Vec<String>,
+    fixits: Vec<FixIt>,
+    help: Option<String>,
+) -> Diagnostic {
+    diagnostic(
+        code,
+        "warning",
+        message,
+        file,
+        span,
+        notes,
+        Vec::new(),
+        fixits,
+        help,
+    )
+}
+
+fn remove_span_fix(file: &str, span: Span, title: &str) -> Vec<FixIt> {
+    vec![FixIt {
+        title: title.to_string(),
+        edits: vec![Edit {
+            file: file.to_string(),
+            span,
+            replacement: String::new(),
+        }],
+    }]
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::lint_program;
@@ -510,6 +581,26 @@ mod tests {
         let program = parse_and_typecheck(&path).expect("parse");
         let diagnostics = lint_program(&program);
         assert!(diagnostics.iter().any(|diag| diag.code == "L1007"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn lint_warns_constant_condition() {
+        let source = "rule main() -> i64:\n  when true:\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n";
+        let path = write_temp(source, "constant_condition");
+        let program = parse_and_typecheck(&path).expect("parse");
+        let diagnostics = lint_program(&program);
+        assert!(diagnostics.iter().any(|diag| diag.code == "L1008"));
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn lint_warns_self_assignment() {
+        let source = "rule main() -> i64:\n  set value: i64 = 1.\n  put value = value.\n  yield value.\nend\n";
+        let path = write_temp(source, "self_assign");
+        let program = parse_and_typecheck(&path).expect("parse");
+        let diagnostics = lint_program(&program);
+        assert!(diagnostics.iter().any(|diag| diag.code == "L1009"));
         let _ = fs::remove_file(&path);
     }
 

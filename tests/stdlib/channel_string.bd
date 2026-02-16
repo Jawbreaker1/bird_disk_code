@@ -1,0 +1,20 @@
+import std::channel.
+import std::string.
+
+rule main() -> i64:
+  set ch: ChannelString = std::channel::string().
+  set ignored: bool = ch::send("hi").
+  set out: RecvString = ch::recv().
+  match out:
+    case RecvString::Ok(v):
+      when std::string::eq(v, "hi"):
+        yield 1.
+      otherwise:
+        yield 0.
+      end
+    case RecvString::Closed:
+      yield 0.
+    otherwise:
+      yield 0.
+  end
+end

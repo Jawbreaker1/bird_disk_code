@@ -70,6 +70,16 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) io_read_line: FuncId,
     pub(crate) time_now_ms: FuncId,
     pub(crate) time_sleep_ms: FuncId,
+    pub(crate) profiler_uptime_ms: FuncId,
+    pub(crate) profiler_alloc_count: FuncId,
+    pub(crate) profiler_bytes_allocated: FuncId,
+    pub(crate) profiler_bytes_in_use: FuncId,
+    pub(crate) profiler_peak_bytes_in_use: FuncId,
+    pub(crate) profiler_gc_runs: FuncId,
+    pub(crate) profiler_last_freed: FuncId,
+    pub(crate) profiler_last_live: FuncId,
+    pub(crate) profiler_last_freed_bytes: FuncId,
+    pub(crate) profiler_last_live_bytes: FuncId,
     pub(crate) rand_seed: FuncId,
     pub(crate) rand_range: FuncId,
     pub(crate) test_assert: FuncId,
@@ -95,6 +105,30 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) json_decode_i64: FuncId,
     pub(crate) json_decode_bool: FuncId,
     pub(crate) json_decode_string: FuncId,
+    pub(crate) channel_i64: FuncId,
+    pub(crate) channel_bool: FuncId,
+    pub(crate) channel_f64: FuncId,
+    pub(crate) channel_u8: FuncId,
+    pub(crate) channel_string: FuncId,
+    pub(crate) channel_bytes: FuncId,
+    pub(crate) channel_send_i64: FuncId,
+    pub(crate) channel_send_bool: FuncId,
+    pub(crate) channel_send_f64: FuncId,
+    pub(crate) channel_send_u8: FuncId,
+    pub(crate) channel_send_string: FuncId,
+    pub(crate) channel_send_bytes: FuncId,
+    pub(crate) channel_recv_i64: FuncId,
+    pub(crate) channel_recv_bool: FuncId,
+    pub(crate) channel_recv_f64: FuncId,
+    pub(crate) channel_recv_u8: FuncId,
+    pub(crate) channel_recv_string: FuncId,
+    pub(crate) channel_recv_bytes: FuncId,
+    pub(crate) channel_close_i64: FuncId,
+    pub(crate) channel_close_bool: FuncId,
+    pub(crate) channel_close_f64: FuncId,
+    pub(crate) channel_close_u8: FuncId,
+    pub(crate) channel_close_string: FuncId,
+    pub(crate) channel_close_bytes: FuncId,
 }
 
 impl RuntimeFuncs {
@@ -448,6 +482,58 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
+        let profiler_uptime_ms =
+            declare_runtime_func(module, "bd_profiler_uptime_ms", &[types::I64], &[types::I64])?;
+        let profiler_alloc_count = declare_runtime_func(
+            module,
+            "bd_profiler_alloc_count",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_bytes_allocated = declare_runtime_func(
+            module,
+            "bd_profiler_bytes_allocated",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_bytes_in_use = declare_runtime_func(
+            module,
+            "bd_profiler_bytes_in_use",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_peak_bytes_in_use = declare_runtime_func(
+            module,
+            "bd_profiler_peak_bytes_in_use",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_gc_runs =
+            declare_runtime_func(module, "bd_profiler_gc_runs", &[types::I64], &[types::I64])?;
+        let profiler_last_freed = declare_runtime_func(
+            module,
+            "bd_profiler_last_freed",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_last_live = declare_runtime_func(
+            module,
+            "bd_profiler_last_live",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_last_freed_bytes = declare_runtime_func(
+            module,
+            "bd_profiler_last_freed_bytes",
+            &[types::I64],
+            &[types::I64],
+        )?;
+        let profiler_last_live_bytes = declare_runtime_func(
+            module,
+            "bd_profiler_last_live_bytes",
+            &[types::I64],
+            &[types::I64],
+        )?;
         let rand_seed =
             declare_runtime_func(module, "bd_rand_seed", &[types::I64, types::I64], &[])?;
         let rand_range = declare_runtime_func(
@@ -594,6 +680,110 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
+        let channel_i64 =
+            declare_runtime_func(module, "bd_channel_i64", &[types::I64, types::I64], &[types::I64])?;
+        let channel_bool =
+            declare_runtime_func(module, "bd_channel_bool", &[types::I64, types::I64], &[types::I64])?;
+        let channel_f64 =
+            declare_runtime_func(module, "bd_channel_f64", &[types::I64, types::I64], &[types::I64])?;
+        let channel_u8 =
+            declare_runtime_func(module, "bd_channel_u8", &[types::I64, types::I64], &[types::I64])?;
+        let channel_string =
+            declare_runtime_func(module, "bd_channel_string", &[types::I64, types::I64], &[types::I64])?;
+        let channel_bytes =
+            declare_runtime_func(module, "bd_channel_bytes", &[types::I64, types::I64], &[types::I64])?;
+        let channel_send_i64 = declare_runtime_func(
+            module,
+            "bd_channel_send_i64",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_send_bool = declare_runtime_func(
+            module,
+            "bd_channel_send_bool",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_send_f64 = declare_runtime_func(
+            module,
+            "bd_channel_send_f64",
+            &[types::I64, types::I64, types::F64],
+            &[types::I64],
+        )?;
+        let channel_send_u8 = declare_runtime_func(
+            module,
+            "bd_channel_send_u8",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_send_string = declare_runtime_func(
+            module,
+            "bd_channel_send_string",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_send_bytes = declare_runtime_func(
+            module,
+            "bd_channel_send_bytes",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_recv_i64 = declare_runtime_func(
+            module,
+            "bd_channel_recv_i64",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_recv_bool = declare_runtime_func(
+            module,
+            "bd_channel_recv_bool",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_recv_f64 = declare_runtime_func(
+            module,
+            "bd_channel_recv_f64",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_recv_u8 = declare_runtime_func(
+            module,
+            "bd_channel_recv_u8",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_recv_string = declare_runtime_func(
+            module,
+            "bd_channel_recv_string",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_recv_bytes = declare_runtime_func(
+            module,
+            "bd_channel_recv_bytes",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_close_i64 =
+            declare_runtime_func(module, "bd_channel_close_i64", &[types::I64, types::I64], &[])?;
+        let channel_close_bool =
+            declare_runtime_func(module, "bd_channel_close_bool", &[types::I64, types::I64], &[])?;
+        let channel_close_f64 =
+            declare_runtime_func(module, "bd_channel_close_f64", &[types::I64, types::I64], &[])?;
+        let channel_close_u8 =
+            declare_runtime_func(module, "bd_channel_close_u8", &[types::I64, types::I64], &[])?;
+        let channel_close_string = declare_runtime_func(
+            module,
+            "bd_channel_close_string",
+            &[types::I64, types::I64],
+            &[],
+        )?;
+        let channel_close_bytes = declare_runtime_func(
+            module,
+            "bd_channel_close_bytes",
+            &[types::I64, types::I64],
+            &[],
+        )?;
         Ok(Self {
             root_push,
             root_pop,
@@ -660,6 +850,16 @@ impl RuntimeFuncs {
             io_read_line,
             time_now_ms,
             time_sleep_ms,
+            profiler_uptime_ms,
+            profiler_alloc_count,
+            profiler_bytes_allocated,
+            profiler_bytes_in_use,
+            profiler_peak_bytes_in_use,
+            profiler_gc_runs,
+            profiler_last_freed,
+            profiler_last_live,
+            profiler_last_freed_bytes,
+            profiler_last_live_bytes,
             rand_seed,
             rand_range,
             test_assert,
@@ -685,6 +885,30 @@ impl RuntimeFuncs {
             json_decode_i64,
             json_decode_bool,
             json_decode_string,
+            channel_i64,
+            channel_bool,
+            channel_f64,
+            channel_u8,
+            channel_string,
+            channel_bytes,
+            channel_send_i64,
+            channel_send_bool,
+            channel_send_f64,
+            channel_send_u8,
+            channel_send_string,
+            channel_send_bytes,
+            channel_recv_i64,
+            channel_recv_bool,
+            channel_recv_f64,
+            channel_recv_u8,
+            channel_recv_string,
+            channel_recv_bytes,
+            channel_close_i64,
+            channel_close_bool,
+            channel_close_f64,
+            channel_close_u8,
+            channel_close_string,
+            channel_close_bytes,
         })
     }
 }

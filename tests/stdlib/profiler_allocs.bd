@@ -1,0 +1,12 @@
+import std::profiler.
+
+rule main() -> i64:
+  set before: i64 = std::profiler::alloc_count().
+  set xs: i64[] = [1, 2, 3, 4, 5].
+  set after: i64 = std::profiler::alloc_count().
+  when after > before:
+    yield 0.
+  otherwise:
+    yield 1.
+  end
+end

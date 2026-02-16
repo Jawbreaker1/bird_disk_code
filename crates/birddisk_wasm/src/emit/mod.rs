@@ -5,7 +5,8 @@ mod types;
 use crate::analysis::{
     program_uses_arrays, program_uses_bytes, program_uses_env, program_uses_fs,
     program_uses_io, program_uses_json, program_uses_objects, program_uses_path,
-    program_uses_rand, program_uses_string_from_bytes, program_uses_strings, program_uses_time,
+    program_uses_profiler, program_uses_rand, program_uses_string_from_bytes,
+    program_uses_strings, program_uses_time,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -70,6 +71,7 @@ pub(crate) const TRAP_FS_IO: i32 = 416;
 pub(crate) const TRAP_PATH: i32 = 417;
 pub(crate) const TRAP_ENV: i32 = 418;
 pub(crate) const TRAP_JSON_PARSE: i32 = 419;
+pub(crate) const TRAP_CHANNEL_BLOCK: i32 = 424;
 
 pub(crate) const TRACE_STACK_PTR_OFFSET: i32 = 0;
 pub(crate) const TRACE_STACK_DATA_OFFSET: i32 = 4;
@@ -106,20 +108,24 @@ pub(crate) struct EnumInfo {
 }
 
 pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
-    let uses_arrays = program_uses_arrays(program);
+    let uses_channel = program.imports.iter().any(|import| {
+        import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
+    });
+    let uses_arrays = program_uses_arrays(program) || uses_channel;
     let uses_strings = program_uses_strings(program);
     let uses_bytes = program_uses_bytes(program);
     let uses_from_bytes = program_uses_string_from_bytes(program);
     let uses_io = program_uses_io(program);
-    let uses_objects = program_uses_objects(program);
-    let uses_time = program_uses_time(program);
+    let uses_objects = program_uses_objects(program) || uses_channel;
+    let uses_profiler = program_uses_profiler(program);
+    let uses_time = program_uses_time(program) || uses_profiler;
     let uses_rand = program_uses_rand(program);
     let uses_fs = program_uses_fs(program);
     let uses_path = program_uses_path(program);
     let uses_env = program_uses_env(program);
     let uses_json = program_uses_json(program);
     let uses_trace = true;
-    let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace;
+    let uses_heap = uses_arrays || uses_strings || uses_io || uses_objects || uses_trace || uses_profiler;
     let needs_validate_utf8 = uses_strings || uses_from_bytes || uses_fs || uses_path || uses_env;
     let export_memory =
         uses_from_bytes || uses_io || uses_fs || uses_path || uses_env || uses_trace;
@@ -169,6 +175,40 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
         );
         ref_fields.push(book_refs);
     }
+    if uses_channel {
+        let channels = [
+            ("ChannelI64", Type::I64),
+            ("ChannelBool", Type::Bool),
+            ("ChannelF64", Type::F64),
+            ("ChannelU8", Type::U8),
+            ("ChannelString", Type::String),
+            ("ChannelBytes", Type::Array(Box::new(Type::U8))),
+        ];
+        for (name, payload_ty) in channels {
+            if books.contains_key(name) {
+                continue;
+            }
+            let mut fields = Vec::new();
+            fields.push(Type::Array(Box::new(payload_ty.clone())));
+            fields.push(Type::Bool);
+            let mut book_refs = Vec::new();
+            for (idx, field) in fields.iter().enumerate() {
+                if is_ref_type(field) {
+                    book_refs.push(idx as u32);
+                }
+            }
+            let book_id = ref_fields.len() as u32;
+            books.insert(
+                name.to_string(),
+                BookLayout {
+                    id: book_id,
+                    fields,
+                    field_index: HashMap::new(),
+                },
+            );
+            ref_fields.push(book_refs);
+        }
+    }
     let mut enums = HashMap::new();
     for (enum_id, enum_decl) in program.enums.iter().enumerate() {
         let mut variants = HashMap::new();
@@ -189,6 +229,47 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
             },
         );
     }
+    if uses_channel {
+        let recv_enums = [
+            ("RecvI64", Some(Type::I64)),
+            ("RecvBool", Some(Type::Bool)),
+            ("RecvF64", Some(Type::F64)),
+            ("RecvU8", Some(Type::U8)),
+            ("RecvString", Some(Type::String)),
+            ("RecvBytes", Some(Type::Array(Box::new(Type::U8)))),
+        ];
+        for (name, payload) in recv_enums {
+            if enums.contains_key(name) {
+                continue;
+            }
+            let enum_id = enums.len() as u32;
+            let mut variants = HashMap::new();
+            variants.insert(
+                "Ok".to_string(),
+                EnumVariantInfo {
+                    id: 0,
+                    payload: payload.clone(),
+                },
+            );
+            variants.insert(
+                "Closed".to_string(),
+                EnumVariantInfo { id: 1, payload: None },
+            );
+            enums.insert(
+                name.to_string(),
+                EnumInfo {
+                    id: enum_id,
+                    variants,
+                },
+            );
+        }
+    }
+
+    let channel_specs = if uses_channel {
+        build_channel_specs(&books, &enums)?
+    } else {
+        Vec::new()
+    };
 
     let layout = build_layout_data(&ref_fields);
     let layout_base = HEAP_START;
@@ -229,6 +310,9 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
             heap_start,
         );
     }
+    if uses_profiler {
+        runtime::emit_profiler_runtime(&mut emitter);
+    }
     if uses_rand {
         runtime::emit_rand_runtime(&mut emitter);
     }
@@ -249,6 +333,9 @@ pub fn emit_wat(program: &Program) -> Result<String, WasmError> {
     }
     if uses_bytes {
         runtime::emit_bytes_runtime(&mut emitter);
+    }
+    if uses_channel {
+        runtime::emit_channel_runtime(&mut emitter, &channel_specs);
     }
     if uses_io {
         runtime::emit_io_runtime(&mut emitter);
@@ -346,6 +433,44 @@ fn build_layout_data(ref_fields: &[Vec<u32>]) -> Vec<u8> {
         bytes.extend_from_slice(&value.to_le_bytes());
     }
     bytes
+}
+
+fn build_channel_specs(
+    books: &HashMap<String, BookLayout>,
+    enums: &HashMap<String, EnumInfo>,
+) -> Result<Vec<runtime::ChannelSpec>, WasmError> {
+    let specs = [
+        ("i64", "ChannelI64", "RecvI64", runtime::ChannelPayload::I64),
+        ("bool", "ChannelBool", "RecvBool", runtime::ChannelPayload::Bool),
+        ("f64", "ChannelF64", "RecvF64", runtime::ChannelPayload::F64),
+        ("u8", "ChannelU8", "RecvU8", runtime::ChannelPayload::U8),
+        ("string", "ChannelString", "RecvString", runtime::ChannelPayload::Ref),
+        ("bytes", "ChannelBytes", "RecvBytes", runtime::ChannelPayload::Ref),
+    ];
+    let mut out = Vec::with_capacity(specs.len());
+    for (name, book_name, recv_name, payload) in specs {
+        let book = books.get(book_name).ok_or_else(|| {
+            wasm_error("E0400", format!("Missing book layout for '{book_name}'"))
+        })?;
+        let recv = enums.get(recv_name).ok_or_else(|| {
+            wasm_error("E0400", format!("Missing enum layout for '{recv_name}'"))
+        })?;
+        let ok = recv.variants.get("Ok").ok_or_else(|| {
+            wasm_error("E0400", format!("Missing {recv_name}::Ok variant"))
+        })?;
+        let closed = recv.variants.get("Closed").ok_or_else(|| {
+            wasm_error("E0400", format!("Missing {recv_name}::Closed variant"))
+        })?;
+        out.push(runtime::ChannelSpec {
+            name,
+            book_id: book.id,
+            enum_id: recv.id,
+            ok_variant: ok.id,
+            closed_variant: closed.id,
+            payload,
+        });
+    }
+    Ok(out)
 }
 
 fn encode_bytes(bytes: &[u8]) -> String {

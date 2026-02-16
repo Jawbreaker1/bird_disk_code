@@ -30,6 +30,7 @@ const BUILTIN_MODULES = [
   'std::bytes',
   'std::io',
   'std::time',
+  'std::profiler',
   'std::fs',
   'std::path',
   'std::env',
@@ -312,10 +313,45 @@ function runDiagnostics(document, diagnostics, output) {
     diagnostics.delete(document.uri);
     return;
   }
+  const enableLint = config.get('enableLintDiagnostics', true);
   const compilerPath = config.get('compilerPath', 'birddiskc');
-  const args = ['check', '--json', document.uri.fsPath];
   const cwd = workspaceFolderFor(document.uri);
+  runCompilerJson(
+    compilerPath,
+    ['check', '--json', document.uri.fsPath],
+    cwd,
+    output,
+    (checkReport) => {
+      const list = Array.isArray(checkReport.diagnostics)
+        ? checkReport.diagnostics
+        : [];
+      const entryFile = resolveEntryFilePath(document);
+      const isEntry = entryFile ? pathsEqual(entryFile, document.uri.fsPath) : true;
+      const filtered = isEntry ? list : list.filter((diag) => diag.code !== 'E0309');
+      if (!enableLint) {
+        const items = filtered.map((diag) => mapDiagnostic(diag, document));
+        diagnostics.set(document.uri, items);
+        return;
+      }
+      runCompilerJson(
+        compilerPath,
+        ['lint', '--json', document.uri.fsPath],
+        cwd,
+        output,
+        (lintReport) => {
+          const lintList = Array.isArray(lintReport.diagnostics)
+            ? lintReport.diagnostics
+            : [];
+          const merged = filtered.concat(lintList);
+          const items = merged.map((diag) => mapDiagnostic(diag, document));
+          diagnostics.set(document.uri, items);
+        }
+      );
+    }
+  );
+}
 
+function runCompilerJson(compilerPath, args, cwd, output, onSuccess) {
   cp.execFile(compilerPath, args, { cwd, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
     if (!stdout) {
       if (stderr) {
@@ -334,12 +370,10 @@ function runDiagnostics(document, diagnostics, output) {
       output.appendLine(stdout.trim());
       return;
     }
-    const list = Array.isArray(report.diagnostics) ? report.diagnostics : [];
-    const entryFile = resolveEntryFilePath(document);
-    const isEntry = entryFile ? pathsEqual(entryFile, document.uri.fsPath) : true;
-    const filtered = isEntry ? list : list.filter((diag) => diag.code !== 'E0309');
-    const items = filtered.map((diag) => mapDiagnostic(diag, document));
-    diagnostics.set(document.uri, items);
+    if (!report || typeof report !== 'object') {
+      return;
+    }
+    onSuccess(report);
   });
 }
 

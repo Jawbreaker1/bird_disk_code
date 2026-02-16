@@ -11,9 +11,9 @@ BirdDisk is a proof-of-concept compiled programming language and toolchain desig
 BirdDisk focuses on:
 - **Unique, LLM-friendly syntax** (low ambiguity, few special cases)
 - **Strong static typing** with **local type inference**
+- **Test enforcement** (core feature, opt-in quality gate)
 - **Deterministic formatter** (one canonical style)
 - **Structured JSON diagnostics + fix-its** (machine actionable)
-- **Optional test enforcement** for higher-quality LLM output (opt-in quality gate)
 - **Golden reference execution** (VM/interpreter)
 - **Native compilation** (host JIT + AOT object/exe)
 - **WASM as a portable baseline**
@@ -59,8 +59,8 @@ See [docs/VSCODE.md](docs/VSCODE.md).
 
 More commands and flags live in [docs/CLI.md](docs/CLI.md).
 
-Quality gate (optional)
-BirdDisk can enforce tests before building to keep LLM-generated code reliable:
+Test enforcement (core feature, opt-in)
+BirdDisk can enforce tests before building to keep LLM-generated code reliable and enable self-validation loops during LLM-driven development:
 ```sh
 ./target/debug/birddiskc build --require-tests
 ```
@@ -96,7 +96,7 @@ Docs (start here)
 - [docs/LLM.md](docs/LLM.md) (LLM onboarding + safe workflow)
 - [docs/QUICKREF.md](docs/QUICKREF.md) (syntax + typing snapshot)
 - [docs/COOKBOOK.md](docs/COOKBOOK.md) (runnable examples)
-- [docs/SPEC.md](docs/SPEC.md) (language spec)
+- [SPEC.md](SPEC.md) (language spec)
 - [GRAMMAR.md](GRAMMAR.md) (full grammar)
 
 Docs (tooling + internals)
@@ -104,6 +104,7 @@ Docs (tooling + internals)
 - [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) (error codes + JSON schema)
 - [docs/VSCODE.md](docs/VSCODE.md) (editor extension)
 - [docs/RUNTIME.md](docs/RUNTIME.md) (GC + runtime layout)
+- [docs/NATIVE.md](docs/NATIVE.md) (native backend targets + limitations)
 - [docs/PROJECT.md](docs/PROJECT.md) (repo layout + development principles)
 - [docs/STATUS.md](docs/STATUS.md) (targets + status)
 - [docs/DECISIONS.md](docs/DECISIONS.md) (design decisions)

@@ -1,0 +1,23 @@
+import std::channel.
+import std::io.
+import std::string.
+
+rule main() -> i64:
+  set ch: ChannelBytes = std::channel::bytes().
+  set bytes: u8[] = std::string::bytes("ok").
+  set ok: bool = ch::send(bytes).
+  set got: RecvBytes = ch::recv().
+  ch::close().
+  set out: string = "none".
+  match got:
+    case RecvBytes::Ok(value):
+      put out = std::string::from_bytes(value).
+    case RecvBytes::Closed:
+      put out = "closed".
+    otherwise:
+      put out = "none".
+  end
+  set line: string = std::string::concat(out, "\n").
+  std::io::print(line).
+  yield 0.
+end

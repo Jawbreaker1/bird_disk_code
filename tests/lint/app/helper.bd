@@ -1,0 +1,4 @@
+rule helper() -> i64:
+  set value: i64 = 0.
+  yield value.
+end

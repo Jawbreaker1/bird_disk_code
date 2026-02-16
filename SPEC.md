@@ -373,7 +373,33 @@ Functions:
   - Sleeps for `ms` milliseconds and returns the duration.
   - Negative values are runtime errors.
 
-### 12.2 std::rand module
+### 12.2 std::profiler module
+To use profiler helpers, import the module:
+- `import std::profiler.`
+
+Functions:
+- `std::profiler::uptime_ms() -> i64`
+  - Alias for `std::time::now_ms()`.
+- `std::profiler::alloc_count() -> i64`
+  - Lifetime allocation counter (payload allocations).
+- `std::profiler::bytes_allocated() -> i64`
+  - Lifetime allocated payload bytes.
+- `std::profiler::bytes_in_use() -> i64`
+  - Current live payload bytes tracked by the GC.
+- `std::profiler::peak_bytes_in_use() -> i64`
+  - Peak live payload bytes observed.
+- `std::profiler::gc_runs() -> i64`
+  - GC cycles completed.
+- `std::profiler::last_freed() -> i64`
+  - Object count freed in the most recent GC.
+- `std::profiler::last_live() -> i64`
+  - Object count remaining after the most recent GC.
+- `std::profiler::last_freed_bytes() -> i64`
+  - Payload bytes freed in the most recent GC.
+- `std::profiler::last_live_bytes() -> i64`
+  - Payload bytes remaining after the most recent GC.
+
+### 12.3 std::rand module
 To use random helpers, import the module:
 - `import std::rand.`
 
@@ -381,7 +407,7 @@ Functions:
 - `std::rand::seed(value: i64) -> void`
 - `std::rand::range(min: i64, max: i64) -> i64`
 
-### 12.3 std::test module
+### 12.4 std::test module
 To use test helpers, import the module:
 - `import std::test.`
 
@@ -443,7 +469,68 @@ Functions:
 - `std::env::set_cwd(path: string) -> i64`
   - Sets the current working directory and returns 1 on success.
 
-## 14. Stdlib layout
+## 14. Concurrency (planned; not implemented in v0.1)
+BirdDisk exposes minimal threading with message passing only (channels). There is no shared mutable state; the only shared objects are channel handles.
+
+### 14.1 Sendable types
+Types allowed across threads (arguments to `spawn` or values sent through channels):
+- `i64`, `f64`, `bool`, `u8`, `string`
+- `ChannelI64`, `ChannelString`
+Not sendable yet (compile-time error when passed to `spawn`):
+- Arrays, books/objects, enums
+
+### 14.2 std::thread module (planned)
+To use threading, import the module:
+- `import std::thread.`
+
+Types:
+- `Thread` (opaque handle)
+
+Functions:
+- `std::thread::spawn(entry: string, args...) -> Thread`
+  - `entry` must be a **string literal** with a fully-qualified rule path (e.g. `"app::worker"`).
+  - The referenced rule must be top-level (not a book method) and must return `i64`.
+  - All `args` must be sendable types.
+- `std::thread::join(handle: Thread) -> i64`
+  - Blocks until completion and returns the rule result.
+  - Joining the same handle twice is a runtime error.
+
+Scheduling notes:
+- VM will expose an opt-in deterministic scheduler for tests/debugging.
+- Native uses OS scheduling and is nondeterministic.
+- WASM threading is not supported in v0.x (compile-time error).
+CLI:
+- `birddiskc run --engine vm --deterministic` enables deterministic scheduling.
+- In deterministic mode, `std::time::sleep_ms` advances a virtual clock without sleeping, and
+  `std::time::now_ms` returns that virtual time.
+
+### 14.3 std::channel module (planned)
+To use channels, import the module:
+- `import std::channel.`
+
+Types:
+- `ChannelI64`, `ChannelString`
+- `RecvI64`, `RecvString` (enums with `Ok(value)` or `Closed()`)
+
+Functions:
+- `std::channel::i64() -> ChannelI64`
+- `std::channel::string() -> ChannelString`
+
+Methods:
+- `ChannelI64::send(value: i64) -> bool`
+- `ChannelI64::recv() -> RecvI64`
+- `ChannelI64::close() -> void`
+- `ChannelString::send(value: string) -> bool`
+- `ChannelString::recv() -> RecvString`
+- `ChannelString::close() -> void`
+
+Semantics:
+- Channels are unbounded FIFO queues.
+- `send` returns `false` if the channel is closed.
+- `recv` blocks until a value is available or the channel is closed.
+  If closed and empty, returns `Closed()`.
+
+## 15. Stdlib layout
 BirdDisk ships stdlib modules on disk for reusable logic.
 
 - Stdlib modules live under `stdlib/` at the project root.
@@ -451,11 +538,11 @@ BirdDisk ships stdlib modules on disk for reusable logic.
   - `import std::math.` resolves to `stdlib/std/math.bd`.
 - Functions in stdlib modules are compiled with their module prefix
   (e.g. `std::math::add`).
-- `std::string`, `std::bytes`, `std::io`, `std::time`, `std::rand`, `std::test`, `std::fs`, `std::path`, `std::env`, and `std::json` remain implemented in Rust for now.
+- `std::string`, `std::bytes`, `std::io`, `std::time`, `std::profiler`, `std::rand`, `std::test`, `std::fs`, `std::path`, `std::env`, and `std::json` remain implemented in Rust for now.
 - In v0.1, BirdDisk stdlib modules should be self-contained and avoid
   importing other modules.
 
-### 14.1 std::math module
+### 15.1 std::math module
 To use math helpers, import the module:
 - `import std::math.`
 
@@ -475,10 +562,10 @@ Functions:
 - `std::math::gcd(a: i64, b: i64) -> i64` (uses absolute values)
 - `std::math::lcm(a: i64, b: i64) -> i64` (returns 0 if `a` or `b` is 0)
 
-## 15. Objects (v0.1)
+## 16. Objects (v0.1)
 BirdDisk supports a minimal OO model via `book` declarations.
 
-### 14.1 Book declarations
+### 16.1 Book declarations
 ```birddisk
 book Counter:
   field value: i64.

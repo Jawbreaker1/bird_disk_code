@@ -1,4 +1,6 @@
-use super::diagnostics::{require_tests_config_diagnostic, require_tests_diagnostic};
+use super::diagnostics::{
+    require_tests_config_diagnostic, require_tests_diagnostic, require_tests_rule_diagnostic,
+};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +13,7 @@ pub(crate) fn enforce_require_tests(
         Ok(program) => program,
         Err(diags) => return diags,
     };
+    let rule_targets = collect_rule_targets(&program);
     let root = config
         .project_root
         .clone()
@@ -22,13 +25,8 @@ pub(crate) fn enforce_require_tests(
 
     let mut files = HashSet::new();
     files.insert(PathBuf::from(entry));
-    for func in &program.functions {
-        files.insert(PathBuf::from(&func.file));
-    }
-    for book in &program.books {
-        for method in &book.methods {
-            files.insert(PathBuf::from(&method.file));
-        }
+    for target in &rule_targets {
+        files.insert(target.file.clone());
     }
 
     let mut diagnostics = Vec::new();
@@ -37,12 +35,42 @@ pub(crate) fn enforce_require_tests(
         if is_excluded(&file, &stdlib_root, &exclude_rules) {
             continue;
         }
+        let required: Vec<&RuleTarget> = rule_targets
+            .iter()
+            .filter(|target| {
+                target
+                    .file
+                    .canonicalize()
+                    .unwrap_or_else(|_| target.file.clone())
+                    == file
+            })
+            .collect();
+        if required.is_empty() {
+            continue;
+        }
         let expected = expected_test_path(&file, &root);
         if !expected.exists() {
             diagnostics.push(require_tests_diagnostic(
                 &file.to_string_lossy(),
                 &expected.to_string_lossy(),
             ));
+            continue;
+        }
+        let test_rules = match parse_test_rules(&expected) {
+            Ok(names) => names,
+            Err(diags) => {
+                diagnostics.extend(diags);
+                continue;
+            }
+        };
+        for target in required {
+            if !test_rules.contains(&target.test_rule) {
+                diagnostics.push(require_tests_rule_diagnostic(
+                    &file.to_string_lossy(),
+                    &target.rule_name,
+                    &target.test_rule,
+                ));
+            }
         }
     }
     diagnostics
@@ -128,6 +156,138 @@ fn expected_test_path(source: &Path, root: &Path) -> PathBuf {
 }
 
 #[derive(Clone)]
+struct RuleTarget {
+    file: PathBuf,
+    rule_name: String,
+    test_rule: String,
+}
+
+fn collect_rule_targets(program: &birddisk_core::ast::Program) -> Vec<RuleTarget> {
+    let mut targets = Vec::new();
+    for func in &program.functions {
+        let base = base_rule_name(&func.name);
+        if is_exempt_rule(base) || base.starts_with("test_") {
+            continue;
+        }
+        targets.push(RuleTarget {
+            file: PathBuf::from(&func.file),
+            rule_name: base.to_string(),
+            test_rule: format!("test_{base}"),
+        });
+    }
+    for book in &program.books {
+        for method in &book.methods {
+            if is_exempt_rule(&method.name) {
+                continue;
+            }
+            if method.name.starts_with("test_") {
+                continue;
+            }
+            targets.push(RuleTarget {
+                file: PathBuf::from(&method.file),
+                rule_name: format!("{}::{}", book.name, method.name),
+                test_rule: format!("test_{}_{}", book.name, method.name),
+            });
+        }
+    }
+    targets
+}
+
+fn base_rule_name(name: &str) -> &str {
+    name.split("::").last().unwrap_or(name)
+}
+
+fn is_exempt_rule(name: &str) -> bool {
+    matches!(name, "main" | "init")
+}
+
+fn parse_test_rules(path: &Path) -> Result<HashSet<String>, Vec<birddisk_core::Diagnostic>> {
+    let source = std::fs::read_to_string(path).map_err(|err| {
+        vec![birddisk_core::Diagnostic {
+            code: "E0001",
+            severity: "error",
+            message: format!("Unable to read file: {err}"),
+            file: path.to_string_lossy().to_string(),
+            span: default_span(),
+            trace: Vec::new(),
+            notes: vec!["IO error".to_string()],
+            spec_refs: Vec::new(),
+            fixits: Vec::new(),
+            help: Some("Ensure the path exists and is readable.".to_string()),
+        }]
+    })?;
+    let tokens = birddisk_core::lexer::lex(&source)
+        .map_err(|err| vec![lex_error_diagnostic(path, err)])?;
+    let program = birddisk_core::parser::parse_with_recovery(&tokens).map_err(|errs| {
+        errs.into_iter()
+            .map(|err| parse_error_diagnostic(path, err))
+            .collect::<Vec<_>>()
+    })?;
+    let names = program
+        .functions
+        .iter()
+        .map(|func| func.name.clone())
+        .collect::<HashSet<_>>();
+    Ok(names)
+}
+
+fn lex_error_diagnostic(
+    path: &Path,
+    err: birddisk_core::lexer::LexError,
+) -> birddisk_core::Diagnostic {
+    birddisk_core::Diagnostic {
+        code: err.code,
+        severity: "error",
+        message: err.message,
+        file: path.to_string_lossy().to_string(),
+        span: err.span,
+        trace: Vec::new(),
+        notes: vec!["Lexer error".to_string()],
+        spec_refs: Vec::new(),
+        fixits: Vec::new(),
+        help: None,
+    }
+}
+
+fn parse_error_diagnostic(
+    path: &Path,
+    err: birddisk_core::parser::ParseError,
+) -> birddisk_core::Diagnostic {
+    let fixits = err
+        .fixit
+        .map(|hint| {
+            vec![birddisk_core::FixIt {
+                title: hint.title.to_string(),
+                edits: vec![birddisk_core::Edit {
+                    file: path.to_string_lossy().to_string(),
+                    span: hint.span,
+                    replacement: hint.replacement,
+                }],
+            }]
+        })
+        .unwrap_or_default();
+    birddisk_core::Diagnostic {
+        code: err.code,
+        severity: "error",
+        message: err.message,
+        file: path.to_string_lossy().to_string(),
+        span: err.span,
+        trace: Vec::new(),
+        notes: vec!["Parser error".to_string()],
+        spec_refs: Vec::new(),
+        fixits,
+        help: None,
+    }
+}
+
+fn default_span() -> birddisk_core::Span {
+    birddisk_core::Span::new(
+        birddisk_core::Position::new(1, 1),
+        birddisk_core::Position::new(1, 1),
+    )
+}
+
+#[derive(Clone)]
 struct ExcludeRule {
     path: PathBuf,
     is_dir: bool,
@@ -178,10 +338,10 @@ mod tests {
     fn require_tests_accepts_expected_file() {
         let (root, entry, config) = setup_project(
             "ok",
-            "rule main() -> i64:\n  yield 0.\nend\n",
+            "rule helper() -> i64:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield helper().\nend\n",
         );
         let test_path = root.join("tests").join("src").join("main_test.bd");
-        fs::write(&test_path, "rule test_main() -> void:\nend\n").expect("write test");
+        fs::write(&test_path, "rule test_helper() -> void:\nend\n").expect("write test");
         let diagnostics = enforce_require_tests(&entry, &config, &[]);
         assert!(diagnostics.is_empty());
         let _ = fs::remove_dir_all(&root);
@@ -191,7 +351,7 @@ mod tests {
     fn require_tests_reports_missing_file() {
         let (root, entry, config) = setup_project(
             "missing",
-            "rule main() -> i64:\n  yield 0.\nend\n",
+            "rule helper() -> i64:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield helper().\nend\n",
         );
         let diagnostics = enforce_require_tests(&entry, &config, &[]);
         assert!(diagnostics.iter().any(|diag| diag.code == "L2000"));
@@ -199,12 +359,49 @@ mod tests {
     }
 
     #[test]
+    fn require_tests_reports_missing_rule() {
+        let (root, entry, config) = setup_project(
+            "missing_rule",
+            "rule helper() -> i64:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield helper().\nend\n",
+        );
+        let test_path = root.join("tests").join("src").join("main_test.bd");
+        fs::write(&test_path, "rule test_main() -> void:\nend\n").expect("write test");
+        let diagnostics = enforce_require_tests(&entry, &config, &[]);
+        assert!(diagnostics.iter().any(|diag| diag.code == "L2002"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn require_tests_respects_exclude_list() {
         let (root, entry, config) = setup_project(
             "exclude",
-            "rule main() -> i64:\n  yield 0.\nend\n",
+            "rule helper() -> i64:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield helper().\nend\n",
         );
         let diagnostics = enforce_require_tests(&entry, &config, &["src/main.bd".to_string()]);
+        assert!(diagnostics.is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn require_tests_skips_main_only() {
+        let (root, entry, config) = setup_project(
+            "main_only",
+            "rule main() -> i64:\n  yield 0.\nend\n",
+        );
+        let diagnostics = enforce_require_tests(&entry, &config, &[]);
+        assert!(diagnostics.is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn require_tests_accepts_book_method() {
+        let (root, entry, config) = setup_project(
+            "book_method",
+            "book Counter:\n  field value: i64.\n  rule init(self: Counter, start: i64) -> Counter:\n    put self::value = start.\n    yield self.\n  end\n  rule inc(self: Counter) -> Counter:\n    put self::value = self::value + 1.\n    yield self.\n  end\nend\n\nrule main() -> i64:\n  set c: Counter = new Counter(1).\n  yield c::value.\nend\n",
+        );
+        let test_path = root.join("tests").join("src").join("main_test.bd");
+        fs::write(&test_path, "rule test_Counter_inc() -> void:\nend\n").expect("write test");
+        let diagnostics = enforce_require_tests(&entry, &config, &[]);
         assert!(diagnostics.is_empty());
         let _ = fs::remove_dir_all(&root);
     }

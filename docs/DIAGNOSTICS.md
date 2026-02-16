@@ -122,6 +122,8 @@ E0313: Unknown enum type
 E0314: Unknown enum variant
 E0315: Enum variant payload mismatch
 E0316: Invalid cast
+E0325: WASM backend does not support std::thread
+E0326: Native backend does not support std::thread yet
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)
@@ -140,6 +142,12 @@ E0500: Backend mismatch (VM/WASM/native)
 E0501: Test harness error
 E0502: Test output mismatch (VM/WASM/native)
 E0503: Expected error mismatch
+E0504: Performance harness error
+
+L1000–L1099: Lint warnings (see docs/LINT.md)
+L2000: Missing test file for source (require-tests)
+L2001: Require-tests misconfiguration (no entry)
+L2002: Missing test rule for a required rule
 
 Minimum required fields
 

@@ -1,0 +1,15 @@
+rule main() -> i64:
+  set xs: i64[] = array(10000).
+  set i: i64 = 0.
+  repeat while i < 10000:
+    put xs[i] = i.
+    put i = i + 1.
+  end
+  set sum: i64 = 0.
+  set j: i64 = 0.
+  repeat while j < 10000:
+    put sum = sum + xs[j].
+    put j = j + 1.
+  end
+  yield sum.
+end

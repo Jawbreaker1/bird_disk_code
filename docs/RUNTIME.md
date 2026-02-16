@@ -99,6 +99,7 @@ Expose simple counters for trust + performance tracking:
 - `gc_runs`, `last_freed`, `last_live` (object counts).
 - `last_freed_bytes`, `last_live_bytes` (per-GC memory stats).
 - WASM tests expose `__bd_gc_last_freed` and `__bd_heap_high_water`.
+These counters are exposed to programs via `std::profiler`.
 
 ## Book layout table (object scanning)
 Compiler emits a table of reference-field offsets per book id.

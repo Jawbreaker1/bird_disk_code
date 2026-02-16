@@ -10,11 +10,13 @@ pub(crate) fn import_modules(uri: &str) -> Vec<String> {
         "std::bytes".to_string(),
         "std::io".to_string(),
         "std::time".to_string(),
+        "std::profiler".to_string(),
         "std::rand".to_string(),
         "std::fs".to_string(),
         "std::path".to_string(),
         "std::env".to_string(),
         "std::json".to_string(),
+        "std::channel".to_string(),
     ];
     if let Some(path) = uri_to_path(uri) {
         if let Some(root) = find_stdlib_root(&path) {

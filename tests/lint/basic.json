@@ -1,0 +1,223 @@
+{
+  "tool": "birddisk",
+  "version": "0.1",
+  "ok": false,
+  "diagnostics": [
+    {
+      "code": "L1005",
+      "severity": "warning",
+      "message": "Parameter 'right' is never used.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 3,
+          "col": 24
+        },
+        "end": {
+          "line": 3,
+          "col": 34
+        }
+      },
+      "notes": [
+        "Unused parameters add noise for LLMs."
+      ],
+      "spec_refs": [],
+      "fixits": [],
+      "help": "Remove the parameter or use it."
+    },
+    {
+      "code": "L1001",
+      "severity": "warning",
+      "message": "Prefer explicit type annotation for 'count'.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 8,
+          "col": 3
+        },
+        "end": {
+          "line": 8,
+          "col": 17
+        }
+      },
+      "notes": [
+        "Explicit types reduce ambiguity for LLMs."
+      ],
+      "spec_refs": [],
+      "fixits": [],
+      "help": "Add `: <type>` to the binding."
+    },
+    {
+      "code": "L1002",
+      "severity": "warning",
+      "message": "Name 'x' is too short for LLM-friendly code.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 9,
+          "col": 3
+        },
+        "end": {
+          "line": 9,
+          "col": 18
+        }
+      },
+      "notes": [
+        "Prefer descriptive names (min 2 characters)."
+      ],
+      "spec_refs": [],
+      "fixits": [],
+      "help": "Rename the binding to a descriptive name."
+    },
+    {
+      "code": "L1009",
+      "severity": "warning",
+      "message": "Self-assignment to 'count' has no effect.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 12,
+          "col": 3
+        },
+        "end": {
+          "line": 12,
+          "col": 21
+        }
+      },
+      "notes": [
+        "Self-assignment adds noise for LLMs."
+      ],
+      "spec_refs": [],
+      "fixits": [
+        {
+          "title": "Remove redundant assignment.",
+          "edits": [
+            {
+              "file": "tests/lint/basic.bd",
+              "span": {
+                "start": {
+                  "line": 12,
+                  "col": 3
+                },
+                "end": {
+                  "line": 12,
+                  "col": 21
+                }
+              },
+              "replacement": ""
+            }
+          ]
+        }
+      ],
+      "help": "Remove the assignment or change the value."
+    },
+    {
+      "code": "L1006",
+      "severity": "warning",
+      "message": "Name 'total' shadows an existing binding.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 14,
+          "col": 5
+        },
+        "end": {
+          "line": 14,
+          "col": 24
+        }
+      },
+      "notes": [
+        "Shadowing reduces clarity for LLMs."
+      ],
+      "spec_refs": [],
+      "fixits": [],
+      "help": "Rename the binding to a distinct name."
+    },
+    {
+      "code": "L1004",
+      "severity": "warning",
+      "message": "Binding 'unused_value' is never used.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 10,
+          "col": 3
+        },
+        "end": {
+          "line": 10,
+          "col": 30
+        }
+      },
+      "notes": [
+        "Unused bindings add noise for LLMs."
+      ],
+      "spec_refs": [],
+      "fixits": [],
+      "help": "Remove the binding or use it."
+    },
+    {
+      "code": "L1003",
+      "severity": "warning",
+      "message": "Deep nesting in 'main' (depth 5). Consider extracting helper rules.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 7,
+          "col": 1
+        },
+        "end": {
+          "line": 36,
+          "col": 4
+        }
+      },
+      "notes": [
+        "LLM-friendly code benefits from shallow control flow."
+      ],
+      "spec_refs": [],
+      "fixits": [],
+      "help": "Split nested blocks into named helper rules."
+    },
+    {
+      "code": "L1007",
+      "severity": "warning",
+      "message": "Unused import 'app::helper'.",
+      "file": "tests/lint/basic.bd",
+      "span": {
+        "start": {
+          "line": 1,
+          "col": 1
+        },
+        "end": {
+          "line": 1,
+          "col": 20
+        }
+      },
+      "notes": [
+        "Unused imports add noise for LLMs."
+      ],
+      "spec_refs": [],
+      "fixits": [
+        {
+          "title": "Remove unused import.",
+          "edits": [
+            {
+              "file": "tests/lint/basic.bd",
+              "span": {
+                "start": {
+                  "line": 1,
+                  "col": 1
+                },
+                "end": {
+                  "line": 1,
+                  "col": 20
+                }
+              },
+              "replacement": ""
+            }
+          ]
+        }
+      ],
+      "help": "Remove the import or use it."
+    }
+  ]
+}

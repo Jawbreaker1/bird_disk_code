@@ -29,10 +29,19 @@ impl<'a> Vm<'a> {
             }
         }
         self.roots.pop_frame(1);
+        if let Some(kind) = ChannelKind::from_book(book) {
+            self.channels
+                .entry(handle.as_u32())
+                .or_insert_with(|| ChannelState::new(kind));
+        }
         Ok(Value::Object {
             handle,
             book: book.to_string(),
         })
+    }
+
+    pub(crate) fn alloc_channel(&mut self, kind: ChannelKind) -> Result<Value, RuntimeError> {
+        self.alloc_object(kind.book_name())
     }
 
     pub(super) fn default_value(&mut self, ty: &Type) -> Result<Value, RuntimeError> {

@@ -1,0 +1,36 @@
+import app::helper.
+
+rule helper(left: i64, right: i64) -> i64:
+  yield left.
+end
+
+rule main() -> i64:
+  set count = 1.
+  set x: i64 = 2.
+  set unused_value: i64 = 10.
+  set total: i64 = 0.
+  put count = count.
+  when count < 10:
+    set total: i64 = 1.
+    put count = total.
+    when count < 9:
+      when count < 8:
+        repeat while count < 3:
+          when count < 7:
+            put count = count + x.
+          otherwise:
+            put count = count + 0.
+          end
+        end
+      otherwise:
+        put count = count + 0.
+      end
+    otherwise:
+      put count = count + 0.
+    end
+  otherwise:
+    put count = count + 0.
+  end
+  put count = total.
+  yield count.
+end

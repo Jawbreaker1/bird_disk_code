@@ -70,6 +70,62 @@ impl<'a> Vm<'a> {
         }))
     }
 
+    pub(crate) fn alloc_enum_variant(
+        &mut self,
+        enum_name: &str,
+        variant_name: &str,
+        payload: Option<Value>,
+    ) -> Result<Value, RuntimeError> {
+        let enum_info = self
+            .enums
+            .get(enum_name)
+            .cloned()
+            .ok_or_else(|| runtime_error("E0400", "Unknown enum at runtime."))?;
+        let variant = enum_info.variants.get(variant_name).ok_or_else(|| {
+            runtime_error(
+                "E0400",
+                format!("Unknown enum variant '{enum_name}::{variant_name}'."),
+            )
+        })?;
+
+        let (payload_kind, payload_len, payload_bytes) = match (payload, &variant.payload) {
+            (Some(value), Some(payload_ty)) => {
+                let coerced = coerce_value(value, payload_ty)?;
+                let kind = elem_kind_for_type(payload_ty)?;
+                let bytes = self.encode_enum_payload(&coerced, payload_ty)?;
+                (kind as u32, 8usize, bytes)
+            }
+            (None, None) => (0u32, 0usize, Vec::new()),
+            (Some(_), None) => {
+                return Err(runtime_error(
+                    "E0400",
+                    "Enum variant does not take a payload.",
+                ))
+            }
+            (None, Some(_)) => {
+                return Err(runtime_error(
+                    "E0400",
+                    "Enum variant expects a payload.",
+                ))
+            }
+        };
+
+        let handle = self.heap.alloc_enum(
+            enum_info.id,
+            variant.id,
+            payload_kind,
+            payload_len,
+        );
+        if !payload_bytes.is_empty() {
+            let payload = self.heap.payload_mut(handle);
+            payload[..payload_bytes.len()].copy_from_slice(&payload_bytes);
+        }
+        Ok(Value::Enum {
+            handle,
+            name: enum_name.to_string(),
+        })
+    }
+
     fn encode_enum_payload(&self, value: &Value, ty: &Type) -> Result<Vec<u8>, RuntimeError> {
         match (ty, value) {
             (Type::I64, Value::I64(value)) => Ok(value.to_le_bytes().to_vec()),

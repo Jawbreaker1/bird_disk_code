@@ -233,6 +233,46 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::I64],
             return_type: Type::I64,
         }),
+        "std::profiler::uptime_ms" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::alloc_count" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::bytes_allocated" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::bytes_in_use" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::peak_bytes_in_use" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::gc_runs" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::last_freed" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::last_live" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::last_freed_bytes" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::last_live_bytes" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::rand::seed" => Some(FunctionSig {
             params: vec![Type::I64],
             return_type: Type::Void,
@@ -333,6 +373,30 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::String,
         }),
+        "std::channel::i64" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Book("ChannelI64".to_string()),
+        }),
+        "std::channel::bool" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Book("ChannelBool".to_string()),
+        }),
+        "std::channel::f64" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Book("ChannelF64".to_string()),
+        }),
+        "std::channel::u8" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Book("ChannelU8".to_string()),
+        }),
+        "std::channel::string" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Book("ChannelString".to_string()),
+        }),
+        "std::channel::bytes" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Book("ChannelBytes".to_string()),
+        }),
         _ => None,
     }
 }
@@ -390,6 +454,9 @@ pub(crate) fn build_book_layouts(
 ) -> Result<(HashMap<String, BookLayout>, Vec<Vec<usize>>), NativeError> {
     let mut books = HashMap::new();
     let mut ref_fields = Vec::new();
+    let has_std_channel = program.imports.iter().any(|import| {
+        import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
+    });
     for (book_id, book) in program.books.iter().enumerate() {
         if books.contains_key(&book.name) {
             return Err(native_error(format!(
@@ -417,6 +484,30 @@ pub(crate) fn build_book_layouts(
             },
         );
     }
+    if has_std_channel {
+        for name in [
+            "ChannelI64",
+            "ChannelBool",
+            "ChannelF64",
+            "ChannelU8",
+            "ChannelString",
+            "ChannelBytes",
+        ] {
+            if books.contains_key(name) {
+                continue;
+            }
+            let book_id = ref_fields.len() as u32;
+            books.insert(
+                name.to_string(),
+                BookLayout {
+                    id: book_id,
+                    fields: Vec::new(),
+                    field_index: HashMap::new(),
+                },
+            );
+            ref_fields.push(Vec::new());
+        }
+    }
     Ok((books, ref_fields))
 }
 
@@ -424,6 +515,9 @@ pub(crate) fn build_enum_layouts(
     program: &Program,
 ) -> Result<HashMap<String, EnumInfo>, NativeError> {
     let mut enums = HashMap::new();
+    let has_std_channel = program.imports.iter().any(|import| {
+        import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
+    });
     for (enum_id, enum_decl) in program.enums.iter().enumerate() {
         if enums.contains_key(&enum_decl.name) {
             return Err(native_error(format!(
@@ -448,6 +542,40 @@ pub(crate) fn build_enum_layouts(
                 variants,
             },
         );
+    }
+    if has_std_channel {
+        for (name, payload) in [
+            ("RecvI64", Some(Type::I64)),
+            ("RecvBool", Some(Type::Bool)),
+            ("RecvF64", Some(Type::F64)),
+            ("RecvU8", Some(Type::U8)),
+            ("RecvString", Some(Type::String)),
+            ("RecvBytes", Some(Type::Array(Box::new(Type::U8)))),
+        ] {
+            if enums.contains_key(name) {
+                continue;
+            }
+            let enum_id = enums.len() as u32;
+            let mut variants = HashMap::new();
+            variants.insert(
+                "Ok".to_string(),
+                EnumVariantInfo {
+                    id: 0,
+                    payload: payload.clone(),
+                },
+            );
+            variants.insert(
+                "Closed".to_string(),
+                EnumVariantInfo { id: 1, payload: None },
+            );
+            enums.insert(
+                name.to_string(),
+                EnumInfo {
+                    id: enum_id,
+                    variants,
+                },
+            );
+        }
     }
     Ok(enums)
 }

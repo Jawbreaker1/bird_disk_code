@@ -1,0 +1,6 @@
+import std::thread.
+
+rule main() -> i64:
+  std::thread::spawn("main").
+  yield 0.
+end

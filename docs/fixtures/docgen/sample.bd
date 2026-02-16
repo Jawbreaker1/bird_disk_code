@@ -1,0 +1,28 @@
+enum Result:
+  case Ok(value: i64).
+  case Err(message: string).
+end
+
+book Counter:
+  field value: i64.
+
+  rule init(self: Counter, start: i64) -> Counter:
+    put self::value = start.
+    yield self.
+  end
+
+  rule inc(self: Counter) -> Counter:
+    put self::value = self::value + 1.
+    yield self.
+  end
+end
+
+rule add(left: i64, right: i64) -> i64:
+  yield left + right.
+end
+
+rule main() -> i64:
+  set counter: Counter = new Counter(1).
+  set next: Counter = counter::inc().
+  yield add(next::value, 1).
+end

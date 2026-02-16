@@ -1,15 +1,16 @@
 use crate::analysis::{
     program_uses_arrays, program_uses_env, program_uses_fs, program_uses_io,
     program_uses_objects, program_uses_path, program_uses_string_from_bytes,
-    program_uses_strings, program_uses_time,
+    program_uses_profiler, program_uses_strings, program_uses_time,
 };
 use crate::emit::{
     emit_wat, wasm_error, WasmError, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
     STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
     TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER,
-    TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_ENUM, TRAP_KIND_OBJECT,
-    TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_PATH, TRAP_RAND_RANGE, TRAP_STRING_OOB,
-    TRAP_STRING_PARSE, TRAP_STRING_UTF8, TRAP_TIME_NEG, TRAP_TRACE_OOM, TRAP_UTF8_INVALID,
+    TRAP_CHANNEL_BLOCK, TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_ENUM,
+    TRAP_KIND_OBJECT, TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_PATH, TRAP_RAND_RANGE,
+    TRAP_STRING_OOB, TRAP_STRING_PARSE, TRAP_STRING_UTF8, TRAP_TIME_NEG, TRAP_TRACE_OOM,
+    TRAP_UTF8_INVALID,
 };
 use crate::trace::build_trace_table;
 use birddisk_core::ast::{Program, Type};
@@ -85,7 +86,7 @@ pub fn run_with_io(
     let uses_from_bytes = program_uses_string_from_bytes(program);
     let uses_io = program_uses_io(program);
     let uses_objects = program_uses_objects(program);
-    let uses_time = program_uses_time(program);
+    let uses_time = program_uses_time(program) || program_uses_profiler(program);
     let uses_fs = program_uses_fs(program);
     let uses_path = program_uses_path(program);
     let uses_env = program_uses_env(program);
@@ -867,6 +868,7 @@ fn map_trap(err: anyhow::Error, default_message: &str, trace: Vec<TraceFrame>) -
             TRAP_PATH => wasm_error("E0400", "std::path operation failed."),
             TRAP_ENV => wasm_error("E0400", "std::env operation failed."),
             TRAP_JSON_PARSE => wasm_error("E0400", "Invalid JSON input."),
+            TRAP_CHANNEL_BLOCK => wasm_error("E0400", "Channel recv would block."),
             _ => wasm_error("E0400", format!("{default_message}: {err}")),
         }
     } else if let Some(trap) = err.downcast_ref::<wasmtime::Trap>() {

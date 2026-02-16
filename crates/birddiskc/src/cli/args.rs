@@ -10,8 +10,9 @@ Commands:
   lint <file|dir> [--json]
   doc [<file|dir>] [--out <file>]
   build [<file|dir>] [--engine vm|wasm|native] [--emit wat|wasm|obj|exe] [--out <file>] [--require-tests]
-  run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>]
-  test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--require-tests]
+  run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [--deterministic]
+  test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--filter <text>] [--jobs <n>] [--snapshot] [--require-tests] [--deterministic]
+  perf [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--filter <text>] [--baseline <file>] [--update-baseline] [--iterations <n>] [--warmup <n>] [--max-regression <pct>]
 
 Options:
   -h, --help     Show this help message
@@ -56,7 +57,7 @@ Options:
 
 pub(crate) const RUN_HELP: &str = "\
 Usage:
-  birddiskc run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [-- <args>...]
+  birddiskc run [<file|dir>] [--engine vm|wasm|native] [--json] [--emit wat|wasm|obj|exe] [--out <file>] [--stdin <file>] [--stdout <file>] [--report <file>] [--deterministic] [-- <args>...]
 
 Options:
   --engine       Execution engine (vm, wasm, or native)
@@ -67,6 +68,7 @@ Options:
   --             Pass remaining arguments to std::env::args()
   --stdout       Write stdout to file (JSON still printed to stdout)
   --report       Write JSON report to file (stdout becomes program output unless --json is set)
+  --deterministic Use VM deterministic scheduler (VM only)
   -h, --help     Show this help message
 Notes:
   If <file|dir> is omitted, `birddiskc run` uses `birddisk.json` (manifest entry).
@@ -88,18 +90,40 @@ Notes:
 
 pub(crate) const TEST_HELP: &str = "\
 Usage:
-  birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--require-tests]
+  birddiskc test [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--filter <text>] [--jobs <n>] [--snapshot] [--require-tests] [--deterministic]
 
 Options:
   --json         Emit JSON output
   --engine       Execution engine (vm, wasm, or native)
   --dir          Directory to scan for .bd files (repeatable)
   --tag          Filter tests by tag (repeatable)
+  --filter       Filter tests by substring (repeatable)
+  --jobs         Number of test workers (default: 1)
+  --snapshot     Write stdout snapshots for passing tests
   --require-tests Enforce test coverage (opt-in)
+  --deterministic Use VM deterministic scheduler (VM only)
   -h, --help     Show this help message
 ";
 
-#[derive(Debug, PartialEq, Eq)]
+pub(crate) const PERF_HELP: &str = "\
+Usage:
+  birddiskc perf [--json] [--engine vm|wasm|native] [--dir <path>] [--tag <tag>] [--filter <text>] [--baseline <file>] [--update-baseline] [--iterations <n>] [--warmup <n>] [--max-regression <pct>]
+
+Options:
+  --json         Emit JSON output
+  --engine       Execution engine (vm, wasm, or native)
+  --dir          Directory to scan for .bd files (repeatable)
+  --tag          Filter perf cases by tag (repeatable)
+  --filter       Filter perf cases by substring (repeatable)
+  --baseline     Path to baseline JSON to compare against
+  --update-baseline Write baseline JSON after a successful run
+  --iterations   Number of timed iterations (default: 10)
+  --warmup       Number of warmup iterations (default: 3)
+  --max-regression Fail if regression exceeds percent (default: 15)
+  -h, --help     Show this help message
+";
+
+#[derive(Debug, PartialEq)]
 pub(crate) enum Command {
     Fmt { path: String },
     Check { path: String, json: bool },
@@ -122,13 +146,30 @@ pub(crate) enum Command {
         stdout: Option<String>,
         report: Option<String>,
         args: Vec<String>,
+        deterministic: bool,
     },
     Test {
         json: bool,
         engine: Option<birddisk_core::Engine>,
         dirs: Vec<String>,
         tags: Vec<String>,
+        filters: Vec<String>,
+        jobs: Option<usize>,
+        snapshot: bool,
         require_tests: bool,
+        deterministic: bool,
+    },
+    Perf {
+        json: bool,
+        engine: birddisk_core::Engine,
+        dirs: Vec<String>,
+        tags: Vec<String>,
+        filters: Vec<String>,
+        baseline: Option<String>,
+        update_baseline: bool,
+        iterations: Option<usize>,
+        warmup: Option<usize>,
+        max_regression: Option<f64>,
     },
 }
 
@@ -153,6 +194,7 @@ pub(crate) fn parse_command(args: &[String]) -> Result<Command, String> {
         "build" => parse_build(&args[1..]),
         "run" => parse_run(&args[1..]),
         "test" => parse_test(&args[1..]),
+        "perf" => parse_perf(&args[1..]),
         other => Err(format!("unknown command '{other}'")),
     }
 }
@@ -160,7 +202,10 @@ pub(crate) fn parse_command(args: &[String]) -> Result<Command, String> {
 fn parse_fmt(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, false, false, false, false, false, false, false, false, false, false, false),
+        ParseConfig::new(
+            true, false, false, false, false, false, false, false, false, false, false, false,
+            false, false, false, false,
+        ),
     )?;
     let path = parsed
         .path
@@ -171,7 +216,10 @@ fn parse_fmt(args: &[String]) -> Result<Command, String> {
 fn parse_check(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, false, true, false, false, false, false, false, false, false, false, false),
+        ParseConfig::new(
+            true, false, true, false, false, false, false, false, false, false, false, false,
+            false, false, false, false,
+        ),
     )?;
     let path = parsed
         .path
@@ -185,7 +233,10 @@ fn parse_check(args: &[String]) -> Result<Command, String> {
 fn parse_lint(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, false, true, false, false, false, false, false, false, false, false, true),
+        ParseConfig::new(
+            true, false, true, false, false, false, false, false, false, false, false, false,
+            false, false, true, false,
+        ),
     )?;
     let path = parsed
         .path
@@ -200,7 +251,10 @@ fn parse_lint(args: &[String]) -> Result<Command, String> {
 fn parse_doc(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, false, false, false, true, false, false, false, false, false, false, false),
+        ParseConfig::new(
+            true, false, false, false, true, false, false, false, false, false, false, false,
+            false, false, false, false,
+        ),
     )?;
     Ok(Command::Doc {
         path: parsed.path,
@@ -211,7 +265,10 @@ fn parse_doc(args: &[String]) -> Result<Command, String> {
 fn parse_build(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, true, false, true, true, false, false, false, false, false, false, true),
+        ParseConfig::new(
+            true, true, false, true, true, false, false, false, false, false, false, false, false,
+            false, true, false,
+        ),
     )?;
     if parsed.emit.is_none() && parsed.out.is_some() {
         return Err("--out requires --emit".to_string());
@@ -228,7 +285,10 @@ fn parse_build(args: &[String]) -> Result<Command, String> {
 fn parse_run(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(true, true, true, true, true, false, false, true, true, true, true, false),
+        ParseConfig::new(
+            true, true, true, true, true, false, false, false, false, false, true, true, true,
+            true, false, true,
+        ),
     )?;
     if parsed.emit.is_some() && parsed.json {
         return Err("cannot combine --emit with --json".to_string());
@@ -255,13 +315,17 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
         stdout: parsed.stdout,
         report: parsed.report,
         args: parsed.args,
+        deterministic: parsed.deterministic,
     })
 }
 
 fn parse_test(args: &[String]) -> Result<Command, String> {
     let parsed = parse_path_and_flags(
         args,
-        ParseConfig::new(false, true, true, false, false, true, true, false, false, false, false, true),
+        ParseConfig::new(
+            false, true, true, false, false, true, true, true, true, true, false, false, false,
+            false, true, true,
+        ),
     )?;
     if parsed.path.is_some() {
         return Err("unexpected path for test".to_string());
@@ -271,7 +335,118 @@ fn parse_test(args: &[String]) -> Result<Command, String> {
         engine: parsed.engine,
         dirs: parsed.dirs,
         tags: parsed.tags,
+        filters: parsed.filters,
+        jobs: parsed.jobs,
+        snapshot: parsed.snapshot,
         require_tests: parsed.require_tests,
+        deterministic: parsed.deterministic,
+    })
+}
+
+fn parse_perf(args: &[String]) -> Result<Command, String> {
+    let mut engine = birddisk_core::Engine::Native;
+    let mut json = false;
+    let mut dirs = Vec::new();
+    let mut tags = Vec::new();
+    let mut filters = Vec::new();
+    let mut baseline = None;
+    let mut update_baseline = false;
+    let mut iterations = None;
+    let mut warmup = None;
+    let mut max_regression = None;
+    let mut iter = args.iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--json" => {
+                json = true;
+            }
+            "--engine" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --engine".to_string())?;
+                engine = parse_engine(value)?;
+            }
+            "--dir" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --dir".to_string())?;
+                dirs.push(value.to_string());
+            }
+            "--tag" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --tag".to_string())?;
+                tags.push(value.to_string());
+            }
+            "--filter" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --filter".to_string())?;
+                filters.push(value.to_string());
+            }
+            "--baseline" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --baseline".to_string())?;
+                baseline = Some(value.to_string());
+            }
+            "--update-baseline" => {
+                update_baseline = true;
+            }
+            "--iterations" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --iterations".to_string())?;
+                let parsed: usize = value
+                    .parse()
+                    .map_err(|_| format!("invalid value for --iterations: {value}"))?;
+                if parsed == 0 {
+                    return Err("--iterations must be >= 1".to_string());
+                }
+                iterations = Some(parsed);
+            }
+            "--warmup" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --warmup".to_string())?;
+                let parsed: usize = value
+                    .parse()
+                    .map_err(|_| format!("invalid value for --warmup: {value}"))?;
+                warmup = Some(parsed);
+            }
+            "--max-regression" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --max-regression".to_string())?;
+                let parsed: f64 = value
+                    .parse()
+                    .map_err(|_| format!("invalid value for --max-regression: {value}"))?;
+                if parsed < 0.0 {
+                    return Err("--max-regression must be >= 0".to_string());
+                }
+                max_regression = Some(parsed);
+            }
+            flag if flag.starts_with('-') => {
+                return Err(format!("unknown option '{flag}'"));
+            }
+            value => {
+                return Err(format!("unexpected argument '{value}'"));
+            }
+        }
+    }
+
+    Ok(Command::Perf {
+        json,
+        engine,
+        dirs,
+        tags,
+        filters,
+        baseline,
+        update_baseline,
+        iterations,
+        warmup,
+        max_regression,
     })
 }
 
@@ -284,11 +459,15 @@ struct ParseConfig {
     allow_out: bool,
     allow_dir: bool,
     allow_tag: bool,
+    allow_filter: bool,
+    allow_jobs: bool,
+    allow_snapshot: bool,
     allow_stdin: bool,
     allow_stdout: bool,
     allow_report: bool,
     allow_args: bool,
     allow_require_tests: bool,
+    allow_deterministic: bool,
 }
 
 impl ParseConfig {
@@ -300,11 +479,15 @@ impl ParseConfig {
         allow_out: bool,
         allow_dir: bool,
         allow_tag: bool,
+        allow_filter: bool,
+        allow_jobs: bool,
+        allow_snapshot: bool,
         allow_stdin: bool,
         allow_stdout: bool,
         allow_report: bool,
         allow_args: bool,
         allow_require_tests: bool,
+        allow_deterministic: bool,
     ) -> Self {
         Self {
             allow_path,
@@ -314,11 +497,15 @@ impl ParseConfig {
             allow_out,
             allow_dir,
             allow_tag,
+            allow_filter,
+            allow_jobs,
+            allow_snapshot,
             allow_stdin,
             allow_stdout,
             allow_report,
             allow_args,
             allow_require_tests,
+            allow_deterministic,
         }
     }
 }
@@ -331,11 +518,15 @@ struct ParsedArgs {
     out: Option<String>,
     dirs: Vec<String>,
     tags: Vec<String>,
+    filters: Vec<String>,
+    jobs: Option<usize>,
+    snapshot: bool,
     stdin: Option<String>,
     stdout: Option<String>,
     report: Option<String>,
     args: Vec<String>,
     require_tests: bool,
+    deterministic: bool,
 }
 
 fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedArgs, String> {
@@ -346,11 +537,15 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
     let mut out = None;
     let mut dirs = Vec::new();
     let mut tags = Vec::new();
+    let mut filters = Vec::new();
+    let mut jobs = None;
+    let mut snapshot = false;
     let mut stdin = None;
     let mut stdout = None;
     let mut report = None;
     let mut arg_values = Vec::new();
     let mut require_tests = false;
+    let mut deterministic = false;
     let mut iter = args.iter();
 
     while let Some(arg) = iter.next() {
@@ -373,6 +568,12 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
                     return Err("unexpected --require-tests".to_string());
                 }
                 require_tests = true;
+            }
+            "--deterministic" => {
+                if !config.allow_deterministic {
+                    return Err("unexpected --deterministic".to_string());
+                }
+                deterministic = true;
             }
             "--engine" => {
                 if !config.allow_engine {
@@ -418,6 +619,36 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
                     .next()
                     .ok_or_else(|| "missing value for --tag".to_string())?;
                 tags.push(value.to_string());
+            }
+            "--filter" => {
+                if !config.allow_filter {
+                    return Err("unexpected --filter".to_string());
+                }
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --filter".to_string())?;
+                filters.push(value.to_string());
+            }
+            "--jobs" => {
+                if !config.allow_jobs {
+                    return Err("unexpected --jobs".to_string());
+                }
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --jobs".to_string())?;
+                let parsed: usize = value
+                    .parse()
+                    .map_err(|_| format!("invalid value for --jobs: {value}"))?;
+                if parsed == 0 {
+                    return Err("--jobs must be >= 1".to_string());
+                }
+                jobs = Some(parsed);
+            }
+            "--snapshot" => {
+                if !config.allow_snapshot {
+                    return Err("unexpected --snapshot".to_string());
+                }
+                snapshot = true;
             }
             "--stdin" => {
                 if !config.allow_stdin {
@@ -469,11 +700,15 @@ fn parse_path_and_flags(args: &[String], config: ParseConfig) -> Result<ParsedAr
         out,
         dirs,
         tags,
+        filters,
+        jobs,
+        snapshot,
         stdin,
         stdout,
         report,
         args: arg_values,
         require_tests,
+        deterministic,
     })
 }
 

@@ -28,6 +28,11 @@
           "default": true,
           "description": "Run birddiskc check --json on save."
         },
+        "birddisk.enableLintDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include birddiskc lint --json warnings in diagnostics."
+        },
         "birddisk.enableLsp": {
           "type": "boolean",
           "default": false,

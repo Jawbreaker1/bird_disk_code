@@ -25,13 +25,27 @@ impl<'a> Vm<'a> {
     }
 
     pub(crate) fn now_ms(&self) -> i64 {
+        if self.deterministic {
+            return self.virtual_time_ms;
+        }
         let elapsed = self.start_time.elapsed().as_millis();
         i64::try_from(elapsed).unwrap_or(i64::MAX)
     }
 
-    pub(crate) fn sleep_ms(&self, millis: i64) -> Result<i64, RuntimeError> {
+    pub(crate) fn heap_stats(&self) -> crate::heap::HeapStats {
+        self.heap.stats()
+    }
+
+    pub(crate) fn sleep_ms(&mut self, millis: i64) -> Result<i64, RuntimeError> {
         if millis < 0 {
             return Err(runtime_error("E0400", "Sleep duration must be >= 0."));
+        }
+        if self.deterministic {
+            let next = self
+                .virtual_time_ms
+                .saturating_add(millis.max(0));
+            self.virtual_time_ms = next;
+            return Ok(millis);
         }
         std::thread::sleep(Duration::from_millis(millis as u64));
         Ok(millis)

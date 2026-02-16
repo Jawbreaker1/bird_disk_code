@@ -1,9 +1,11 @@
 mod bytes;
+mod channel;
 mod env;
 mod fs;
 mod io;
 mod json;
 mod path;
+mod profiler;
 mod rand;
 mod string;
 mod test;
@@ -28,10 +30,16 @@ impl<'a> Vm<'a> {
         if let Some(value) = self.eval_json_builtin(name, args)? {
             return Ok(Some(value));
         }
+        if let Some(value) = self.eval_channel_builtin(name, args)? {
+            return Ok(Some(value));
+        }
         if let Some(value) = self.eval_io_builtin(name, args)? {
             return Ok(Some(value));
         }
         if let Some(value) = self.eval_time_builtin(name, args)? {
+            return Ok(Some(value));
+        }
+        if let Some(value) = self.eval_profiler_builtin(name, args)? {
             return Ok(Some(value));
         }
         if let Some(value) = self.eval_rand_builtin(name, args)? {

@@ -110,6 +110,17 @@ pub(crate) fn program_uses_time(program: &Program) -> bool {
     false
 }
 
+pub(crate) fn program_uses_profiler(program: &Program) -> bool {
+    for func in all_functions(program) {
+        for stmt in &func.body {
+            if stmt_has_profiler(stmt) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub(crate) fn program_uses_rand(program: &Program) -> bool {
     for func in all_functions(program) {
         for stmt in &func.body {
@@ -586,6 +597,63 @@ fn expr_has_time(expr: &Expr) -> bool {
         ExprKind::Unary { expr, .. } => expr_has_time(expr),
         ExprKind::Binary { left, right, .. } => {
             expr_has_time(left) || expr_has_time(right)
+        }
+        _ => false,
+    }
+}
+
+fn stmt_has_profiler(stmt: &Stmt) -> bool {
+    match stmt {
+        Stmt::Set { expr, .. } => expr_has_profiler(expr),
+        Stmt::Expr { expr, .. } => expr_has_profiler(expr),
+        Stmt::Put { expr, .. } => expr_has_profiler(expr),
+        Stmt::PutIndex { index, expr, .. } => expr_has_profiler(index) || expr_has_profiler(expr),
+        Stmt::PutField { expr, .. } => expr_has_profiler(expr),
+        Stmt::Yield { expr, .. } => expr_has_profiler(expr),
+        Stmt::Throw { expr, .. } => expr_has_profiler(expr),
+        Stmt::Try {
+            try_body,
+            catch_body,
+            ..
+        } => try_body.iter().any(stmt_has_profiler) || catch_body.iter().any(stmt_has_profiler),
+        Stmt::When {
+            cond,
+            then_body,
+            else_body,
+            ..
+        } => {
+            expr_has_profiler(cond)
+                || then_body.iter().any(stmt_has_profiler)
+                || else_body.iter().any(stmt_has_profiler)
+        }
+        Stmt::Repeat { cond, body, .. } => {
+            expr_has_profiler(cond) || body.iter().any(stmt_has_profiler)
+        }
+        Stmt::Match {
+            expr,
+            cases,
+            otherwise,
+            ..
+        } => {
+            expr_has_profiler(expr)
+                || cases.iter().any(|case| case.body.iter().any(stmt_has_profiler))
+                || otherwise.iter().any(stmt_has_profiler)
+        }
+    }
+}
+
+fn expr_has_profiler(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Call { name, args } => {
+            name.starts_with("std::profiler::") || args.iter().any(expr_has_profiler)
+        }
+        ExprKind::New { args, .. } => args.iter().any(expr_has_profiler),
+        ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_profiler),
+        ExprKind::ArrayNew { len } => expr_has_profiler(len),
+        ExprKind::Index { base, index } => expr_has_profiler(base) || expr_has_profiler(index),
+        ExprKind::Unary { expr, .. } => expr_has_profiler(expr),
+        ExprKind::Binary { left, right, .. } => {
+            expr_has_profiler(left) || expr_has_profiler(right)
         }
         _ => false,
     }

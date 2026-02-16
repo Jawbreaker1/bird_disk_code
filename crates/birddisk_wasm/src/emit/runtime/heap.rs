@@ -2,6 +2,7 @@ use crate::emit::{
     WatEmitter,
     ARRAY_HEADER_SIZE,
     HEAP_AUX_OFFSET,
+    HEAP_HEADER_SIZE,
     HEAP_FLAGS_OFFSET,
     HEAP_KIND_FREE,
     HEAP_KIND_SHIFT,
@@ -40,6 +41,16 @@ pub(in crate::emit) fn emit_heap_runtime(
     ));
     emitter.push_line("(global $free_list (mut i32) (i32.const 0))");
     emitter.push_line("(global $gc_last_freed (mut i32) (i32.const 0))");
+    emitter.push_line("(global $prof_alloc_count (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_bytes_allocated (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_bytes_in_use (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_peak_bytes_in_use (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_gc_runs (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_last_freed (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_last_live (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_last_freed_bytes (mut i64) (i64.const 0))");
+    emitter.push_line("(global $prof_last_live_bytes (mut i64) (i64.const 0))");
+    emitter.push_line("(global $gc_threshold (mut i64) (i64.const 65536))");
     emitter.push_line("(global $error_kind (mut i32) (i32.const 0))");
     emitter.push_line("(global $error_msg (mut i32) (i32.const 0))");
     emitter.push_line("(global $error_trace (mut i32) (i32.const 0))");
@@ -157,7 +168,7 @@ pub(in crate::emit) fn emit_heap_runtime(
     emitter.dedent();
     emitter.push_line(")");
 
-    emitter.push_line("(func $bd_alloc (param $size i32) (result i32) (local $ptr i32) (local $new_heap i32) (local $pages_needed i32) (local $cur_pages i32) (local $grow_by i32)");
+    emitter.push_line("(func $bd_alloc (param $size i32) (result i32) (local $ptr i32) (local $new_heap i32) (local $pages_needed i32) (local $cur_pages i32) (local $grow_by i32) (local $payload i32)");
     emitter.indent();
     emitter.push_line("local.get $size");
     emitter.push_line("i32.const 7");
@@ -165,6 +176,22 @@ pub(in crate::emit) fn emit_heap_runtime(
     emitter.push_line("i32.const -8");
     emitter.push_line("i32.and");
     emitter.push_line("local.set $size");
+    emitter.push_line("local.get $size");
+    emitter.push_line(format!("i32.const {HEAP_HEADER_SIZE}"));
+    emitter.push_line("i32.sub");
+    emitter.push_line("local.set $payload");
+    emitter.push_line("global.get $prof_bytes_in_use");
+    emitter.push_line("local.get $payload");
+    emitter.push_line("i64.extend_i32_u");
+    emitter.push_line("i64.add");
+    emitter.push_line("global.get $gc_threshold");
+    emitter.push_line("i64.ge_u");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("call $bd_gc_collect");
+    emitter.push_line("drop");
+    emitter.dedent();
+    emitter.push_line("end");
     emitter.push_line("local.get $size");
     emitter.push_line("call $bd_alloc_from_free");
     emitter.push_line("local.set $ptr");
@@ -220,6 +247,29 @@ pub(in crate::emit) fn emit_heap_runtime(
     emitter.push_line("global.set $heap");
     emitter.dedent();
     emitter.push_line("end");
+    emitter.dedent();
+    emitter.push_line("end");
+    emitter.push_line("global.get $prof_alloc_count");
+    emitter.push_line("i64.const 1");
+    emitter.push_line("i64.add");
+    emitter.push_line("global.set $prof_alloc_count");
+    emitter.push_line("global.get $prof_bytes_allocated");
+    emitter.push_line("local.get $payload");
+    emitter.push_line("i64.extend_i32_u");
+    emitter.push_line("i64.add");
+    emitter.push_line("global.set $prof_bytes_allocated");
+    emitter.push_line("global.get $prof_bytes_in_use");
+    emitter.push_line("local.get $payload");
+    emitter.push_line("i64.extend_i32_u");
+    emitter.push_line("i64.add");
+    emitter.push_line("global.set $prof_bytes_in_use");
+    emitter.push_line("global.get $prof_bytes_in_use");
+    emitter.push_line("global.get $prof_peak_bytes_in_use");
+    emitter.push_line("i64.gt_u");
+    emitter.push_line("if");
+    emitter.indent();
+    emitter.push_line("global.get $prof_bytes_in_use");
+    emitter.push_line("global.set $prof_peak_bytes_in_use");
     emitter.dedent();
     emitter.push_line("end");
     emitter.push_line("local.get $ptr");
