@@ -7,8 +7,8 @@ use crate::program::{
 };
 use crate::rt::RuntimeFuncs;
 use crate::runtime;
-use birddisk_core::ast::Type;
 use birddisk_core::ast::Program;
+use birddisk_core::ast::Type;
 use birddisk_core::TraceFrame;
 use cranelift_codegen::ir::{types, InstBuilder};
 use cranelift_codegen::settings;
@@ -84,32 +84,74 @@ pub fn run_with_io(
     builder.symbol("bd_alloc_object", runtime::bd_alloc_object as *const u8);
     builder.symbol("bd_object_get_i64", runtime::bd_object_get_i64 as *const u8);
     builder.symbol("bd_object_set_i64", runtime::bd_object_set_i64 as *const u8);
-    builder.symbol("bd_object_get_bool", runtime::bd_object_get_bool as *const u8);
-    builder.symbol("bd_object_set_bool", runtime::bd_object_set_bool as *const u8);
+    builder.symbol(
+        "bd_object_get_bool",
+        runtime::bd_object_get_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_object_set_bool",
+        runtime::bd_object_set_bool as *const u8,
+    );
     builder.symbol("bd_object_get_u8", runtime::bd_object_get_u8 as *const u8);
     builder.symbol("bd_object_set_u8", runtime::bd_object_set_u8 as *const u8);
     builder.symbol("bd_object_get_ref", runtime::bd_object_get_ref as *const u8);
     builder.symbol("bd_object_set_ref", runtime::bd_object_set_ref as *const u8);
     builder.symbol("bd_enum_variant", runtime::bd_enum_variant as *const u8);
-    builder.symbol("bd_enum_payload_i64", runtime::bd_enum_payload_i64 as *const u8);
-    builder.symbol("bd_enum_payload_bool", runtime::bd_enum_payload_bool as *const u8);
-    builder.symbol("bd_enum_payload_u8", runtime::bd_enum_payload_u8 as *const u8);
-    builder.symbol("bd_enum_payload_ref", runtime::bd_enum_payload_ref as *const u8);
-    builder.symbol("bd_enum_set_payload_i64", runtime::bd_enum_set_payload_i64 as *const u8);
-    builder.symbol("bd_enum_set_payload_bool", runtime::bd_enum_set_payload_bool as *const u8);
-    builder.symbol("bd_enum_set_payload_u8", runtime::bd_enum_set_payload_u8 as *const u8);
-    builder.symbol("bd_enum_set_payload_ref", runtime::bd_enum_set_payload_ref as *const u8);
+    builder.symbol(
+        "bd_enum_payload_i64",
+        runtime::bd_enum_payload_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_payload_bool",
+        runtime::bd_enum_payload_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_payload_u8",
+        runtime::bd_enum_payload_u8 as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_payload_ref",
+        runtime::bd_enum_payload_ref as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_set_payload_i64",
+        runtime::bd_enum_set_payload_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_set_payload_bool",
+        runtime::bd_enum_set_payload_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_set_payload_u8",
+        runtime::bd_enum_set_payload_u8 as *const u8,
+    );
+    builder.symbol(
+        "bd_enum_set_payload_ref",
+        runtime::bd_enum_set_payload_ref as *const u8,
+    );
     builder.symbol("bd_string_len", runtime::bd_string_len as *const u8);
     builder.symbol("bd_string_concat", runtime::bd_string_concat as *const u8);
     builder.symbol("bd_string_eq", runtime::bd_string_eq as *const u8);
     builder.symbol("bd_string_bytes", runtime::bd_string_bytes as *const u8);
     builder.symbol("bd_string_slice", runtime::bd_string_slice as *const u8);
-    builder.symbol("bd_string_index_of", runtime::bd_string_index_of as *const u8);
-    builder.symbol("bd_string_contains", runtime::bd_string_contains as *const u8);
+    builder.symbol(
+        "bd_string_index_of",
+        runtime::bd_string_index_of as *const u8,
+    );
+    builder.symbol(
+        "bd_string_contains",
+        runtime::bd_string_contains as *const u8,
+    );
     builder.symbol("bd_string_replace", runtime::bd_string_replace as *const u8);
-    builder.symbol("bd_string_from_bytes", runtime::bd_string_from_bytes as *const u8);
+    builder.symbol(
+        "bd_string_from_bytes",
+        runtime::bd_string_from_bytes as *const u8,
+    );
     builder.symbol("bd_string_to_i64", runtime::bd_string_to_i64 as *const u8);
-    builder.symbol("bd_string_from_i64", runtime::bd_string_from_i64 as *const u8);
+    builder.symbol(
+        "bd_string_from_i64",
+        runtime::bd_string_from_i64 as *const u8,
+    );
     builder.symbol("bd_bytes_len", runtime::bd_bytes_len as *const u8);
     builder.symbol("bd_bytes_eq", runtime::bd_bytes_eq as *const u8);
     builder.symbol("bd_bytes_slice", runtime::bd_bytes_slice as *const u8);
@@ -162,9 +204,18 @@ pub fn run_with_io(
     builder.symbol("bd_rand_seed", runtime::bd_rand_seed as *const u8);
     builder.symbol("bd_rand_range", runtime::bd_rand_range as *const u8);
     builder.symbol("bd_test_assert", runtime::bd_test_assert as *const u8);
-    builder.symbol("bd_test_assert_eq_i64", runtime::bd_test_assert_eq_i64 as *const u8);
-    builder.symbol("bd_test_assert_eq_bool", runtime::bd_test_assert_eq_bool as *const u8);
-    builder.symbol("bd_test_assert_eq_string", runtime::bd_test_assert_eq_string as *const u8);
+    builder.symbol(
+        "bd_test_assert_eq_i64",
+        runtime::bd_test_assert_eq_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_test_assert_eq_bool",
+        runtime::bd_test_assert_eq_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_test_assert_eq_string",
+        runtime::bd_test_assert_eq_string as *const u8,
+    );
     builder.symbol("bd_fs_read_text", runtime::bd_fs_read_text as *const u8);
     builder.symbol("bd_fs_write_text", runtime::bd_fs_write_text as *const u8);
     builder.symbol("bd_fs_read_bytes", runtime::bd_fs_read_bytes as *const u8);
@@ -178,20 +229,117 @@ pub fn run_with_io(
     builder.symbol("bd_env_set", runtime::bd_env_set as *const u8);
     builder.symbol("bd_env_cwd", runtime::bd_env_cwd as *const u8);
     builder.symbol("bd_env_set_cwd", runtime::bd_env_set_cwd as *const u8);
-    builder.symbol("bd_json_encode_i64", runtime::bd_json_encode_i64 as *const u8);
-    builder.symbol("bd_json_encode_bool", runtime::bd_json_encode_bool as *const u8);
-    builder.symbol("bd_json_encode_string", runtime::bd_json_encode_string as *const u8);
-    builder.symbol("bd_json_decode_i64", runtime::bd_json_decode_i64 as *const u8);
-    builder.symbol("bd_json_decode_bool", runtime::bd_json_decode_bool as *const u8);
-    builder.symbol("bd_json_decode_string", runtime::bd_json_decode_string as *const u8);
+    builder.symbol(
+        "bd_json_encode_i64",
+        runtime::bd_json_encode_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_json_encode_bool",
+        runtime::bd_json_encode_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_json_encode_string",
+        runtime::bd_json_encode_string as *const u8,
+    );
+    builder.symbol(
+        "bd_json_decode_i64",
+        runtime::bd_json_decode_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_json_decode_bool",
+        runtime::bd_json_decode_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_json_decode_string",
+        runtime::bd_json_decode_string as *const u8,
+    );
+    builder.symbol("bd_channel_i64", runtime::bd_channel_i64 as *const u8);
+    builder.symbol("bd_channel_bool", runtime::bd_channel_bool as *const u8);
+    builder.symbol("bd_channel_f64", runtime::bd_channel_f64 as *const u8);
+    builder.symbol("bd_channel_u8", runtime::bd_channel_u8 as *const u8);
+    builder.symbol("bd_channel_string", runtime::bd_channel_string as *const u8);
+    builder.symbol("bd_channel_bytes", runtime::bd_channel_bytes as *const u8);
+    builder.symbol(
+        "bd_channel_send_i64",
+        runtime::bd_channel_send_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_send_bool",
+        runtime::bd_channel_send_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_send_f64",
+        runtime::bd_channel_send_f64 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_send_u8",
+        runtime::bd_channel_send_u8 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_send_string",
+        runtime::bd_channel_send_string as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_send_bytes",
+        runtime::bd_channel_send_bytes as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_recv_i64",
+        runtime::bd_channel_recv_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_recv_bool",
+        runtime::bd_channel_recv_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_recv_f64",
+        runtime::bd_channel_recv_f64 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_recv_u8",
+        runtime::bd_channel_recv_u8 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_recv_string",
+        runtime::bd_channel_recv_string as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_recv_bytes",
+        runtime::bd_channel_recv_bytes as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_close_i64",
+        runtime::bd_channel_close_i64 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_close_bool",
+        runtime::bd_channel_close_bool as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_close_f64",
+        runtime::bd_channel_close_f64 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_close_u8",
+        runtime::bd_channel_close_u8 as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_close_string",
+        runtime::bd_channel_close_string as *const u8,
+    );
+    builder.symbol(
+        "bd_channel_close_bytes",
+        runtime::bd_channel_close_bytes as *const u8,
+    );
     let mut module = JITModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, layout) = build_book_layouts(program)?;
     let enums = build_enum_layouts(program)?;
     let trace_table = build_trace_table(program);
     let function_sigs = collect_function_sigs(program)?;
-    let function_ids =
-        declare_functions(&mut module, program, &function_sigs, |name| name.to_string())?;
+    let function_ids = declare_functions(&mut module, program, &function_sigs, |name| {
+        name.to_string()
+    })?;
     let mut string_data = HashMap::new();
     let mut string_counter = 0usize;
     let functions = collect_functions(program);
@@ -255,9 +403,9 @@ pub fn run_with_io(
         compiler.emit_error_block();
         function_builder.finalize();
 
-        let func_id = *function_ids.get(&full_name).ok_or_else(|| {
-            native_error(format!("missing function id for '{}'.", full_name))
-        })?;
+        let func_id = *function_ids
+            .get(&full_name)
+            .ok_or_else(|| native_error(format!("missing function id for '{}'.", full_name)))?;
         module
             .define_function(func_id, &mut ctx)
             .map_err(|err| native_error(format!("native define failed: {err}")))?;
@@ -343,8 +491,7 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
     let enums = build_enum_layouts(program)?;
     let trace_table = build_trace_table(program);
     let function_sigs = collect_function_sigs(program)?;
-    let function_ids =
-        declare_functions(&mut module, program, &function_sigs, mangle_symbol)?;
+    let function_ids = declare_functions(&mut module, program, &function_sigs, mangle_symbol)?;
     let mut string_data = HashMap::new();
     let mut string_counter = 0usize;
     let functions = collect_functions(program);
@@ -408,9 +555,9 @@ pub fn emit_object(program: &Program) -> Result<Vec<u8>, NativeError> {
         compiler.emit_error_block();
         function_builder.finalize();
 
-        let func_id = *function_ids.get(&full_name).ok_or_else(|| {
-            native_error(format!("missing function id for '{}'.", full_name))
-        })?;
+        let func_id = *function_ids
+            .get(&full_name)
+            .ok_or_else(|| native_error(format!("missing function id for '{}'.", full_name)))?;
         module
             .define_function(func_id, &mut ctx)
             .map_err(|err| native_error(format!("native define failed: {err}")))?;

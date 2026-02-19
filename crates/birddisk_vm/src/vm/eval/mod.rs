@@ -5,7 +5,6 @@ mod stmt;
 use super::*;
 use birddisk_core::ast::Type;
 
-
 impl<'a> Vm<'a> {
     pub(super) fn eval_main(&mut self) -> Result<i64, RuntimeError> {
         let main = self
@@ -29,8 +28,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-
-    fn eval_function(
+    pub(crate) fn eval_function(
         &mut self,
         function: &birddisk_core::ast::Function,
         args: &[Value],
@@ -72,7 +70,6 @@ impl<'a> Vm<'a> {
         }
     }
 
-
     fn push_trace(&mut self, function: &birddisk_core::ast::Function) {
         self.trace.push(TraceFrame {
             function: function.name.clone(),
@@ -82,11 +79,9 @@ impl<'a> Vm<'a> {
         });
     }
 
-
     fn pop_trace(&mut self) {
         self.trace.pop();
     }
-
 
     fn with_trace(&self, mut err: RuntimeError) -> RuntimeError {
         if err.trace.is_empty() {
@@ -94,5 +89,4 @@ impl<'a> Vm<'a> {
         }
         err
     }
-
 }

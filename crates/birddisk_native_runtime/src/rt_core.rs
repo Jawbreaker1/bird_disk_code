@@ -74,6 +74,33 @@ impl ChannelState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ThreadStatus {
+    Running,
+    Completed(i64),
+    Joined,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ThreadState {
+    pub(crate) status: ThreadStatus,
+}
+
+impl ThreadState {
+    fn running() -> Self {
+        Self {
+            status: ThreadStatus::Running,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ThreadJoinError {
+    Missing,
+    Running,
+    AlreadyJoined,
+}
+
 #[derive(Debug, Clone)]
 pub struct NativeTrap {
     pub code: &'static str,
@@ -297,6 +324,8 @@ pub struct Runtime {
     stdout_live: bool,
     pub(crate) rand_state: u64,
     pub(crate) channels: HashMap<u32, ChannelState>,
+    pub(crate) threads: HashMap<u64, ThreadState>,
+    pub(crate) next_thread_id: u64,
 }
 
 impl Runtime {
@@ -317,6 +346,8 @@ impl Runtime {
             stdout_live: false,
             rand_state: 0x9E37_79B9_7F4A_7C15,
             channels: HashMap::new(),
+            threads: HashMap::new(),
+            next_thread_id: 1,
         }
     }
 
@@ -336,6 +367,31 @@ impl Runtime {
         self.channels
             .entry(handle.as_u32())
             .or_insert_with(|| ChannelState::new(kind));
+    }
+
+    pub(crate) fn register_thread(&mut self) -> u64 {
+        let id = self.next_thread_id;
+        self.next_thread_id = self.next_thread_id.saturating_add(1);
+        self.threads.insert(id, ThreadState::running());
+        id
+    }
+
+    pub(crate) fn complete_thread(&mut self, id: u64, result: i64) {
+        if let Some(state) = self.threads.get_mut(&id) {
+            state.status = ThreadStatus::Completed(result);
+        }
+    }
+
+    pub(crate) fn join_thread(&mut self, id: u64) -> Result<i64, ThreadJoinError> {
+        let state = self.threads.get_mut(&id).ok_or(ThreadJoinError::Missing)?;
+        match state.status {
+            ThreadStatus::Running => Err(ThreadJoinError::Running),
+            ThreadStatus::Completed(result) => {
+                state.status = ThreadStatus::Joined;
+                Ok(result)
+            }
+            ThreadStatus::Joined => Err(ThreadJoinError::AlreadyJoined),
+        }
     }
 
     fn heap_ref(&self) -> &Heap {
@@ -454,15 +510,8 @@ impl Heap {
         if elem_count > u32::MAX as usize {
             return None;
         }
-        let header = HeapHeader::new(
-            HeapKind::Array,
-            0,
-            elem_count as u32,
-            elem_kind as u32,
-        );
-        let payload_len = elem_count
-            .checked_mul(elem_size)
-            ?;
+        let header = HeapHeader::new(HeapKind::Array, 0, elem_count as u32, elem_kind as u32);
+        let payload_len = elem_count.checked_mul(elem_size)?;
         self.alloc(header, payload_len)
     }
 
@@ -470,15 +519,8 @@ impl Heap {
         if field_count > u32::MAX as usize {
             return None;
         }
-        let header = HeapHeader::new(
-            HeapKind::Object,
-            book_id,
-            field_count as u32,
-            0,
-        );
-        let payload_len = field_count
-            .checked_mul(abi::OBJECT_FIELD_SIZE as usize)
-            ?;
+        let header = HeapHeader::new(HeapKind::Object, book_id, field_count as u32, 0);
+        let payload_len = field_count.checked_mul(abi::OBJECT_FIELD_SIZE as usize)?;
         self.alloc(header, payload_len)
     }
 
@@ -719,7 +761,10 @@ pub(crate) fn heap_object<'a>(rt: &'a Runtime, handle: HeapHandle) -> Option<&'a
     Some(&rt.heap_ref().objects[idx])
 }
 
-pub(crate) fn heap_object_mut<'a>(rt: &'a mut Runtime, handle: HeapHandle) -> Option<&'a mut HeapObject> {
+pub(crate) fn heap_object_mut<'a>(
+    rt: &'a mut Runtime,
+    handle: HeapHandle,
+) -> Option<&'a mut HeapObject> {
     let idx = handle.as_u32() as usize;
     let len = rt.heap_ref().objects.len();
     if idx >= len {
@@ -738,7 +783,10 @@ pub(crate) fn heap_payload<'a>(rt: &'a Runtime, handle: HeapHandle) -> Option<&'
     heap_object(rt, handle).map(|obj| obj.payload.as_slice())
 }
 
-pub(crate) fn heap_payload_mut<'a>(rt: &'a mut Runtime, handle: HeapHandle) -> Option<&'a mut [u8]> {
+pub(crate) fn heap_payload_mut<'a>(
+    rt: &'a mut Runtime,
+    handle: HeapHandle,
+) -> Option<&'a mut [u8]> {
     heap_object_mut(rt, handle).map(|obj| obj.payload.as_mut_slice())
 }
 
@@ -779,7 +827,11 @@ pub(crate) fn array_index(rt: &Runtime, len: usize, index: i64) -> Option<usize>
     Some(index)
 }
 
-pub(crate) fn array_header(rt: &Runtime, handle: HeapHandle, expected: ElemKind) -> Option<HeapHeader> {
+pub(crate) fn array_header(
+    rt: &Runtime,
+    handle: HeapHandle,
+    expected: ElemKind,
+) -> Option<HeapHeader> {
     let header = heap_header(rt, handle)?;
     if header.kind() != HeapKind::Array {
         runtime_error(rt, "Expected array handle.");

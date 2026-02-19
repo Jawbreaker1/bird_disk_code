@@ -233,6 +233,36 @@ See `docs/DIAGNOSTICS.md` for full error list.
 - `decode_bool(text: string) -> bool`
 - `decode_string(text: string) -> string`
 
+### std::channel
+- `i64() -> ChannelI64`
+- `bool() -> ChannelBool`
+- `f64() -> ChannelF64`
+- `u8() -> ChannelU8`
+- `string() -> ChannelString`
+- `bytes() -> ChannelBytes`
+- `ChannelI64::send(value: i64) -> bool`
+- `ChannelI64::recv() -> RecvI64`
+- `ChannelI64::close() -> void`
+- `ChannelBool::send(value: bool) -> bool`
+- `ChannelBool::recv() -> RecvBool`
+- `ChannelBool::close() -> void`
+- `ChannelF64::send(value: f64) -> bool`
+- `ChannelF64::recv() -> RecvF64`
+- `ChannelF64::close() -> void`
+- `ChannelU8::send(value: u8) -> bool`
+- `ChannelU8::recv() -> RecvU8`
+- `ChannelU8::close() -> void`
+- `ChannelString::send(value: string) -> bool`
+- `ChannelString::recv() -> RecvString`
+- `ChannelString::close() -> void`
+- `ChannelBytes::send(value: u8[]) -> bool`
+- `ChannelBytes::recv() -> RecvBytes`
+- `ChannelBytes::close() -> void`
+
+### std::thread
+- `spawn(entry: string, args...) -> Thread` (VM only in current release)
+- `join(handle: Thread) -> i64` (VM only in current release)
+
 ### std::math (BirdDisk module)
 - `add(a: i64, b: i64) -> i64`
 - `sub(a: i64, b: i64) -> i64`

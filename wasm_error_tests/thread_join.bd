@@ -1,0 +1,6 @@
+import std::thread.
+
+rule main() -> i64:
+  std::thread::join(0).
+  yield 0.
+end

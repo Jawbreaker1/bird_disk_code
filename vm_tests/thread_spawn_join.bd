@@ -1,0 +1,14 @@
+import std::io.
+import std::string.
+import std::thread.
+
+rule worker(value: i64) -> i64:
+  yield value + 2.
+end
+
+rule main() -> i64:
+  set t: Thread = std::thread::spawn("worker", 5).
+  set result: i64 = std::thread::join(t).
+  std::io::print(std::string::concat(std::string::from_i64(result), "\n")).
+  yield result.
+end

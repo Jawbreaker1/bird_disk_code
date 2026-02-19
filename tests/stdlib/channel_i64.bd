@@ -7,8 +7,8 @@ rule main() -> i64:
   set sum: i64 = 0.
   set one: RecvI64 = ch::recv().
   match one:
-    case RecvI64::Ok(v):
-      put sum = sum + v.
+    case RecvI64::Ok(v1):
+      put sum = sum + v1.
     case RecvI64::Closed:
       put sum = sum + 100.
     otherwise:
@@ -16,8 +16,8 @@ rule main() -> i64:
   end
   set two: RecvI64 = ch::recv().
   match two:
-    case RecvI64::Ok(v):
-      put sum = sum + v.
+    case RecvI64::Ok(v2):
+      put sum = sum + v2.
     case RecvI64::Closed:
       put sum = sum + 100.
     otherwise:

@@ -17,6 +17,7 @@ pub(crate) fn import_modules(uri: &str) -> Vec<String> {
         "std::env".to_string(),
         "std::json".to_string(),
         "std::channel".to_string(),
+        "std::thread".to_string(),
     ];
     if let Some(path) = uri_to_path(uri) {
         if let Some(root) = find_stdlib_root(&path) {
@@ -101,7 +102,10 @@ fn user_module_candidates(entry_path: &Path, module_path: &[String]) -> Vec<Path
     candidates
 }
 
-pub(crate) fn resolve_user_module_path(entry_path: &Path, module_path: &[String]) -> Option<PathBuf> {
+pub(crate) fn resolve_user_module_path(
+    entry_path: &Path,
+    module_path: &[String],
+) -> Option<PathBuf> {
     for candidate in user_module_candidates(entry_path, module_path) {
         if candidate.exists() {
             return Some(candidate);

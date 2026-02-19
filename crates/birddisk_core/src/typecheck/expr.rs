@@ -61,11 +61,8 @@ impl<'a> Checker<'a> {
                 match (&from_ty, &to_ty) {
                     (Ty::I64, Ty::F64) | (Ty::F64, Ty::I64) => to_ty,
                     _ => {
-                        let message = format!(
-                            "Cannot cast from {} to {}.",
-                            from_ty.name(),
-                            to_ty.name()
-                        );
+                        let message =
+                            format!("Cannot cast from {} to {}.", from_ty.name(), to_ty.name());
                         self.diagnostics.push(diagnostic(
                             "E0316",
                             "error",
@@ -117,7 +114,12 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn check_int_literal_expected(&mut self, value: i64, span: Span, expected: &Ty) -> Ty {
+    pub(super) fn check_int_literal_expected(
+        &mut self,
+        value: i64,
+        span: Span,
+        expected: &Ty,
+    ) -> Ty {
         if matches!(expected, Ty::U8) {
             if (0..=u8::MAX as i64).contains(&value) {
                 Ty::U8
@@ -140,7 +142,12 @@ impl<'a> Checker<'a> {
         }
     }
 
-    pub(super) fn check_array_literal_expected(&mut self, elements: &[Expr], span: Span, expected: &Ty) -> Ty {
+    pub(super) fn check_array_literal_expected(
+        &mut self,
+        elements: &[Expr],
+        span: Span,
+        expected: &Ty,
+    ) -> Ty {
         let expected_elem = match expected {
             Ty::Array(elem) => elem.as_ref().clone(),
             _ => return self.check_array_literal(elements, span),
@@ -477,6 +484,9 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_call(&mut self, span: Span, name: &str, args: &[Expr]) -> Ty {
+        if name == "std::thread::spawn" {
+            return self.check_thread_spawn(span, args);
+        }
         if !self.functions.contains_key(name) {
             if let Some((enum_name, variant_name)) = name.split_once("::") {
                 if !variant_name.contains("::")
@@ -530,8 +540,7 @@ impl<'a> Checker<'a> {
                                 ),
                                 self.file,
                                 span,
-                                vec!["Argument count must match the method signature."
-                                    .to_string()],
+                                vec!["Argument count must match the method signature.".to_string()],
                                 vec!["SPEC.md#15-objects".to_string()],
                                 Vec::new(),
                                 None,
@@ -612,16 +621,178 @@ impl<'a> Checker<'a> {
                 _ => self.check_expr(arg),
             };
             if actual != Ty::Unknown && expected != &actual {
-                self.diagnostics.push(type_mismatch(
-                    self.file,
-                    arg.span,
-                    expected.clone(),
-                    actual,
-                ));
+                self.diagnostics
+                    .push(type_mismatch(self.file, arg.span, expected.clone(), actual));
             }
         }
 
         sig.return_type
+    }
+
+    fn check_thread_spawn(&mut self, span: Span, args: &[Expr]) -> Ty {
+        if args.is_empty() {
+            self.diagnostics.push(diagnostic(
+                "E0302",
+                "error",
+                "Wrong number of arguments: expected at least 1, got 0.".to_string(),
+                self.file,
+                span,
+                vec!["std::thread::spawn requires an entry rule string literal.".to_string()],
+                vec!["SPEC.md#6-5-function-calls".to_string()],
+                Vec::new(),
+                None,
+            ));
+            return Ty::Book("Thread".to_string());
+        }
+
+        let mut arg_actuals: Vec<Option<Ty>> = vec![None; args.len().saturating_sub(1)];
+
+        let entry_name = if let ExprKind::String(name) = &args[0].kind {
+            Some(name.clone())
+        } else {
+            let actual = self.check_expr(&args[0]);
+            if actual != Ty::Unknown && actual != Ty::String {
+                self.diagnostics
+                    .push(type_mismatch(self.file, args[0].span, Ty::String, actual));
+            }
+            self.diagnostics.push(diagnostic(
+                "E0300",
+                "error",
+                "std::thread::spawn entry must be a string literal.".to_string(),
+                self.file,
+                args[0].span,
+                vec!["Use a literal like \"worker\" or \"app::worker\".".to_string()],
+                vec!["SPEC.md#6-5-function-calls".to_string()],
+                Vec::new(),
+                None,
+            ));
+            None
+        };
+
+        if let Some(entry_name) = entry_name {
+            if self.method_functions.contains(&entry_name) {
+                self.diagnostics.push(diagnostic(
+                    "E0300",
+                    "error",
+                    format!("Thread entry '{entry_name}' must be a top-level rule."),
+                    self.file,
+                    args[0].span,
+                    vec!["Book methods are not allowed as thread entry points.".to_string()],
+                    vec!["SPEC.md#6-5-function-calls".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+            } else if let Some(sig) = self.functions.get(&entry_name).cloned() {
+                if sig.return_type != Ty::I64 {
+                    self.diagnostics.push(type_mismatch(
+                        self.file,
+                        args[0].span,
+                        Ty::I64,
+                        sig.return_type,
+                    ));
+                }
+                let expected = sig.params.len();
+                let provided = args.len() - 1;
+                if expected != provided {
+                    self.diagnostics.push(diagnostic(
+                        "E0302",
+                        "error",
+                        format!(
+                            "Wrong number of arguments: expected {}, got {}.",
+                            expected, provided
+                        ),
+                        self.file,
+                        span,
+                        vec!["Thread entry args must match the target rule signature.".to_string()],
+                        vec!["SPEC.md#6-5-function-calls".to_string()],
+                        Vec::new(),
+                        None,
+                    ));
+                }
+                for (index, (arg, expected)) in
+                    args.iter().skip(1).zip(sig.params.iter()).enumerate()
+                {
+                    let actual = match (&arg.kind, expected) {
+                        (ExprKind::Int(value), Ty::U8) => {
+                            self.check_int_literal_expected(*value, arg.span, expected)
+                        }
+                        (ExprKind::ArrayLit(elements), Ty::Array(_)) => {
+                            self.check_array_literal_expected(elements, arg.span, expected)
+                        }
+                        _ => self.check_expr(arg),
+                    };
+                    if let Some(slot) = arg_actuals.get_mut(index) {
+                        *slot = Some(actual.clone());
+                    }
+                    if actual != Ty::Unknown && expected != &actual {
+                        self.diagnostics.push(type_mismatch(
+                            self.file,
+                            arg.span,
+                            expected.clone(),
+                            actual,
+                        ));
+                    }
+                }
+            } else {
+                self.diagnostics.push(diagnostic(
+                    "E0303",
+                    "error",
+                    format!("Unknown function '{entry_name}'."),
+                    self.file,
+                    args[0].span,
+                    vec!["Define the target rule before spawning it.".to_string()],
+                    vec!["SPEC.md#6-5-function-calls".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+            }
+        }
+
+        for (index, arg) in args.iter().skip(1).enumerate() {
+            let ty = if let Some(ty) = arg_actuals.get(index).and_then(|item| item.clone()) {
+                ty
+            } else {
+                self.check_expr(arg)
+            };
+            if !self.thread_sendable_type(&ty) {
+                self.diagnostics.push(diagnostic(
+                    "E0300",
+                    "error",
+                    format!(
+                        "Type '{}' is not sendable to std::thread::spawn.",
+                        ty.name()
+                    ),
+                    self.file,
+                    arg.span,
+                    vec![
+                        "Sendable types are i64, f64, bool, u8, string, and channel handles."
+                            .to_string(),
+                    ],
+                    vec!["SPEC.md#6-5-function-calls".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+            }
+        }
+
+        Ty::Book("Thread".to_string())
+    }
+
+    fn thread_sendable_type(&self, ty: &Ty) -> bool {
+        match ty {
+            Ty::Unknown => true,
+            Ty::I64 | Ty::F64 | Ty::Bool | Ty::U8 | Ty::String => true,
+            Ty::Book(name) => matches!(
+                name.as_str(),
+                "ChannelI64"
+                    | "ChannelBool"
+                    | "ChannelF64"
+                    | "ChannelU8"
+                    | "ChannelString"
+                    | "ChannelBytes"
+            ),
+            Ty::Void | Ty::Array(_) | Ty::Enum(_) => false,
+        }
     }
 
     fn check_enum_constructor(
@@ -641,18 +812,18 @@ impl<'a> Checker<'a> {
                 if !self.enums.contains_key(enum_name) {
                     return Ty::Unknown;
                 }
-            self.diagnostics.push(diagnostic(
-                "E0314",
-                "error",
-                format!("Unknown enum variant '{enum_name}::{variant_name}'."),
-                self.file,
-                span,
-                vec!["Check the variant name.".to_string()],
-                vec!["SPEC.md#2-1-enums".to_string()],
-                Vec::new(),
-                None,
-            ));
-            return Ty::Unknown;
+                self.diagnostics.push(diagnostic(
+                    "E0314",
+                    "error",
+                    format!("Unknown enum variant '{enum_name}::{variant_name}'."),
+                    self.file,
+                    span,
+                    vec!["Check the variant name.".to_string()],
+                    vec!["SPEC.md#2-1-enums".to_string()],
+                    Vec::new(),
+                    None,
+                ));
+                return Ty::Unknown;
             }
         };
 
@@ -687,19 +858,21 @@ impl<'a> Checker<'a> {
                 _ => self.check_expr(arg),
             };
             if actual != Ty::Unknown && expected != &actual {
-                self.diagnostics.push(type_mismatch(
-                    self.file,
-                    arg.span,
-                    expected.clone(),
-                    actual,
-                ));
+                self.diagnostics
+                    .push(type_mismatch(self.file, arg.span, expected.clone(), actual));
             }
         }
 
         Ty::Enum(enum_name.to_string())
     }
 
-    pub(super) fn check_binary(&mut self, _span: Span, op: BinaryOp, left: &Expr, right: &Expr) -> Ty {
+    pub(super) fn check_binary(
+        &mut self,
+        _span: Span,
+        op: BinaryOp,
+        left: &Expr,
+        right: &Expr,
+    ) -> Ty {
         let left_ty = self.check_expr(left);
         let right_ty = self.check_expr(right);
 
@@ -753,8 +926,12 @@ impl<'a> Checker<'a> {
 
     fn check_binary_mismatch(&mut self, left: &Expr, left_ty: Ty, right: &Expr, right_ty: Ty) {
         if left_ty != Ty::Unknown && right_ty != Ty::Unknown && left_ty != right_ty {
-            self.diagnostics
-                .push(type_mismatch(self.file, right.span, left_ty.clone(), right_ty.clone()));
+            self.diagnostics.push(type_mismatch(
+                self.file,
+                right.span,
+                left_ty.clone(),
+                right_ty.clone(),
+            ));
             self.diagnostics
                 .push(type_mismatch(self.file, left.span, right_ty, left_ty));
         }
@@ -770,8 +947,12 @@ impl<'a> Checker<'a> {
     ) -> bool {
         let mut ok = true;
         if left_ty != expected {
-            self.diagnostics
-                .push(type_mismatch(self.file, left.span, expected.clone(), left_ty));
+            self.diagnostics.push(type_mismatch(
+                self.file,
+                left.span,
+                expected.clone(),
+                left_ty,
+            ));
             ok = false;
         }
         if right_ty != expected {

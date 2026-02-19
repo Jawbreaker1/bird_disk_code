@@ -365,6 +365,22 @@ pub(crate) fn stdlib_signatures(
             );
         }
     }
+    if has_import(program, &["std", "thread"]) {
+        signatures.insert(
+            "std::thread::spawn".to_string(),
+            CallSignature {
+                params: vec!["entry".to_string(), "...args".to_string()],
+                return_type: Type::Book("Thread".to_string()),
+            },
+        );
+        signatures.insert(
+            "std::thread::join".to_string(),
+            CallSignature {
+                params: vec!["handle".to_string()],
+                return_type: Type::I64,
+            },
+        );
+    }
     if let Some(root) = root {
         for import in &program.imports {
             let module_name = import.path.join("::");
@@ -378,6 +394,8 @@ pub(crate) fn stdlib_signatures(
                 || module_name.starts_with("std::path")
                 || module_name.starts_with("std::env")
                 || module_name.starts_with("std::json")
+                || module_name.starts_with("std::channel")
+                || module_name.starts_with("std::thread")
             {
                 continue;
             }
@@ -487,6 +505,7 @@ pub(crate) fn builtin_stdlib_functions(module: &str) -> Vec<String> {
             "decode_string",
         ],
         "std::channel" => vec!["i64", "bool", "f64", "u8", "string", "bytes"],
+        "std::thread" => vec!["spawn", "join"],
         _ => Vec::new(),
     }
     .into_iter()

@@ -421,13 +421,13 @@ Implement:
 - [ ] VM deterministic scheduler (opt-in, e.g. `--deterministic` or test-only)
   - [x] CLI flag + docs (virtual time + deterministic clock)
   - [ ] Deterministic thread scheduling (once threads exist)
-- [ ] Native threading runtime scaffolding (thread registry + join bookkeeping)
+- [x] Native threading runtime scaffolding (thread registry + join bookkeeping)
 - [ ] WASM behavior: compile-time error for threading (clear diagnostic)
   - [x] WASM compile-time error for std::thread/std::channel + tests
 
 Add tests:
 - [ ] VM: deterministic scheduling fixture tests
-- [ ] Compile-time error tests for WASM threading
+- [x] Compile-time error tests for WASM threading
 
 Acceptance:
 - Spec + stdlib surface finalized; VM deterministic mode documented
@@ -436,12 +436,13 @@ Acceptance:
 
 ## Sprint 19 — Concurrency implementation (VM + native)
 Implement:
-- [ ] VM: spawn/join + channels (message passing only)
+- [x] VM: spawn/join + channels (message passing only)
 - [ ] Native: spawn/join + channels (OS threads)
 - [ ] CLI/test harness support for concurrency fixtures
 - [ ] Error codes for thread/channel failures (closed channel, join error)
 
 Add tests:
+- [x] VM spawn/join fixtures (`vm_tests/`)
 - [ ] VM vs native parity tests (deterministic mode in VM)
 - [ ] Stress tests with multiple threads + channels
 
@@ -485,6 +486,7 @@ Acceptance:
 ## Future — Language features
 - [ ] Add generics/type parameters (types + functions + enums)
 - [ ] Use generics to replace typed channels with `Channel<T>` + `Recv<T>`
+- [ ] Update concurrency/channel examples to use `Channel<T>` once generics ship (keep a non-generic compatibility example for migration docs)
 
 ## Future — Full eval suite
 - [ ] Expand `eval/` with mutations, report generation, and cross-language comparison

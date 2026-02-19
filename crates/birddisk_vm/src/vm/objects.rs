@@ -2,7 +2,7 @@ use super::*;
 use birddisk_core::ast::Type;
 
 impl<'a> Vm<'a> {
-    pub(super) fn alloc_object(&mut self, book: &str) -> Result<Value, RuntimeError> {
+    pub(crate) fn alloc_object(&mut self, book: &str) -> Result<Value, RuntimeError> {
         let Some(info) = self.books.get(book) else {
             return Err(runtime_error(
                 "E0400",
@@ -87,9 +87,9 @@ impl<'a> Vm<'a> {
         }
         let len = header.len_or_size as usize;
         let payload = self.heap.payload(handle);
-        let bytes = payload.get(..len).ok_or_else(|| {
-            runtime_error("E0400", "String payload out of bounds.")
-        })?;
+        let bytes = payload
+            .get(..len)
+            .ok_or_else(|| runtime_error("E0400", "String payload out of bounds."))?;
         Ok(bytes.to_vec())
     }
 
@@ -115,9 +115,9 @@ impl<'a> Vm<'a> {
         }
         let payload = self.heap.payload(handle);
         let offset = index * 8;
-        let bytes = payload.get(offset..offset + 8).ok_or_else(|| {
-            runtime_error("E0400", "Object payload out of bounds.")
-        })?;
+        let bytes = payload
+            .get(offset..offset + 8)
+            .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
         let raw = u64::from_le_bytes(bytes.try_into().unwrap());
         match field_ty {
             Type::I64 => Ok(Value::I64(i64::from_le_bytes(bytes.try_into().unwrap()))),
@@ -151,41 +151,41 @@ impl<'a> Vm<'a> {
         let offset = index * 8;
         match value {
             Value::I64(value) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Object payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
                 target.copy_from_slice(&value.to_le_bytes());
             }
             Value::F64(value) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Object payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
                 target.copy_from_slice(&value.to_le_bytes());
             }
             Value::Bool(value) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Object payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
                 target.copy_from_slice(&(value as u64).to_le_bytes());
             }
             Value::U8(value) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Object payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
                 target.copy_from_slice(&(value as u64).to_le_bytes());
             }
             Value::String(handle) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Object payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
                 target.copy_from_slice(&(handle.as_u32() as u64).to_le_bytes());
             }
             Value::Array { handle, .. }
             | Value::Object { handle, .. }
             | Value::Enum { handle, .. } => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Object payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Object payload out of bounds."))?;
                 target.copy_from_slice(&(handle.as_u32() as u64).to_le_bytes());
             }
             Value::Void => {

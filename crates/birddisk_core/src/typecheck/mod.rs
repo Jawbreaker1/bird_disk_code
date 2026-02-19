@@ -1,8 +1,8 @@
 mod books;
 mod enums;
 mod expr;
-mod stmt;
 mod stdlib;
+mod stmt;
 
 use crate::ast::{Program, Stmt, Type};
 use crate::diagnostics::{diagnostic, Diagnostic, Edit, FixIt, Position, Span};
@@ -84,6 +84,7 @@ struct Checker<'a> {
     file: &'a str,
     diagnostics: Vec<Diagnostic>,
     functions: HashMap<String, FunctionSig>,
+    method_functions: HashSet<String>,
     books: HashMap<String, BookInfo>,
     enums: HashMap<String, EnumInfo>,
     scopes: Vec<HashMap<String, Ty>>,
@@ -96,6 +97,7 @@ impl<'a> Checker<'a> {
             file,
             diagnostics: Vec::new(),
             functions: HashMap::new(),
+            method_functions: HashSet::new(),
             books: HashMap::new(),
             enums: HashMap::new(),
             scopes: Vec::new(),
@@ -422,9 +424,7 @@ fn edit_distance(a: &str, b: &str) -> usize {
         curr[0] = i + 1;
         for (j, cb) in b.chars().enumerate() {
             let cost = if ca == cb { 0 } else { 1 };
-            curr[j + 1] = (prev[j + 1] + 1)
-                .min(curr[j] + 1)
-                .min(prev[j] + cost);
+            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
         }
         prev.clone_from_slice(&curr);
     }
@@ -457,10 +457,10 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
         } => block_always_yields(try_body) && block_always_yields(catch_body),
         Stmt::Match {
             cases, otherwise, ..
-        } => cases
-            .iter()
-            .all(|case| block_always_yields(&case.body))
-            && block_always_yields(otherwise),
+        } => {
+            cases.iter().all(|case| block_always_yields(&case.body))
+                && block_always_yields(otherwise)
+        }
         Stmt::Repeat { .. } => false,
         Stmt::Set { .. }
         | Stmt::Expr { .. }
@@ -473,7 +473,7 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{lexer, parser, parse_and_typecheck};
+    use crate::{lexer, parse_and_typecheck, parser};
     use std::path::PathBuf;
 
     fn check(source: &str) -> Vec<Diagnostic> {
@@ -526,9 +526,7 @@ mod tests {
 
     #[test]
     fn typecheck_suggests_unknown_name() {
-        let diags = check(
-            "rule main() -> i64:\n  set count = 1.\n  yield coun.\nend\n",
-        );
+        let diags = check("rule main() -> i64:\n  set count = 1.\n  yield coun.\nend\n");
         let diag = diags.iter().find(|d| d.code == "E0301").unwrap();
         assert!(diag.notes.iter().any(|note| note.contains("count")));
     }
@@ -654,9 +652,7 @@ mod tests {
 
     #[test]
     fn typecheck_rejects_std_io_without_import() {
-        let diags = check(
-            "rule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n",
-        );
+        let diags = check("rule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n");
         assert!(diags.iter().any(|d| d.code == "E0303"));
     }
 
@@ -669,6 +665,22 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_std_thread_spawn_join() {
+        let diags = check(
+            "import std::thread.\nrule worker(value: i64) -> i64:\n  yield value + 1.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 2).\n  yield std::thread::join(t).\nend\n",
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_rejects_std_thread_non_literal_entry() {
+        let diags = check(
+            "import std::thread.\nrule worker() -> i64:\n  yield 1.\nend\n\nrule main() -> i64:\n  set name: string = \"worker\".\n  set t: Thread = std::thread::spawn(name).\n  yield std::thread::join(t).\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0300"));
+    }
+
+    #[test]
     fn typecheck_accepts_void_function_without_yield() {
         let diags = check(
             "import std::io.\nrule log() -> void:\n  std::io::print(\"hi\").\nend\n\nrule main() -> i64:\n  log().\n  yield 0.\nend\n",
@@ -678,9 +690,8 @@ mod tests {
 
     #[test]
     fn typecheck_rejects_void_yield() {
-        let diags = check(
-            "rule log() -> void:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n",
-        );
+        let diags =
+            check("rule log() -> void:\n  yield 1.\nend\n\nrule main() -> i64:\n  yield 0.\nend\n");
         assert!(diags.iter().any(|d| d.code == "E0312"));
     }
 

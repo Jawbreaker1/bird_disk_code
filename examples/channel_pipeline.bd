@@ -1,0 +1,39 @@
+import std::channel.
+import std::io.
+import std::string.
+
+rule main() -> i64:
+  set ch: ChannelI64 = std::channel::i64().
+  set base: i64 = 10.
+  set count: i64 = 5.
+  set i: i64 = 0.
+  repeat while i < count:
+    set value: i64 = base + i.
+    set sent: bool = ch::send(value).
+    when sent:
+      put i = i + 1.
+    otherwise:
+      yield 0.
+    end
+  end
+  set sum: i64 = 0.
+  set received: i64 = 0.
+  repeat while received < count:
+    set message: RecvI64 = ch::recv().
+    match message:
+      case RecvI64::Ok(v):
+        put sum = sum + v.
+        put received = received + 1.
+      case RecvI64::Closed:
+        yield 0.
+      otherwise:
+        yield 0.
+    end
+  end
+
+  set sum_text: string = std::string::from_i64(sum).
+  set line: string = std::string::concat("channel sum = ", sum_text).
+  put line = std::string::concat(line, "\n").
+  std::io::print(line).
+  yield sum.
+end

@@ -1,4 +1,6 @@
-use crate::rt_core::{split_lines, Heap, HeapHeader, HeapKind, RootStack, RootValue};
+use crate::rt_core::{
+    split_lines, Heap, HeapHeader, HeapKind, RootStack, RootValue, Runtime, ThreadJoinError,
+};
 
 #[test]
 fn heap_header_encodes_kind_and_type() {
@@ -36,5 +38,22 @@ fn gc_reclaims_unrooted_values() {
 fn split_lines_strips_cr() {
     let lines = split_lines("123\r\n456\r\n");
     let collected: Vec<String> = lines.into_iter().collect();
-    assert_eq!(collected, vec!["123".to_string(), "456".to_string(), "".to_string()]);
+    assert_eq!(
+        collected,
+        vec!["123".to_string(), "456".to_string(), "".to_string()]
+    );
+}
+
+#[test]
+fn thread_registry_join_bookkeeping() {
+    let mut rt = Runtime::new();
+    let thread_id = rt.register_thread();
+    assert_eq!(rt.join_thread(thread_id), Err(ThreadJoinError::Running));
+    rt.complete_thread(thread_id, 42);
+    assert_eq!(rt.join_thread(thread_id), Ok(42));
+    assert_eq!(
+        rt.join_thread(thread_id),
+        Err(ThreadJoinError::AlreadyJoined)
+    );
+    assert_eq!(rt.join_thread(9_999), Err(ThreadJoinError::Missing));
 }

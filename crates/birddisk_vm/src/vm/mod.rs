@@ -81,6 +81,7 @@ pub(crate) struct Vm<'a> {
     heap: Heap,
     roots: RootStack,
     channels: HashMap<u32, ChannelState>,
+    threads: HashMap<u32, ThreadState>,
     gc_layout: GcLayout,
     gc_threshold: usize,
     stdin_fallback: bool,
@@ -139,6 +140,23 @@ impl ChannelState {
             kind,
             queue: VecDeque::new(),
             closed: false,
+        }
+    }
+}
+
+pub(crate) enum ThreadStatus {
+    Completed(i64),
+    Joined,
+}
+
+pub(crate) struct ThreadState {
+    pub(crate) status: ThreadStatus,
+}
+
+impl ThreadState {
+    fn completed(result: i64) -> Self {
+        Self {
+            status: ThreadStatus::Completed(result),
         }
     }
 }
@@ -246,6 +264,9 @@ impl<'a> Vm<'a> {
         let has_std_channel = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
         });
+        let has_std_thread = program.imports.iter().any(|import| {
+            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "thread"
+        });
         let mut books = HashMap::new();
         let mut ref_fields = Vec::new();
         for (book_id, book) in program.books.iter().enumerate() {
@@ -293,6 +314,18 @@ impl<'a> Vm<'a> {
                 );
                 ref_fields.push(Vec::new());
             }
+        }
+        if has_std_thread && !books.contains_key("Thread") {
+            let book_id = ref_fields.len() as u32;
+            books.insert(
+                "Thread".to_string(),
+                BookInfo {
+                    id: book_id,
+                    field_types: Vec::new(),
+                    field_index: HashMap::new(),
+                },
+            );
+            ref_fields.push(Vec::new());
         }
         let mut enums = HashMap::new();
         for (enum_id, enum_decl) in program.enums.iter().enumerate() {
@@ -363,6 +396,7 @@ impl<'a> Vm<'a> {
             heap: Heap::new(),
             roots: RootStack::new(),
             channels: HashMap::new(),
+            threads: HashMap::new(),
             gc_layout: GcLayout { ref_fields },
             gc_threshold: GC_MIN_THRESHOLD,
             stdin_fallback: false,
@@ -429,6 +463,29 @@ impl<'a> Vm<'a> {
             .ok_or_else(|| runtime_error("E0400", "Channel state missing at runtime."))
     }
 
+    pub(crate) fn function_by_name(&self, name: &str) -> Option<&'a birddisk_core::ast::Function> {
+        self.functions.get(name).copied()
+    }
+
+    pub(crate) fn register_thread(&mut self, handle: HeapHandle, result: i64) {
+        self.threads
+            .insert(handle.as_u32(), ThreadState::completed(result));
+    }
+
+    pub(crate) fn join_thread(&mut self, handle: HeapHandle) -> Result<i64, RuntimeError> {
+        let state = self
+            .threads
+            .get_mut(&handle.as_u32())
+            .ok_or_else(|| runtime_error("E0400", "Thread handle is invalid."))?;
+        match state.status {
+            ThreadStatus::Completed(result) => {
+                state.status = ThreadStatus::Joined;
+                Ok(result)
+            }
+            ThreadStatus::Joined => Err(runtime_error("E0400", "Thread has already been joined.")),
+        }
+    }
+
     fn update_root_slot(&mut self, slot: usize, value: &Value) {
         let root_value = match value.heap_handle() {
             Some(handle) => RootValue::Ptr(handle),
@@ -451,8 +508,7 @@ impl<'a> Vm<'a> {
         };
         if let Some(base) = base {
             for (offset, handle) in extra_roots.iter().enumerate() {
-                self.roots
-                    .set_slot(base + offset, RootValue::Ptr(*handle));
+                self.roots.set_slot(base + offset, RootValue::Ptr(*handle));
             }
         }
         let report = self.heap.gc_with_layout(&self.roots, &self.gc_layout);
@@ -460,10 +516,7 @@ impl<'a> Vm<'a> {
             let _ = base;
             self.roots.pop_frame(extra_count);
         }
-        let next = report
-            .live_bytes
-            .saturating_mul(2)
-            .max(GC_MIN_THRESHOLD);
+        let next = report.live_bytes.saturating_mul(2).max(GC_MIN_THRESHOLD);
         self.gc_threshold = next;
     }
 
@@ -532,7 +585,10 @@ fn elem_kind_for_type(ty: &Type) -> Result<ElemKind, RuntimeError> {
         Type::Bool => Ok(ElemKind::Bool),
         Type::U8 => Ok(ElemKind::U8),
         Type::String | Type::Array(_) | Type::Book(_) => Ok(ElemKind::Ref),
-        Type::Void => Err(runtime_error("E0400", "Void is not a valid array element type.")),
+        Type::Void => Err(runtime_error(
+            "E0400",
+            "Void is not a valid array element type.",
+        )),
     }
 }
 
@@ -575,7 +631,10 @@ mod tests {
     fn split_lines_strips_cr() {
         let lines = split_lines("123\r\n456\r\n");
         let collected: Vec<String> = lines.into_iter().collect();
-        assert_eq!(collected, vec!["123".to_string(), "456".to_string(), "".to_string()]);
+        assert_eq!(
+            collected,
+            vec!["123".to_string(), "456".to_string(), "".to_string()]
+        );
     }
 
     #[test]
@@ -587,7 +646,9 @@ mod tests {
             &program,
             "",
             &[],
-            VmOptions { deterministic: true },
+            VmOptions {
+                deterministic: true,
+            },
         )
         .unwrap();
         assert_eq!(result, 5);

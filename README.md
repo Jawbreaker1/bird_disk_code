@@ -76,6 +76,7 @@ Examples (start here)
 - [examples/book_point.bd](examples/book_point.bd) (field access + method calls)
 - [examples/enum_result.bd](examples/enum_result.bd) (enum variants + match)
 - [examples/floats.bd](examples/floats.bd) (f64 arithmetic + explicit cast)
+- [examples/channel_pipeline.bd](examples/channel_pipeline.bd) (typed channels + recv loop across VM/WASM/native)
 - [examples/terminal_calculator.bd](examples/terminal_calculator.bd) (terminal IO + operator dispatch)
 - [examples/yahtzee/](examples/yahtzee/) (multi-file ASCII Yahtzee demo; VM/WASM/native)
 

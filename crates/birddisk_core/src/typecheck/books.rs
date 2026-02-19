@@ -21,8 +21,12 @@ impl<'a> Checker<'a> {
                 ));
                 continue;
             }
-            self.books
-                .insert(book.name.clone(), BookInfo { fields: HashMap::new() });
+            self.books.insert(
+                book.name.clone(),
+                BookInfo {
+                    fields: HashMap::new(),
+                },
+            );
         }
 
         let mut processed = HashSet::new();
@@ -88,10 +92,7 @@ impl<'a> Checker<'a> {
                         self.diagnostics.push(diagnostic(
                             "E0300",
                             "error",
-                            format!(
-                                "First parameter of method '{}' must be 'self'.",
-                                full_name
-                            ),
+                            format!("First parameter of method '{}' must be 'self'.", full_name),
                             self.file,
                             first.span,
                             vec!["Methods must take self as the first parameter.".to_string()],
@@ -103,12 +104,8 @@ impl<'a> Checker<'a> {
                     let expected = Ty::Book(book.name.clone());
                     let actual = self.type_from_ast(first.ty.clone());
                     if actual != expected {
-                        self.diagnostics.push(type_mismatch(
-                            self.file,
-                            first.span,
-                            expected,
-                            actual,
-                        ));
+                        self.diagnostics
+                            .push(type_mismatch(self.file, first.span, expected, actual));
                     }
                 } else {
                     self.diagnostics.push(diagnostic(
@@ -143,6 +140,7 @@ impl<'a> Checker<'a> {
                         ty
                     },
                 };
+                self.method_functions.insert(full_name.clone());
                 self.functions.insert(full_name, sig);
             }
 

@@ -15,7 +15,7 @@ pub use vm::{
 #[cfg(test)]
 mod tests {
     use super::*;
-    use birddisk_core::{attach_sources, lexer, parser, parse_and_typecheck};
+    use birddisk_core::{attach_sources, lexer, parse_and_typecheck, parser};
     use std::path::PathBuf;
 
     fn parse_program(source: &str) -> birddisk_core::ast::Program {
@@ -130,9 +130,8 @@ mod tests {
 
     #[test]
     fn eval_array_literal_index() {
-        let result = eval_source(
-            "rule main() -> i64:\n  set xs: i64[] = [1, 2, 3].\n  yield xs[1].\nend\n",
-        );
+        let result =
+            eval_source("rule main() -> i64:\n  set xs: i64[] = [1, 2, 3].\n  yield xs[1].\nend\n");
         assert_eq!(result, 2);
     }
 
@@ -238,5 +237,22 @@ mod tests {
         let (result, output) = eval_with_io(&program, "BirdDisk", &[]).unwrap();
         assert_eq!(result, 9);
         assert_eq!(output, "BirdDisk!");
+    }
+
+    #[test]
+    fn eval_thread_spawn_and_join() {
+        let result = eval_source(
+            "import std::thread.\nrule worker(value: i64) -> i64:\n  yield value + 2.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 5).\n  yield std::thread::join(t).\nend\n",
+        );
+        assert_eq!(result, 7);
+    }
+
+    #[test]
+    fn eval_thread_join_twice_errors() {
+        let source = "import std::thread.\nrule worker() -> i64:\n  yield 3.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\").\n  set first: i64 = std::thread::join(t).\n  set second: i64 = std::thread::join(t).\n  yield first + second.\nend\n";
+        let program = parse_program(source);
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0400");
+        assert!(err.message.contains("already been joined"));
     }
 }
