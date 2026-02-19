@@ -19,7 +19,13 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Stdlib harness
+        if: matrix.os != 'windows-latest'
         run: cargo run -p birddiskc -- test --json --dir tests --tag stdlib
+      - name: Stdlib harness (windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cargo run -p birddiskc -- test --json --dir tests --tag stdlib --engine vm
+          cargo run -p birddiskc -- test --json --dir tests --tag stdlib --engine native
 
   test-linux-arm64:
     runs-on: ubuntu-latest
