@@ -585,12 +585,14 @@ mod tests {
         assert_eq!(result, 2);
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_reports_div_by_zero() {
         let err = compile_and_run("rule main() -> i64:\n  yield 1 / 0.\nend\n").unwrap_err();
         assert_eq!(err.code, "E0402");
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_reports_null_deref() {
         let err = compile_and_run(
@@ -601,6 +603,7 @@ mod tests {
         assert_eq!(err.message, "Null dereference.");
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_trace_includes_call_stack() {
         let err = compile_and_run(
