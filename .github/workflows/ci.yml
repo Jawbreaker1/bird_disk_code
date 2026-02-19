@@ -34,4 +34,4 @@ jobs:
             -v "$PWD":/repo \
             -w /repo \
             rust:1.76 \
-            bash -lc "cargo test --workspace && cargo run -p birddiskc -- test --json --dir tests --tag stdlib"
+            bash -c "cargo test --workspace && cargo run -p birddiskc -- test --json --dir tests --tag stdlib"

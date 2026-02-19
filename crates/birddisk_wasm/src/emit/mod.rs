@@ -898,6 +898,7 @@ mod tests {
         assert!(after > before);
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_header_sanity_traps_invalid_kind() {
         let source = "rule main() -> i64:\n  yield 0.\nend\n";
@@ -926,6 +927,7 @@ mod tests {
         assert_eq!(store.data().last_trap, Some(super::TRAP_HEAP_HEADER));
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_header_sanity_traps_invalid_array_aux() {
         let source = "rule main() -> i64:\n  yield 0.\nend\n";
