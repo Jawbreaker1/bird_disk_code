@@ -687,6 +687,7 @@ mod tests {
         assert_eq!(result, 2);
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_rejects_string_to_i64_invalid() {
         let err = compile_and_run(
@@ -696,6 +697,7 @@ mod tests {
         assert_eq!(err.code, "E0400");
     }
 
+    #[cfg_attr(target_os = "windows", ignore = "wasmtime trap callback aborts on MSVC")]
     #[test]
     fn wasm_rejects_invalid_utf8_from_bytes() {
         let err = compile_and_run(

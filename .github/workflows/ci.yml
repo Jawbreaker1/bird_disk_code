@@ -33,5 +33,5 @@ jobs:
           docker run --rm --platform linux/arm64 \
             -v "$PWD":/repo \
             -w /repo \
-            rust:1.76 \
+            rust:1 \
             bash -c "cargo test --workspace && cargo run -p birddiskc -- test --json --dir tests --tag stdlib"
