@@ -180,7 +180,10 @@ mod tests {
             entry_path.to_str().unwrap(),
             "docs/fixtures/docgen/sample.bd",
         );
-        let expected = fs::read_to_string(expected_path).expect("read expected docs");
+        let normalized = normalized.replace("\r\n", "\n");
+        let expected = fs::read_to_string(expected_path)
+            .expect("read expected docs")
+            .replace("\r\n", "\n");
         assert_eq!(normalized.trim(), expected.trim());
     }
 
