@@ -31,7 +31,10 @@
 - std::env (VM + WASM + native)
 - std::json (VM + WASM + native)
 - std::channel typed channels (i64/bool/f64/u8/string/bytes) (VM + WASM + native)
-- std::thread spawn/join (VM; WASM/native currently emit compile-time diagnostics E0325/E0326)
+- std::thread spawn/join (VM + native; WASM emits compile-time diagnostic E0325)
+- std::net TCP (connect/listen/accept/read_line/read_exact/read_to_end/write_text/timeout/close + TcpPool get/put/close) (VM + native; WASM emits compile-time diagnostic E0326)
+- std::http minimal client module (GET/POST + status/headers parsing with Content-Length and chunked body decoding; EOF fallback when both are missing, VM + native)
+- VM deterministic thread scheduler mode (`--deterministic`) for stable concurrency fixtures
 - stdlib module loading + std::math (BirdDisk)
 - Project manifest + build workflow (`birddisk.json`, `birddiskc build`)
 - OO core (book + fields + methods, VM + WASM + native)

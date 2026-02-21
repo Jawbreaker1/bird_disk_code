@@ -1,7 +1,7 @@
 use super::NativeCompiler;
 use crate::error::{native_error, NativeError};
 use crate::program::{stdlib_signature, type_name};
-use birddisk_core::ast::{Expr, Type};
+use birddisk_core::ast::{Expr, ExprKind, Type};
 use cranelift_codegen::ir::{types, InstBuilder, Value};
 use cranelift_module::Module;
 
@@ -91,9 +91,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 .get(name)
                 .copied()
                 .ok_or_else(|| native_error(format!("missing function id for '{name}'.")))?;
-            let func_ref = self
-                .module
-                .declare_func_in_func(func_id, self.builder.func);
+            let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
             let mut call_args = Vec::with_capacity(args.len() + 1);
             call_args.push(self.rt_ptr);
             for (arg, param_ty) in args.iter().zip(sig.params.iter()) {
@@ -164,9 +162,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             .get(&full_name)
             .copied()
             .ok_or_else(|| native_error(format!("missing function id for '{full_name}'.")))?;
-        let func_ref = self
-            .module
-            .declare_func_in_func(func_id, self.builder.func);
+        let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
         let base_info = self
             .vars
             .get(base)
@@ -266,9 +262,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                         )));
                     }
                 }
-                let enum_info = self.enums.get(recv_name).ok_or_else(|| {
-                    native_error(format!("missing enum info for '{recv_name}'."))
-                })?;
+                let enum_info = self
+                    .enums
+                    .get(recv_name)
+                    .ok_or_else(|| native_error(format!("missing enum info for '{recv_name}'.")))?;
                 let ok_id = enum_info
                     .variants
                     .get("Ok")
@@ -277,18 +274,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .variants
                     .get("Closed")
                     .ok_or_else(|| native_error(format!("missing {recv_name}::Closed variant")))?;
-                let enum_id_val = self
-                    .builder
-                    .ins()
-                    .iconst(types::I64, enum_info.id as i64);
-                let ok_val = self
-                    .builder
-                    .ins()
-                    .iconst(types::I64, ok_id.id as i64);
-                let closed_val = self
-                    .builder
-                    .ins()
-                    .iconst(types::I64, closed_id.id as i64);
+                let enum_id_val = self.builder.ins().iconst(types::I64, enum_info.id as i64);
+                let ok_val = self.builder.ins().iconst(types::I64, ok_id.id as i64);
+                let closed_val = self.builder.ins().iconst(types::I64, closed_id.id as i64);
                 let result = match kind {
                     ChannelKind::I64 => self.call_runtime_value(
                         self.runtime.channel_recv_i64,
@@ -346,10 +334,8 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                         self.runtime.channel_close_f64,
                         &[self.rt_ptr, base_val],
                     ),
-                    ChannelKind::U8 => self.call_runtime_void(
-                        self.runtime.channel_close_u8,
-                        &[self.rt_ptr, base_val],
-                    ),
+                    ChannelKind::U8 => self
+                        .call_runtime_void(self.runtime.channel_close_u8, &[self.rt_ptr, base_val]),
                     ChannelKind::String => self.call_runtime_void(
                         self.runtime.channel_close_string,
                         &[self.rt_ptr, base_val],
@@ -375,6 +361,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         args: &[Expr],
         expected: Option<&Type>,
     ) -> Result<Option<Value>, NativeError> {
+        if name == "std::thread::spawn" {
+            return self.emit_thread_spawn(args, expected);
+        }
         let sig = stdlib_signature(name)
             .ok_or_else(|| native_error(format!("unknown function '{name}'.")))?;
         if sig.params.len() != args.len() {
@@ -398,10 +387,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             arg_vals.push(self.emit_expr(arg, Some(param_ty))?);
         }
         let value = match name {
-            "std::string::len" => Some(self.call_runtime_value(
-                self.runtime.string_len,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::string::len" => {
+                Some(self.call_runtime_value(self.runtime.string_len, &[self.rt_ptr, arg_vals[0]]))
+            }
             "std::string::concat" => Some(self.call_runtime_value(
                 self.runtime.string_concat,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
@@ -410,10 +398,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.string_eq,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::string::bytes" => Some(self.call_runtime_value(
-                self.runtime.string_bytes,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::string::bytes" => Some(
+                self.call_runtime_value(self.runtime.string_bytes, &[self.rt_ptr, arg_vals[0]]),
+            ),
             "std::string::slice" => Some(self.call_runtime_value(
                 self.runtime.string_slice,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1], arg_vals[2]],
@@ -430,22 +417,21 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.string_replace,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1], arg_vals[2]],
             )),
-            "std::string::from_bytes" => Some(self.call_runtime_value(
-                self.runtime.string_from_bytes,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::string::to_i64" => Some(self.call_runtime_value(
-                self.runtime.string_to_i64,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::string::from_i64" => Some(self.call_runtime_value(
-                self.runtime.string_from_i64,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::bytes::len" => Some(self.call_runtime_value(
-                self.runtime.bytes_len,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::string::from_bytes" => {
+                Some(self.call_runtime_value(
+                    self.runtime.string_from_bytes,
+                    &[self.rt_ptr, arg_vals[0]],
+                ))
+            }
+            "std::string::to_i64" => Some(
+                self.call_runtime_value(self.runtime.string_to_i64, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::string::from_i64" => Some(
+                self.call_runtime_value(self.runtime.string_from_i64, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::bytes::len" => {
+                Some(self.call_runtime_value(self.runtime.bytes_len, &[self.rt_ptr, arg_vals[0]]))
+            }
             "std::bytes::eq" => Some(self.call_runtime_value(
                 self.runtime.bytes_eq,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
@@ -466,58 +452,45 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.call_runtime_void(self.runtime.io_print, &[self.rt_ptr, arg_vals[0]]);
                 None
             }
-            "std::io::read_line" => Some(self.call_runtime_value(
-                self.runtime.io_read_line,
-                &[self.rt_ptr],
-            )),
-            "std::time::now_ms" => Some(self.call_runtime_value(
-                self.runtime.time_now_ms,
-                &[self.rt_ptr],
-            )),
-            "std::time::sleep_ms" => Some(self.call_runtime_value(
-                self.runtime.time_sleep_ms,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::profiler::uptime_ms" => Some(self.call_runtime_value(
-                self.runtime.profiler_uptime_ms,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::alloc_count" => Some(self.call_runtime_value(
-                self.runtime.profiler_alloc_count,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::bytes_allocated" => Some(self.call_runtime_value(
-                self.runtime.profiler_bytes_allocated,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::bytes_in_use" => Some(self.call_runtime_value(
-                self.runtime.profiler_bytes_in_use,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::peak_bytes_in_use" => Some(self.call_runtime_value(
-                self.runtime.profiler_peak_bytes_in_use,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::gc_runs" => Some(self.call_runtime_value(
-                self.runtime.profiler_gc_runs,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::last_freed" => Some(self.call_runtime_value(
-                self.runtime.profiler_last_freed,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::last_live" => Some(self.call_runtime_value(
-                self.runtime.profiler_last_live,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::last_freed_bytes" => Some(self.call_runtime_value(
-                self.runtime.profiler_last_freed_bytes,
-                &[self.rt_ptr],
-            )),
-            "std::profiler::last_live_bytes" => Some(self.call_runtime_value(
-                self.runtime.profiler_last_live_bytes,
-                &[self.rt_ptr],
-            )),
+            "std::io::read_line" => {
+                Some(self.call_runtime_value(self.runtime.io_read_line, &[self.rt_ptr]))
+            }
+            "std::time::now_ms" => {
+                Some(self.call_runtime_value(self.runtime.time_now_ms, &[self.rt_ptr]))
+            }
+            "std::time::sleep_ms" => Some(
+                self.call_runtime_value(self.runtime.time_sleep_ms, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::profiler::uptime_ms" => {
+                Some(self.call_runtime_value(self.runtime.profiler_uptime_ms, &[self.rt_ptr]))
+            }
+            "std::profiler::alloc_count" => {
+                Some(self.call_runtime_value(self.runtime.profiler_alloc_count, &[self.rt_ptr]))
+            }
+            "std::profiler::bytes_allocated" => {
+                Some(self.call_runtime_value(self.runtime.profiler_bytes_allocated, &[self.rt_ptr]))
+            }
+            "std::profiler::bytes_in_use" => {
+                Some(self.call_runtime_value(self.runtime.profiler_bytes_in_use, &[self.rt_ptr]))
+            }
+            "std::profiler::peak_bytes_in_use" => Some(
+                self.call_runtime_value(self.runtime.profiler_peak_bytes_in_use, &[self.rt_ptr]),
+            ),
+            "std::profiler::gc_runs" => {
+                Some(self.call_runtime_value(self.runtime.profiler_gc_runs, &[self.rt_ptr]))
+            }
+            "std::profiler::last_freed" => {
+                Some(self.call_runtime_value(self.runtime.profiler_last_freed, &[self.rt_ptr]))
+            }
+            "std::profiler::last_live" => {
+                Some(self.call_runtime_value(self.runtime.profiler_last_live, &[self.rt_ptr]))
+            }
+            "std::profiler::last_freed_bytes" => Some(
+                self.call_runtime_value(self.runtime.profiler_last_freed_bytes, &[self.rt_ptr]),
+            ),
+            "std::profiler::last_live_bytes" => {
+                Some(self.call_runtime_value(self.runtime.profiler_last_live_bytes, &[self.rt_ptr]))
+            }
             "std::rand::seed" => {
                 self.call_runtime_void(self.runtime.rand_seed, &[self.rt_ptr, arg_vals[0]]);
                 None
@@ -554,18 +527,16 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 );
                 None
             }
-            "std::fs::read_text" => Some(self.call_runtime_value(
-                self.runtime.fs_read_text,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::fs::read_text" => Some(
+                self.call_runtime_value(self.runtime.fs_read_text, &[self.rt_ptr, arg_vals[0]]),
+            ),
             "std::fs::write_text" => Some(self.call_runtime_value(
                 self.runtime.fs_write_text,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::fs::read_bytes" => Some(self.call_runtime_value(
-                self.runtime.fs_read_bytes,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::fs::read_bytes" => Some(
+                self.call_runtime_value(self.runtime.fs_read_bytes, &[self.rt_ptr, arg_vals[0]]),
+            ),
             "std::fs::write_bytes" => Some(self.call_runtime_value(
                 self.runtime.fs_write_bytes,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
@@ -574,72 +545,155 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.path_join,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::path::normalize" => Some(self.call_runtime_value(
-                self.runtime.path_normalize,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::path::basename" => Some(self.call_runtime_value(
-                self.runtime.path_basename,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::path::dirname" => Some(self.call_runtime_value(
-                self.runtime.path_dirname,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::env::args" => Some(self.call_runtime_value(
-                self.runtime.env_args,
-                &[self.rt_ptr],
-            )),
-            "std::env::get" => Some(self.call_runtime_value(
-                self.runtime.env_get,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::path::normalize" => Some(
+                self.call_runtime_value(self.runtime.path_normalize, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::path::basename" => Some(
+                self.call_runtime_value(self.runtime.path_basename, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::path::dirname" => Some(
+                self.call_runtime_value(self.runtime.path_dirname, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::env::args" => {
+                Some(self.call_runtime_value(self.runtime.env_args, &[self.rt_ptr]))
+            }
+            "std::env::get" => {
+                Some(self.call_runtime_value(self.runtime.env_get, &[self.rt_ptr, arg_vals[0]]))
+            }
             "std::env::set_var" => Some(self.call_runtime_value(
                 self.runtime.env_set,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::env::cwd" => Some(self.call_runtime_value(
-                self.runtime.env_cwd,
-                &[self.rt_ptr],
+            "std::env::cwd" => Some(self.call_runtime_value(self.runtime.env_cwd, &[self.rt_ptr])),
+            "std::env::set_cwd" => {
+                Some(self.call_runtime_value(self.runtime.env_set_cwd, &[self.rt_ptr, arg_vals[0]]))
+            }
+            "std::json::encode_i64" => Some(
+                self.call_runtime_value(self.runtime.json_encode_i64, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::json::encode_bool" => Some(
+                self.call_runtime_value(self.runtime.json_encode_bool, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::json::encode_string" => {
+                Some(self.call_runtime_value(
+                    self.runtime.json_encode_string,
+                    &[self.rt_ptr, arg_vals[0]],
+                ))
+            }
+            "std::json::decode_i64" => Some(
+                self.call_runtime_value(self.runtime.json_decode_i64, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::json::decode_bool" => Some(
+                self.call_runtime_value(self.runtime.json_decode_bool, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::json::decode_string" => {
+                Some(self.call_runtime_value(
+                    self.runtime.json_decode_string,
+                    &[self.rt_ptr, arg_vals[0]],
+                ))
+            }
+            "std::thread::join" => {
+                Some(self.call_runtime_value(self.runtime.thread_join, &[self.rt_ptr, arg_vals[0]]))
+            }
+            "std::net::connect" => {
+                let layout = self
+                    .books
+                    .get("TcpStream")
+                    .ok_or_else(|| native_error("missing layout for TcpStream"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.net_connect,
+                    &[self.rt_ptr, arg_vals[0], book_id],
+                ))
+            }
+            "std::net::listen" => {
+                let layout = self
+                    .books
+                    .get("TcpListener")
+                    .ok_or_else(|| native_error("missing layout for TcpListener"))?;
+                let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.net_listen,
+                    &[self.rt_ptr, arg_vals[0], book_id],
+                ))
+            }
+            "std::net::accept" => {
+                let layout = self
+                    .books
+                    .get("TcpStream")
+                    .ok_or_else(|| native_error("missing layout for TcpStream"))?;
+                let stream_book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.net_accept,
+                    &[self.rt_ptr, arg_vals[0], stream_book_id],
+                ))
+            }
+            "std::net::write_text" => Some(self.call_runtime_value(
+                self.runtime.net_write_text,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::env::set_cwd" => Some(self.call_runtime_value(
-                self.runtime.env_set_cwd,
-                &[self.rt_ptr, arg_vals[0]],
+            "std::net::read_line" => Some(
+                self.call_runtime_value(self.runtime.net_read_line, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::net::read_exact" => Some(self.call_runtime_value(
+                self.runtime.net_read_exact,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::json::encode_i64" => Some(self.call_runtime_value(
-                self.runtime.json_encode_i64,
-                &[self.rt_ptr, arg_vals[0]],
+            "std::net::read_to_end" => Some(
+                self.call_runtime_value(self.runtime.net_read_to_end, &[self.rt_ptr, arg_vals[0]]),
+            ),
+            "std::net::set_read_timeout_ms" => Some(self.call_runtime_value(
+                self.runtime.net_set_read_timeout_ms,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::json::encode_bool" => Some(self.call_runtime_value(
-                self.runtime.json_encode_bool,
-                &[self.rt_ptr, arg_vals[0]],
+            "std::net::close_stream" => {
+                self.call_runtime_void(self.runtime.net_close_stream, &[self.rt_ptr, arg_vals[0]]);
+                None
+            }
+            "std::net::close_listener" => {
+                self.call_runtime_void(
+                    self.runtime.net_close_listener,
+                    &[self.rt_ptr, arg_vals[0]],
+                );
+                None
+            }
+            "std::net::pool" => {
+                let layout = self
+                    .books
+                    .get("TcpPool")
+                    .ok_or_else(|| native_error("missing layout for TcpPool"))?;
+                let pool_book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.net_pool,
+                    &[self.rt_ptr, arg_vals[0], arg_vals[1], pool_book_id],
+                ))
+            }
+            "std::net::pool_get" => {
+                let layout = self
+                    .books
+                    .get("TcpStream")
+                    .ok_or_else(|| native_error("missing layout for TcpStream"))?;
+                let stream_book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+                Some(self.call_runtime_value(
+                    self.runtime.net_pool_get,
+                    &[self.rt_ptr, arg_vals[0], stream_book_id],
+                ))
+            }
+            "std::net::pool_put" => Some(self.call_runtime_value(
+                self.runtime.net_pool_put,
+                &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::json::encode_string" => Some(self.call_runtime_value(
-                self.runtime.json_encode_string,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::json::decode_i64" => Some(self.call_runtime_value(
-                self.runtime.json_decode_i64,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::json::decode_bool" => Some(self.call_runtime_value(
-                self.runtime.json_decode_bool,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
-            "std::json::decode_string" => Some(self.call_runtime_value(
-                self.runtime.json_decode_string,
-                &[self.rt_ptr, arg_vals[0]],
-            )),
+            "std::net::pool_close" => {
+                self.call_runtime_void(self.runtime.net_pool_close, &[self.rt_ptr, arg_vals[0]]);
+                None
+            }
             "std::channel::i64" => {
                 let layout = self
                     .books
                     .get("ChannelI64")
                     .ok_or_else(|| native_error("missing layout for ChannelI64"))?;
                 let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
-                Some(self.call_runtime_value(
-                    self.runtime.channel_i64,
-                    &[self.rt_ptr, book_id],
-                ))
+                Some(self.call_runtime_value(self.runtime.channel_i64, &[self.rt_ptr, book_id]))
             }
             "std::channel::bool" => {
                 let layout = self
@@ -647,10 +701,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .get("ChannelBool")
                     .ok_or_else(|| native_error("missing layout for ChannelBool"))?;
                 let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
-                Some(self.call_runtime_value(
-                    self.runtime.channel_bool,
-                    &[self.rt_ptr, book_id],
-                ))
+                Some(self.call_runtime_value(self.runtime.channel_bool, &[self.rt_ptr, book_id]))
             }
             "std::channel::f64" => {
                 let layout = self
@@ -658,10 +709,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .get("ChannelF64")
                     .ok_or_else(|| native_error("missing layout for ChannelF64"))?;
                 let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
-                Some(self.call_runtime_value(
-                    self.runtime.channel_f64,
-                    &[self.rt_ptr, book_id],
-                ))
+                Some(self.call_runtime_value(self.runtime.channel_f64, &[self.rt_ptr, book_id]))
             }
             "std::channel::u8" => {
                 let layout = self
@@ -669,10 +717,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .get("ChannelU8")
                     .ok_or_else(|| native_error("missing layout for ChannelU8"))?;
                 let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
-                Some(self.call_runtime_value(
-                    self.runtime.channel_u8,
-                    &[self.rt_ptr, book_id],
-                ))
+                Some(self.call_runtime_value(self.runtime.channel_u8, &[self.rt_ptr, book_id]))
             }
             "std::channel::string" => {
                 let layout = self
@@ -680,10 +725,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .get("ChannelString")
                     .ok_or_else(|| native_error("missing layout for ChannelString"))?;
                 let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
-                Some(self.call_runtime_value(
-                    self.runtime.channel_string,
-                    &[self.rt_ptr, book_id],
-                ))
+                Some(self.call_runtime_value(self.runtime.channel_string, &[self.rt_ptr, book_id]))
             }
             "std::channel::bytes" => {
                 let layout = self
@@ -691,13 +733,57 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     .get("ChannelBytes")
                     .ok_or_else(|| native_error("missing layout for ChannelBytes"))?;
                 let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
-                Some(self.call_runtime_value(
-                    self.runtime.channel_bytes,
-                    &[self.rt_ptr, book_id],
-                ))
+                Some(self.call_runtime_value(self.runtime.channel_bytes, &[self.rt_ptr, book_id]))
             }
             _ => return Err(native_error(format!("unknown function '{name}'."))),
         };
         Ok(value)
+    }
+
+    fn emit_thread_spawn(
+        &mut self,
+        args: &[Expr],
+        expected: Option<&Type>,
+    ) -> Result<Option<Value>, NativeError> {
+        if args.is_empty() {
+            return Err(native_error(
+                "std::thread::spawn expects at least 1 argument.".to_string(),
+            ));
+        }
+        if let Some(expected) = expected {
+            if expected != &Type::Book("Thread".to_string()) {
+                return Err(native_error(format!(
+                    "type mismatch: expected {}, got book.",
+                    type_name(expected),
+                )));
+            }
+        }
+        let entry_name = match &args[0].kind {
+            ExprKind::String(value) => value.clone(),
+            _ => {
+                return Err(native_error(
+                    "std::thread::spawn entry must be a string literal.".to_string(),
+                ))
+            }
+        };
+        let result = self
+            .emit_call(&entry_name, &args[1..], Some(&Type::I64))?
+            .ok_or_else(|| native_error("Thread entry rule must return i64.".to_string()))?;
+
+        let layout = self
+            .books
+            .get("Thread")
+            .ok_or_else(|| native_error("missing layout for Thread"))?;
+        let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
+        let field_count = self.builder.ins().iconst(types::I64, 0);
+        let thread_handle = self.call_runtime_value(
+            self.runtime.alloc_object,
+            &[self.rt_ptr, book_id, field_count],
+        );
+        self.call_runtime_void(
+            self.runtime.thread_store,
+            &[self.rt_ptr, thread_handle, result],
+        );
+        Ok(Some(thread_handle))
     }
 }

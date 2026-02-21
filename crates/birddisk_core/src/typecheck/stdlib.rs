@@ -43,6 +43,9 @@ impl<'a> Checker<'a> {
         let has_std_thread = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "thread"
         });
+        let has_std_net = program.imports.iter().any(|import| {
+            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "net"
+        });
         if has_std_string {
             self.insert_function("std::string::len", vec![Ty::String], Ty::I64);
             self.insert_function(
@@ -184,6 +187,9 @@ impl<'a> Checker<'a> {
         if has_std_thread {
             self.register_thread_stdlib();
         }
+        if has_std_net {
+            self.register_net_stdlib();
+        }
     }
 
     fn register_channel_stdlib(&mut self) {
@@ -256,6 +262,106 @@ impl<'a> Checker<'a> {
             "std::thread::join",
             vec![Ty::Book("Thread".to_string())],
             Ty::I64,
+        );
+    }
+
+    fn register_net_stdlib(&mut self) {
+        if !self.books.contains_key("TcpStream") {
+            self.books.insert(
+                "TcpStream".to_string(),
+                BookInfo {
+                    fields: HashMap::new(),
+                },
+            );
+        }
+        if !self.books.contains_key("TcpListener") {
+            self.books.insert(
+                "TcpListener".to_string(),
+                BookInfo {
+                    fields: HashMap::new(),
+                },
+            );
+        }
+        if !self.books.contains_key("TcpPool") {
+            self.books.insert(
+                "TcpPool".to_string(),
+                BookInfo {
+                    fields: HashMap::new(),
+                },
+            );
+        }
+        self.insert_function(
+            "std::net::connect",
+            vec![Ty::String],
+            Ty::Book("TcpStream".to_string()),
+        );
+        self.insert_function(
+            "std::net::listen",
+            vec![Ty::String],
+            Ty::Book("TcpListener".to_string()),
+        );
+        self.insert_function(
+            "std::net::accept",
+            vec![Ty::Book("TcpListener".to_string())],
+            Ty::Book("TcpStream".to_string()),
+        );
+        self.insert_function(
+            "std::net::write_text",
+            vec![Ty::Book("TcpStream".to_string()), Ty::String],
+            Ty::I64,
+        );
+        self.insert_function(
+            "std::net::read_line",
+            vec![Ty::Book("TcpStream".to_string())],
+            Ty::String,
+        );
+        self.insert_function(
+            "std::net::read_exact",
+            vec![Ty::Book("TcpStream".to_string()), Ty::I64],
+            Ty::String,
+        );
+        self.insert_function(
+            "std::net::read_to_end",
+            vec![Ty::Book("TcpStream".to_string())],
+            Ty::String,
+        );
+        self.insert_function(
+            "std::net::set_read_timeout_ms",
+            vec![Ty::Book("TcpStream".to_string()), Ty::I64],
+            Ty::I64,
+        );
+        self.insert_function(
+            "std::net::close_stream",
+            vec![Ty::Book("TcpStream".to_string())],
+            Ty::Void,
+        );
+        self.insert_function(
+            "std::net::close_listener",
+            vec![Ty::Book("TcpListener".to_string())],
+            Ty::Void,
+        );
+        self.insert_function(
+            "std::net::pool",
+            vec![Ty::String, Ty::I64],
+            Ty::Book("TcpPool".to_string()),
+        );
+        self.insert_function(
+            "std::net::pool_get",
+            vec![Ty::Book("TcpPool".to_string())],
+            Ty::Book("TcpStream".to_string()),
+        );
+        self.insert_function(
+            "std::net::pool_put",
+            vec![
+                Ty::Book("TcpPool".to_string()),
+                Ty::Book("TcpStream".to_string()),
+            ],
+            Ty::Bool,
+        );
+        self.insert_function(
+            "std::net::pool_close",
+            vec![Ty::Book("TcpPool".to_string())],
+            Ty::Void,
         );
     }
 

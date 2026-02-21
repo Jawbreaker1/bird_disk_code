@@ -37,7 +37,9 @@ pub(crate) struct TraceTable {
     pub(crate) ids: HashMap<String, i64>,
 }
 
-pub(crate) fn collect_function_sigs(program: &Program) -> Result<HashMap<String, FunctionSig>, NativeError> {
+pub(crate) fn collect_function_sigs(
+    program: &Program,
+) -> Result<HashMap<String, FunctionSig>, NativeError> {
     let mut functions = HashMap::new();
     for func in &program.functions {
         insert_function_sig(&mut functions, &func.name, func)?;
@@ -110,7 +112,8 @@ pub(crate) fn make_signature(
         sig.params.push(AbiParam::new(abi_type(&param.ty)));
     }
     if !matches!(function.return_type, Type::Void) {
-        sig.returns.push(AbiParam::new(abi_type(&function.return_type)));
+        sig.returns
+            .push(AbiParam::new(abi_type(&function.return_type)));
     }
     sig
 }
@@ -202,7 +205,10 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             return_type: Type::I64,
         }),
         "std::bytes::eq" => Some(FunctionSig {
-            params: vec![Type::Array(Box::new(Type::U8)), Type::Array(Box::new(Type::U8))],
+            params: vec![
+                Type::Array(Box::new(Type::U8)),
+                Type::Array(Box::new(Type::U8)),
+            ],
             return_type: Type::Bool,
         }),
         "std::bytes::slice" => Some(FunctionSig {
@@ -397,6 +403,69 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::Book("ChannelBytes".to_string()),
         }),
+        "std::thread::join" => Some(FunctionSig {
+            params: vec![Type::Book("Thread".to_string())],
+            return_type: Type::I64,
+        }),
+        "std::net::connect" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Book("TcpStream".to_string()),
+        }),
+        "std::net::listen" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Book("TcpListener".to_string()),
+        }),
+        "std::net::accept" => Some(FunctionSig {
+            params: vec![Type::Book("TcpListener".to_string())],
+            return_type: Type::Book("TcpStream".to_string()),
+        }),
+        "std::net::write_text" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string()), Type::String],
+            return_type: Type::I64,
+        }),
+        "std::net::read_line" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string())],
+            return_type: Type::String,
+        }),
+        "std::net::read_exact" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string()), Type::I64],
+            return_type: Type::String,
+        }),
+        "std::net::read_to_end" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string())],
+            return_type: Type::String,
+        }),
+        "std::net::set_read_timeout_ms" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string()), Type::I64],
+            return_type: Type::I64,
+        }),
+        "std::net::close_stream" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string())],
+            return_type: Type::Void,
+        }),
+        "std::net::close_listener" => Some(FunctionSig {
+            params: vec![Type::Book("TcpListener".to_string())],
+            return_type: Type::Void,
+        }),
+        "std::net::pool" => Some(FunctionSig {
+            params: vec![Type::String, Type::I64],
+            return_type: Type::Book("TcpPool".to_string()),
+        }),
+        "std::net::pool_get" => Some(FunctionSig {
+            params: vec![Type::Book("TcpPool".to_string())],
+            return_type: Type::Book("TcpStream".to_string()),
+        }),
+        "std::net::pool_put" => Some(FunctionSig {
+            params: vec![
+                Type::Book("TcpPool".to_string()),
+                Type::Book("TcpStream".to_string()),
+            ],
+            return_type: Type::Bool,
+        }),
+        "std::net::pool_close" => Some(FunctionSig {
+            params: vec![Type::Book("TcpPool".to_string())],
+            return_type: Type::Void,
+        }),
         _ => None,
     }
 }
@@ -457,6 +526,13 @@ pub(crate) fn build_book_layouts(
     let has_std_channel = program.imports.iter().any(|import| {
         import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
     });
+    let has_std_thread = program.imports.iter().any(|import| {
+        import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "thread"
+    });
+    let has_std_net = program
+        .imports
+        .iter()
+        .any(|import| import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "net");
     for (book_id, book) in program.books.iter().enumerate() {
         if books.contains_key(&book.name) {
             return Err(native_error(format!(
@@ -493,6 +569,35 @@ pub(crate) fn build_book_layouts(
             "ChannelString",
             "ChannelBytes",
         ] {
+            if books.contains_key(name) {
+                continue;
+            }
+            let book_id = ref_fields.len() as u32;
+            books.insert(
+                name.to_string(),
+                BookLayout {
+                    id: book_id,
+                    fields: Vec::new(),
+                    field_index: HashMap::new(),
+                },
+            );
+            ref_fields.push(Vec::new());
+        }
+    }
+    if has_std_thread && !books.contains_key("Thread") {
+        let book_id = ref_fields.len() as u32;
+        books.insert(
+            "Thread".to_string(),
+            BookLayout {
+                id: book_id,
+                fields: Vec::new(),
+                field_index: HashMap::new(),
+            },
+        );
+        ref_fields.push(Vec::new());
+    }
+    if has_std_net {
+        for name in ["TcpStream", "TcpListener", "TcpPool"] {
             if books.contains_key(name) {
                 continue;
             }
@@ -566,7 +671,10 @@ pub(crate) fn build_enum_layouts(
             );
             variants.insert(
                 "Closed".to_string(),
-                EnumVariantInfo { id: 1, payload: None },
+                EnumVariantInfo {
+                    id: 1,
+                    payload: None,
+                },
             );
             enums.insert(
                 name.to_string(),

@@ -1,0 +1,388 @@
+import std::net.
+import std::string.
+
+rule remove_scheme(url: string) -> string:
+  when std::string::index_of(url, "http://") == 0:
+    yield std::string::slice(url, 7, std::string::len(url) - 7).
+  otherwise:
+    throw "std::http supports only http:// URLs.".
+  end
+end
+
+rule host_port(url: string) -> string:
+  set rest: string = remove_scheme(url).
+  set slash: i64 = std::string::index_of(rest, "/").
+  when slash == -1:
+    yield rest.
+  otherwise:
+    yield std::string::slice(rest, 0, slash).
+  end
+end
+
+rule path(url: string) -> string:
+  set rest: string = remove_scheme(url).
+  set slash: i64 = std::string::index_of(rest, "/").
+  when slash == -1:
+    yield "/".
+  otherwise:
+    yield std::string::slice(rest, slash, std::string::len(rest) - slash).
+  end
+end
+
+rule host(url: string) -> string:
+  set hp: string = host_port(url).
+  set colon: i64 = std::string::index_of(hp, ":").
+  when colon == -1:
+    yield hp.
+  otherwise:
+    yield std::string::slice(hp, 0, colon).
+  end
+end
+
+rule port(url: string) -> i64:
+  set hp: string = host_port(url).
+  set colon: i64 = std::string::index_of(hp, ":").
+  when colon == -1:
+    yield 80.
+  otherwise:
+    set text: string = std::string::slice(hp, colon + 1, std::string::len(hp) - colon - 1).
+    yield std::string::to_i64(text).
+  end
+end
+
+rule address(url: string) -> string:
+  set left: string = std::string::concat(host(url), ":").
+  yield std::string::concat(left, std::string::from_i64(port(url))).
+end
+
+rule trim_left_spaces(text: string) -> string:
+  set idx: i64 = 0.
+  set n: i64 = std::string::len(text).
+  set scanning: bool = true.
+  repeat while scanning:
+    when idx >= n:
+      put scanning = false.
+    otherwise:
+      set ch: string = std::string::slice(text, idx, 1).
+      when std::string::eq(ch, " "):
+        put idx = idx + 1.
+      otherwise:
+        put scanning = false.
+      end
+    end
+  end
+  yield std::string::slice(text, idx, n - idx).
+end
+
+rule lower_ascii_char(ch: string) -> string:
+  set upper: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".
+  set idx: i64 = std::string::index_of(upper, ch).
+  when idx == -1:
+    yield ch.
+  otherwise:
+    set lower: string = "abcdefghijklmnopqrstuvwxyz".
+    yield std::string::slice(lower, idx, 1).
+  end
+end
+
+rule lower_ascii(text: string) -> string:
+  set idx: i64 = 0.
+  set n: i64 = std::string::len(text).
+  set out: string = "".
+  repeat while idx < n:
+    set ch: string = std::string::slice(text, idx, 1).
+    put out = std::string::concat(out, lower_ascii_char(ch)).
+    put idx = idx + 1.
+  end
+  yield out.
+end
+
+rule normalize_newlines(text: string) -> string:
+  set cr_code: u8 = 13.
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = cr_code.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  set crlf: string = std::string::concat(cr, "\n").
+  set lf_only: string = std::string::replace(text, crlf, "\n").
+  yield std::string::replace(lf_only, cr, "\n").
+end
+
+rule content_length_from_header_line(line: string) -> i64:
+  set prefix: string = "content-length:".
+  set line_lower: string = lower_ascii(line).
+  when std::string::index_of(line_lower, prefix) == 0:
+    set raw: string = std::string::slice(
+      line,
+      std::string::len(prefix),
+      std::string::len(line) - std::string::len(prefix)
+    ).
+    set cleaned: string = trim_left_spaces(raw).
+    yield std::string::to_i64(cleaned).
+  otherwise:
+    yield -1.
+  end
+end
+
+rule transfer_encoding_chunked_from_header_line(line: string) -> bool:
+  set prefix: string = "transfer-encoding:".
+  set line_lower: string = lower_ascii(line).
+  when std::string::index_of(line_lower, prefix) == 0:
+    set raw: string = std::string::slice(
+      line_lower,
+      std::string::len(prefix),
+      std::string::len(line_lower) - std::string::len(prefix)
+    ).
+    set cleaned: string = trim_left_spaces(raw).
+    yield std::string::contains(cleaned, "chunked").
+  otherwise:
+    yield false.
+  end
+end
+
+rule before_semicolon(text: string) -> string:
+  set semi: i64 = std::string::index_of(text, ";").
+  when semi == -1:
+    yield text.
+  otherwise:
+    yield std::string::slice(text, 0, semi).
+  end
+end
+
+rule hex_digit_value(ch: string) -> i64:
+  set idx: i64 = std::string::index_of("0123456789abcdef", ch).
+  when idx >= 0:
+    yield idx.
+  otherwise:
+    set upper: i64 = std::string::index_of("ABCDEF", ch).
+    when upper >= 0:
+      yield upper + 10.
+    otherwise:
+      yield -1.
+    end
+  end
+end
+
+rule parse_hex_i64(text: string) -> i64:
+  set n: i64 = std::string::len(text).
+  when n == 0:
+    throw "std::http invalid chunk size.".
+  otherwise:
+    set idx: i64 = 0.
+    set value: i64 = 0.
+    repeat while idx < n:
+      set ch: string = std::string::slice(text, idx, 1).
+      set digit: i64 = hex_digit_value(ch).
+      when digit < 0:
+        throw "std::http invalid chunk size.".
+      otherwise:
+        put value = value * 16 + digit.
+        put idx = idx + 1.
+      end
+    end
+    yield value.
+  end
+end
+
+rule chunk_size_from_line(line: string) -> i64:
+  set token0: string = before_semicolon(trim_left_spaces(line)).
+  set space: i64 = std::string::index_of(token0, " ").
+  when space == -1:
+    yield parse_hex_i64(token0).
+  otherwise:
+    yield parse_hex_i64(std::string::slice(token0, 0, space)).
+  end
+end
+
+rule crlf() -> string:
+  set cr_code: u8 = 13.
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = cr_code.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  yield std::string::concat(cr, "\n").
+end
+
+rule build_request(method: string, url: string, body_text: string) -> string:
+  set eol: string = crlf().
+  set req0: string = std::string::concat(method, " ").
+  set req1: string = std::string::concat(req0, path(url)).
+  set req2: string = std::string::concat(req1, " HTTP/1.1").
+  set req2b: string = std::string::concat(req2, eol).
+  set host0: string = std::string::concat("Host: ", host(url)).
+  set host1: string = std::string::concat(host0, eol).
+  set req3: string = std::string::concat(req2b, host1).
+  set conn0: string = std::string::concat("Connection: close", eol).
+  set req4: string = std::string::concat(req3, conn0).
+
+  when std::string::eq(method, "POST"):
+    set len0: string = std::string::concat(
+      "Content-Length: ",
+      std::string::from_i64(std::string::len(body_text))
+    ).
+    set len1: string = std::string::concat(len0, eol).
+    set req5: string = std::string::concat(req4, len1).
+    set req6: string = std::string::concat(req5, eol).
+    yield std::string::concat(req6, body_text).
+  otherwise:
+    yield std::string::concat(req4, eol).
+  end
+end
+
+rule request_with_timeout(method: string, url: string, body_text: string, timeout_ms: i64) -> string:
+  set stream: TcpStream = std::net::connect(address(url)).
+  set timeout_set: i64 = std::net::set_read_timeout_ms(stream, timeout_ms).
+  set wrote: i64 = std::net::write_text(stream, build_request(method, url, body_text)).
+  set status_line: string = std::net::read_line(stream).
+
+  set header_lines: string = "".
+  set content_length: i64 = -1.
+  set chunked: bool = false.
+  set reading_headers: bool = true.
+  repeat while reading_headers:
+    set line: string = std::net::read_line(stream).
+    when std::string::len(line) == 0:
+      put reading_headers = false.
+    otherwise:
+      set with_nl: string = std::string::concat(line, "\n").
+      put header_lines = std::string::concat(header_lines, with_nl).
+      set parsed_len: i64 = content_length_from_header_line(line).
+      when parsed_len >= 0:
+        put content_length = parsed_len.
+      otherwise:
+        set header_noop: i64 = 0.
+      end
+      set parsed_chunked: bool = transfer_encoding_chunked_from_header_line(line).
+      when parsed_chunked:
+        put chunked = true.
+      otherwise:
+        set header_noop2: i64 = 0.
+      end
+    end
+  end
+
+  set response_body: string = "".
+  when chunked:
+    set reading_chunks: bool = true.
+    repeat while reading_chunks:
+      set chunk_line: string = std::net::read_line(stream).
+      set chunk_size: i64 = chunk_size_from_line(chunk_line).
+      when chunk_size == 0:
+        set reading_trailers: bool = true.
+        repeat while reading_trailers:
+          set trailer_line: string = std::net::read_line(stream).
+          when std::string::len(trailer_line) == 0:
+            put reading_trailers = false.
+          otherwise:
+            set trailer_noop: i64 = 0.
+          end
+        end
+        put reading_chunks = false.
+      otherwise:
+        set chunk_text: string = std::net::read_exact(stream, chunk_size).
+        set chunk_term: string = std::net::read_line(stream).
+        when std::string::len(chunk_term) == 0:
+          when std::string::len(response_body) == 0:
+            put response_body = chunk_text.
+          otherwise:
+            put response_body = std::string::concat(response_body, chunk_text).
+          end
+        otherwise:
+          throw "std::http invalid chunk terminator.".
+        end
+      end
+    end
+  otherwise:
+    when content_length >= 0:
+      when content_length > 0:
+        put response_body = std::net::read_exact(stream, content_length).
+      otherwise:
+        set no_body: i64 = 0.
+      end
+    otherwise:
+      put response_body = std::net::read_to_end(stream).
+    end
+  end
+  std::net::close_stream(stream).
+  set out0: string = std::string::concat(status_line, "\n").
+  set out1: string = std::string::concat(out0, header_lines).
+  set out2: string = std::string::concat(out1, "\n").
+  set out3: string = std::string::concat(out2, response_body).
+  yield out3.
+end
+
+rule request(method: string, url: string, body_text: string) -> string:
+  yield request_with_timeout(method, url, body_text, 0).
+end
+
+rule get(url: string) -> string:
+  yield request_with_timeout("GET", url, "", 0).
+end
+
+rule post(url: string, body_text: string) -> string:
+  yield request_with_timeout("POST", url, body_text, 0).
+end
+
+rule get_with_timeout(url: string, timeout_ms: i64) -> string:
+  yield request_with_timeout("GET", url, "", timeout_ms).
+end
+
+rule post_with_timeout(url: string, body_text: string, timeout_ms: i64) -> string:
+  yield request_with_timeout("POST", url, body_text, timeout_ms).
+end
+
+rule status(response: string) -> i64:
+  set normalized: string = normalize_newlines(response).
+  set line_end: i64 = std::string::index_of(normalized, "\n").
+  when line_end == -1:
+    throw "std::http::status expected a status line.".
+  otherwise:
+    set first_line: string = std::string::slice(normalized, 0, line_end).
+    set space1: i64 = std::string::index_of(first_line, " ").
+    when space1 == -1:
+      throw "std::http::status expected an HTTP status line.".
+    otherwise:
+      set rest: string = std::string::slice(
+        first_line,
+        space1 + 1,
+        std::string::len(first_line) - space1 - 1
+      ).
+      set space2: i64 = std::string::index_of(rest, " ").
+      when space2 == -1:
+        yield std::string::to_i64(rest).
+      otherwise:
+        yield std::string::to_i64(std::string::slice(rest, 0, space2)).
+      end
+    end
+  end
+end
+
+rule headers(response: string) -> string:
+  set normalized: string = normalize_newlines(response).
+  set line_end: i64 = std::string::index_of(normalized, "\n").
+  set split: i64 = std::string::index_of(normalized, "\n\n").
+  when line_end == -1 || split == -1:
+    yield "".
+  otherwise:
+    set start: i64 = line_end + 1.
+    set len: i64 = split - start.
+    when len <= 0:
+      yield "".
+    otherwise:
+      yield std::string::slice(normalized, start, len).
+    end
+  end
+end
+
+rule body(response: string) -> string:
+  set normalized: string = normalize_newlines(response).
+  set split: i64 = std::string::index_of(normalized, "\n\n").
+  when split == -1:
+    yield "".
+  otherwise:
+    set start: i64 = split + 2.
+    when start >= std::string::len(normalized):
+      yield "".
+    otherwise:
+      yield std::string::slice(normalized, start, std::string::len(normalized) - start).
+    end
+  end
+end

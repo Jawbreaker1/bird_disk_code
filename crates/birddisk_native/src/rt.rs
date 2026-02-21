@@ -129,6 +129,22 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) channel_close_u8: FuncId,
     pub(crate) channel_close_string: FuncId,
     pub(crate) channel_close_bytes: FuncId,
+    pub(crate) thread_store: FuncId,
+    pub(crate) thread_join: FuncId,
+    pub(crate) net_connect: FuncId,
+    pub(crate) net_listen: FuncId,
+    pub(crate) net_accept: FuncId,
+    pub(crate) net_write_text: FuncId,
+    pub(crate) net_read_line: FuncId,
+    pub(crate) net_read_exact: FuncId,
+    pub(crate) net_read_to_end: FuncId,
+    pub(crate) net_set_read_timeout_ms: FuncId,
+    pub(crate) net_close_stream: FuncId,
+    pub(crate) net_close_listener: FuncId,
+    pub(crate) net_pool: FuncId,
+    pub(crate) net_pool_get: FuncId,
+    pub(crate) net_pool_put: FuncId,
+    pub(crate) net_pool_close: FuncId,
 }
 
 impl RuntimeFuncs {
@@ -139,8 +155,7 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
-        let root_pop =
-            declare_runtime_func(module, "bd_root_pop", &[types::I64, types::I64], &[])?;
+        let root_pop = declare_runtime_func(module, "bd_root_pop", &[types::I64, types::I64], &[])?;
         let root_set = declare_runtime_func(
             module,
             "bd_root_set",
@@ -150,16 +165,13 @@ impl RuntimeFuncs {
         let trace_push =
             declare_runtime_func(module, "bd_trace_push", &[types::I64, types::I64], &[])?;
         let trace_pop = declare_runtime_func(module, "bd_trace_pop", &[types::I64], &[])?;
-        let has_error =
-            declare_runtime_func(module, "bd_has_error", &[types::I64], &[types::I64])?;
+        let has_error = declare_runtime_func(module, "bd_has_error", &[types::I64], &[types::I64])?;
         let error_is_throw =
             declare_runtime_func(module, "bd_error_is_throw", &[types::I64], &[types::I64])?;
         let error_message =
             declare_runtime_func(module, "bd_error_message", &[types::I64], &[types::I64])?;
-        let clear_error =
-            declare_runtime_func(module, "bd_clear_error", &[types::I64], &[])?;
-        let throw_error =
-            declare_runtime_func(module, "bd_throw", &[types::I64, types::I64], &[])?;
+        let clear_error = declare_runtime_func(module, "bd_clear_error", &[types::I64], &[])?;
+        let throw_error = declare_runtime_func(module, "bd_throw", &[types::I64, types::I64], &[])?;
         let alloc_string = declare_runtime_func(
             module,
             "bd_alloc_string",
@@ -466,12 +478,7 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
-        let io_print = declare_runtime_func(
-            module,
-            "bd_io_print",
-            &[types::I64, types::I64],
-            &[],
-        )?;
+        let io_print = declare_runtime_func(module, "bd_io_print", &[types::I64, types::I64], &[])?;
         let io_read_line =
             declare_runtime_func(module, "bd_io_read_line", &[types::I64], &[types::I64])?;
         let time_now_ms =
@@ -482,8 +489,12 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
-        let profiler_uptime_ms =
-            declare_runtime_func(module, "bd_profiler_uptime_ms", &[types::I64], &[types::I64])?;
+        let profiler_uptime_ms = declare_runtime_func(
+            module,
+            "bd_profiler_uptime_ms",
+            &[types::I64],
+            &[types::I64],
+        )?;
         let profiler_alloc_count = declare_runtime_func(
             module,
             "bd_profiler_alloc_count",
@@ -614,12 +625,7 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
-        let env_args = declare_runtime_func(
-            module,
-            "bd_env_args",
-            &[types::I64],
-            &[types::I64],
-        )?;
+        let env_args = declare_runtime_func(module, "bd_env_args", &[types::I64], &[types::I64])?;
         let env_get = declare_runtime_func(
             module,
             "bd_env_get",
@@ -632,12 +638,7 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
-        let env_cwd = declare_runtime_func(
-            module,
-            "bd_env_cwd",
-            &[types::I64],
-            &[types::I64],
-        )?;
+        let env_cwd = declare_runtime_func(module, "bd_env_cwd", &[types::I64], &[types::I64])?;
         let env_set_cwd = declare_runtime_func(
             module,
             "bd_env_set_cwd",
@@ -680,18 +681,42 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[types::I64],
         )?;
-        let channel_i64 =
-            declare_runtime_func(module, "bd_channel_i64", &[types::I64, types::I64], &[types::I64])?;
-        let channel_bool =
-            declare_runtime_func(module, "bd_channel_bool", &[types::I64, types::I64], &[types::I64])?;
-        let channel_f64 =
-            declare_runtime_func(module, "bd_channel_f64", &[types::I64, types::I64], &[types::I64])?;
-        let channel_u8 =
-            declare_runtime_func(module, "bd_channel_u8", &[types::I64, types::I64], &[types::I64])?;
-        let channel_string =
-            declare_runtime_func(module, "bd_channel_string", &[types::I64, types::I64], &[types::I64])?;
-        let channel_bytes =
-            declare_runtime_func(module, "bd_channel_bytes", &[types::I64, types::I64], &[types::I64])?;
+        let channel_i64 = declare_runtime_func(
+            module,
+            "bd_channel_i64",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_bool = declare_runtime_func(
+            module,
+            "bd_channel_bool",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_f64 = declare_runtime_func(
+            module,
+            "bd_channel_f64",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_u8 = declare_runtime_func(
+            module,
+            "bd_channel_u8",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_string = declare_runtime_func(
+            module,
+            "bd_channel_string",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let channel_bytes = declare_runtime_func(
+            module,
+            "bd_channel_bytes",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
         let channel_send_i64 = declare_runtime_func(
             module,
             "bd_channel_send_i64",
@@ -764,14 +789,30 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
-        let channel_close_i64 =
-            declare_runtime_func(module, "bd_channel_close_i64", &[types::I64, types::I64], &[])?;
-        let channel_close_bool =
-            declare_runtime_func(module, "bd_channel_close_bool", &[types::I64, types::I64], &[])?;
-        let channel_close_f64 =
-            declare_runtime_func(module, "bd_channel_close_f64", &[types::I64, types::I64], &[])?;
-        let channel_close_u8 =
-            declare_runtime_func(module, "bd_channel_close_u8", &[types::I64, types::I64], &[])?;
+        let channel_close_i64 = declare_runtime_func(
+            module,
+            "bd_channel_close_i64",
+            &[types::I64, types::I64],
+            &[],
+        )?;
+        let channel_close_bool = declare_runtime_func(
+            module,
+            "bd_channel_close_bool",
+            &[types::I64, types::I64],
+            &[],
+        )?;
+        let channel_close_f64 = declare_runtime_func(
+            module,
+            "bd_channel_close_f64",
+            &[types::I64, types::I64],
+            &[],
+        )?;
+        let channel_close_u8 = declare_runtime_func(
+            module,
+            "bd_channel_close_u8",
+            &[types::I64, types::I64],
+            &[],
+        )?;
         let channel_close_string = declare_runtime_func(
             module,
             "bd_channel_close_string",
@@ -784,6 +825,98 @@ impl RuntimeFuncs {
             &[types::I64, types::I64],
             &[],
         )?;
+        let thread_store = declare_runtime_func(
+            module,
+            "bd_thread_store",
+            &[types::I64, types::I64, types::I64],
+            &[],
+        )?;
+        let thread_join = declare_runtime_func(
+            module,
+            "bd_thread_join",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_connect = declare_runtime_func(
+            module,
+            "bd_net_connect",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_listen = declare_runtime_func(
+            module,
+            "bd_net_listen",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_accept = declare_runtime_func(
+            module,
+            "bd_net_accept",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_write_text = declare_runtime_func(
+            module,
+            "bd_net_write_text",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_read_line = declare_runtime_func(
+            module,
+            "bd_net_read_line",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_read_exact = declare_runtime_func(
+            module,
+            "bd_net_read_exact",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_read_to_end = declare_runtime_func(
+            module,
+            "bd_net_read_to_end",
+            &[types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_set_read_timeout_ms = declare_runtime_func(
+            module,
+            "bd_net_set_read_timeout_ms",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_close_stream = declare_runtime_func(
+            module,
+            "bd_net_close_stream",
+            &[types::I64, types::I64],
+            &[],
+        )?;
+        let net_close_listener = declare_runtime_func(
+            module,
+            "bd_net_close_listener",
+            &[types::I64, types::I64],
+            &[],
+        )?;
+        let net_pool = declare_runtime_func(
+            module,
+            "bd_net_pool",
+            &[types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_pool_get = declare_runtime_func(
+            module,
+            "bd_net_pool_get",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_pool_put = declare_runtime_func(
+            module,
+            "bd_net_pool_put",
+            &[types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
+        let net_pool_close =
+            declare_runtime_func(module, "bd_net_pool_close", &[types::I64, types::I64], &[])?;
         Ok(Self {
             root_push,
             root_pop,
@@ -909,6 +1042,22 @@ impl RuntimeFuncs {
             channel_close_u8,
             channel_close_string,
             channel_close_bytes,
+            thread_store,
+            thread_join,
+            net_connect,
+            net_listen,
+            net_accept,
+            net_write_text,
+            net_read_line,
+            net_read_exact,
+            net_read_to_end,
+            net_set_read_timeout_ms,
+            net_close_stream,
+            net_close_listener,
+            net_pool,
+            net_pool_get,
+            net_pool_put,
+            net_pool_close,
         })
     }
 }

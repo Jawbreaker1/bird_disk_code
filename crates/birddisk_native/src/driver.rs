@@ -331,6 +331,31 @@ pub fn run_with_io(
         "bd_channel_close_bytes",
         runtime::bd_channel_close_bytes as *const u8,
     );
+    builder.symbol("bd_thread_store", runtime::bd_thread_store as *const u8);
+    builder.symbol("bd_thread_join", runtime::bd_thread_join as *const u8);
+    builder.symbol("bd_net_connect", runtime::bd_net_connect as *const u8);
+    builder.symbol("bd_net_listen", runtime::bd_net_listen as *const u8);
+    builder.symbol("bd_net_accept", runtime::bd_net_accept as *const u8);
+    builder.symbol("bd_net_write_text", runtime::bd_net_write_text as *const u8);
+    builder.symbol("bd_net_read_line", runtime::bd_net_read_line as *const u8);
+    builder.symbol("bd_net_read_exact", runtime::bd_net_read_exact as *const u8);
+    builder.symbol("bd_net_read_to_end", runtime::bd_net_read_to_end as *const u8);
+    builder.symbol(
+        "bd_net_set_read_timeout_ms",
+        runtime::bd_net_set_read_timeout_ms as *const u8,
+    );
+    builder.symbol(
+        "bd_net_close_stream",
+        runtime::bd_net_close_stream as *const u8,
+    );
+    builder.symbol(
+        "bd_net_close_listener",
+        runtime::bd_net_close_listener as *const u8,
+    );
+    builder.symbol("bd_net_pool", runtime::bd_net_pool as *const u8);
+    builder.symbol("bd_net_pool_get", runtime::bd_net_pool_get as *const u8);
+    builder.symbol("bd_net_pool_put", runtime::bd_net_pool_put as *const u8);
+    builder.symbol("bd_net_pool_close", runtime::bd_net_pool_close as *const u8);
     let mut module = JITModule::new(builder);
     let runtime_funcs = RuntimeFuncs::declare(&mut module)?;
     let (books, layout) = build_book_layouts(program)?;

@@ -4,11 +4,13 @@ mod env;
 mod fs;
 mod io;
 mod json;
+mod net;
 mod path;
 mod profiler;
 mod rand;
 mod string;
 mod test;
+mod thread;
 mod time;
 
 pub use bytes::{bd_bytes_contains, bd_bytes_eq, bd_bytes_index_of, bd_bytes_len, bd_bytes_slice};
@@ -27,6 +29,11 @@ pub use json::{
     bd_json_decode_bool, bd_json_decode_i64, bd_json_decode_string, bd_json_encode_bool,
     bd_json_encode_i64, bd_json_encode_string,
 };
+pub use net::{
+    bd_net_accept, bd_net_close_listener, bd_net_close_stream, bd_net_connect, bd_net_listen,
+    bd_net_pool, bd_net_pool_close, bd_net_pool_get, bd_net_pool_put, bd_net_read_exact,
+    bd_net_read_line, bd_net_read_to_end, bd_net_set_read_timeout_ms, bd_net_write_text,
+};
 pub use path::{bd_path_basename, bd_path_dirname, bd_path_join, bd_path_normalize};
 pub use profiler::{
     bd_profiler_alloc_count, bd_profiler_bytes_allocated, bd_profiler_bytes_in_use,
@@ -43,6 +50,7 @@ pub use string::{
 pub use test::{
     bd_test_assert, bd_test_assert_eq_bool, bd_test_assert_eq_i64, bd_test_assert_eq_string,
 };
+pub use thread::{bd_thread_join, bd_thread_store};
 pub use time::{bd_time_now_ms, bd_time_sleep_ms};
 
 use crate::rt_core::*;

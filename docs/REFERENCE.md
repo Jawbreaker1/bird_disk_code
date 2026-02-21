@@ -150,6 +150,10 @@ end
 - E0402: division/modulo by zero
 - E0403: array index out of bounds
 - E0404: uncaught throw
+- E0405: thread runtime error (invalid/joined handle misuse)
+- E0406: channel runtime error (invalid handle/kind mismatch)
+- E0407: channel recv would block
+- E0408: network runtime error (connect/listen/read/write/timeout/handle misuse)
 - E0400: runtime error (OOM, invalid UTF-8, etc.)
 
 See `docs/DIAGNOSTICS.md` for full error list.
@@ -260,8 +264,45 @@ See `docs/DIAGNOSTICS.md` for full error list.
 - `ChannelBytes::close() -> void`
 
 ### std::thread
-- `spawn(entry: string, args...) -> Thread` (VM only in current release)
-- `join(handle: Thread) -> i64` (VM only in current release)
+- `spawn(entry: string, args...) -> Thread` (VM + native; WASM rejects with E0325)
+  - VM deterministic mode (`--deterministic`) runs spawned work in FIFO scheduler order.
+- `join(handle: Thread) -> i64` (VM + native; WASM rejects with E0325)
+
+### std::net
+- `connect(addr: string) -> TcpStream` (VM + native; WASM rejects with E0326)
+- `listen(addr: string) -> TcpListener` (VM + native; WASM rejects with E0326)
+- `accept(listener: TcpListener) -> TcpStream` (VM + native; WASM rejects with E0326)
+- `write_text(stream: TcpStream, text: string) -> i64` (VM + native; WASM rejects with E0326)
+- `read_line(stream: TcpStream) -> string` (VM + native; WASM rejects with E0326)
+- `read_exact(stream: TcpStream, len: i64) -> string` (VM + native; WASM rejects with E0326)
+- `read_to_end(stream: TcpStream) -> string` (VM + native; WASM rejects with E0326)
+- `set_read_timeout_ms(stream: TcpStream, timeout_ms: i64) -> i64` (0 disables timeout)
+- `close_stream(stream: TcpStream) -> void`
+- `close_listener(listener: TcpListener) -> void`
+- `pool(addr: string, max_idle: i64) -> TcpPool` (VM + native; WASM rejects with E0326)
+- `pool_get(pool: TcpPool) -> TcpStream`
+- `pool_put(pool: TcpPool, stream: TcpStream) -> bool`
+- `pool_close(pool: TcpPool) -> void`
+
+### std::http (BirdDisk module)
+- `request(method: string, url: string, body_text: string) -> string`
+- `request_with_timeout(method: string, url: string, body_text: string, timeout_ms: i64) -> string`
+- `get(url: string) -> string`
+- `post(url: string, body_text: string) -> string`
+- `get_with_timeout(url: string, timeout_ms: i64) -> string`
+- `post_with_timeout(url: string, body_text: string, timeout_ms: i64) -> string`
+- `status(response: string) -> i64`
+- `headers(response: string) -> string`
+- `body(response: string) -> string`
+- Current scope:
+  - Supports `http://` URLs.
+  - Parses status line + headers, then prefers `Content-Length` for exact body reads.
+  - Emits requests with CRLF (`\r\n`) line endings and HTTP header/body separator.
+  - POST `Content-Length` is computed from `body_text` bytes only (no implicit trailing newline).
+  - Header-name matching for `Content-Length` and `Transfer-Encoding` is case-insensitive.
+  - Supports `Transfer-Encoding: chunked` decoding for chunked bodies.
+  - `status`/`headers`/`body` helpers normalize CRLF/CR response text to LF.
+  - If neither `Content-Length` nor chunked transfer encoding is present, falls back to exact EOF body reads.
 
 ### std::math (BirdDisk module)
 - `add(a: i64, b: i64) -> i64`
