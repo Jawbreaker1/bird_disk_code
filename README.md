@@ -77,6 +77,8 @@ Examples (start here)
 - [examples/enum_result.bd](examples/enum_result.bd) (enum variants + match)
 - [examples/floats.bd](examples/floats.bd) (f64 arithmetic + explicit cast)
 - [examples/channel_pipeline.bd](examples/channel_pipeline.bd) (typed channels + recv loop across VM/WASM/native)
+- [examples/net_tcp_echo.bd](examples/net_tcp_echo.bd) (TCP listener/client roundtrip over `std::net`; VM/native)
+- [examples/http_local_get.bd](examples/http_local_get.bd) (local HTTP GET over `std::http`; VM/native)
 - [examples/terminal_calculator.bd](examples/terminal_calculator.bd) (terminal IO + operator dispatch)
 - [examples/yahtzee/](examples/yahtzee/) (multi-file ASCII Yahtzee demo; VM/WASM/native)
 

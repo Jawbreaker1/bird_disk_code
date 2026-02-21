@@ -442,6 +442,22 @@ rule main() -> i64:
 end
 ```
 
+## 27) TCP loopback with std::net (VM/native)
+Runnable file: `examples/net_tcp_echo.bd` (spawns a local TCP server thread and a client that exchanges `ping`/`pong`).
+```sh
+cargo run -p birddiskc -- run examples/net_tcp_echo.bd --engine vm --json
+cargo run -p birddiskc -- run examples/net_tcp_echo.bd --engine native --json
+```
+Note: requires localhost socket bind permissions.
+
+## 28) Local HTTP GET with std::http (VM/native)
+Runnable file: `examples/http_local_get.bd` (spawns a local server and performs `std::http::get`, `status`, `headers`, and `body` parsing).
+```sh
+cargo run -p birddiskc -- run examples/http_local_get.bd --engine vm --json
+cargo run -p birddiskc -- run examples/http_local_get.bd --engine native --json
+```
+Note: requires localhost socket bind permissions.
+
 ---
 
 Notes:

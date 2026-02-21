@@ -1,0 +1,49 @@
+import std::io.
+import std::net.
+import std::string.
+import std::thread.
+import std::time.
+
+rule server(port: i64) -> i64:
+  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
+  set listener: TcpListener = std::net::listen(addr).
+  set stream: TcpStream = std::net::accept(listener).
+  set line: string = std::net::read_line(stream).
+  set wrote: i64 = 0.
+  when std::string::eq(line, "ping"):
+    put wrote = std::net::write_text(stream, "pong\n").
+  otherwise:
+    put wrote = std::net::write_text(stream, "bad\n").
+  end
+  std::net::close_stream(stream).
+  std::net::close_listener(listener).
+  yield wrote.
+end
+
+rule client(port: i64) -> i64:
+  set ignored: i64 = std::time::sleep_ms(30).
+  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
+  set stream: TcpStream = std::net::connect(addr).
+  set sent: i64 = std::net::write_text(stream, "ping\n").
+  set line: string = std::net::read_line(stream).
+  std::net::close_stream(stream).
+  std::io::print(std::string::concat("tcp reply: ", line)).
+  std::io::print("\n").
+  when std::string::eq(line, "pong"):
+    yield sent.
+  otherwise:
+    yield -1.
+  end
+end
+
+rule main() -> i64:
+  set port: i64 = 18081.
+  set t: Thread = std::thread::spawn("server", port).
+  set client_ok: i64 = client(port).
+  set server_wrote: i64 = std::thread::join(t).
+  when client_ok > 0 && server_wrote > 0:
+    yield 1.
+  otherwise:
+    yield -1.
+  end
+end
