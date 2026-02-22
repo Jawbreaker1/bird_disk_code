@@ -252,6 +252,13 @@ fn native_runs_thread_net_server_roundtrip_i64_arg() {
 }
 
 #[test]
+fn native_runs_thread_net_worker_stream_i64_args() {
+    let source = "import std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule worker(stream: TcpStream, delay_ms: i64) -> i64:\n  set slept: i64 = std::time::sleep_ms(delay_ms).\n  set wrote: i64 = std::net::write_text(stream, \"ok\\n\").\n  std::net::close_stream(stream).\n  when slept >= 0:\n    yield wrote.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set listener: TcpListener = std::net::listen(\"127.0.0.1:0\").\n  set addr: string = std::net::listener_addr(listener).\n  set client: TcpStream = std::net::connect(addr).\n  set server: TcpStream = std::net::accept(listener).\n  set before: i64 = std::time::now_ms().\n  set t: Thread = std::thread::spawn(\"worker\", server, 180).\n  set after: i64 = std::time::now_ms().\n  set recv: string = std::net::read_line(client).\n  std::net::close_stream(client).\n  std::net::close_listener(listener).\n  set done: i64 = std::thread::join(t).\n  set delta: i64 = after - before.\n  when done > 0 && delta >= 0 && delta < 120 && std::string::eq(recv, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+    let result = run_source(source);
+    assert_eq!(result, 1);
+}
+
+#[test]
 fn native_runs_thread_channel_roundtrip() {
     let source = "import std::thread.\nimport std::channel.\nrule worker(ch: ChannelI64) -> i64:\n  set ok: bool = ch::send(9).\n  when ok:\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n\nrule main() -> i64:\n  set ch: ChannelI64 = std::channel::i64().\n  set t: Thread = std::thread::spawn(\"worker\", ch).\n  set done: i64 = std::thread::join(t).\n  set recv: RecvI64 = ch::recv().\n  match recv:\n    case RecvI64::Ok(v):\n      yield done + v.\n    case RecvI64::Closed:\n      yield -1.\n    otherwise:\n      yield -2.\n  end\nend\n";
     let result = run_source(source);

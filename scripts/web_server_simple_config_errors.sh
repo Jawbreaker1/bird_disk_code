@@ -63,4 +63,21 @@ port 18080
 max_requests nope" \
   "runtime error|to_i64|i64"
 
+run_expect_fail \
+  "invalid_mode" \
+  "host 127.0.0.1
+port 18080
+max_requests 200
+mode weird" \
+  "Invalid mode:"
+
+run_expect_fail \
+  "invalid_workers" \
+  "host 127.0.0.1
+port 18080
+max_requests 200
+mode threaded
+workers 0" \
+  "Invalid workers"
+
 echo "web_server_simple config error-path checks ok"

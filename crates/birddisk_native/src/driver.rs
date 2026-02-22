@@ -341,6 +341,10 @@ pub fn run_with_io(
         "bd_thread_spawn_i64_1",
         runtime::bd_thread_spawn_i64_1 as *const u8,
     );
+    builder.symbol(
+        "bd_thread_spawn_i64_stream_i64_2",
+        runtime::bd_thread_spawn_i64_stream_i64_2 as *const u8,
+    );
     builder.symbol("bd_net_connect", runtime::bd_net_connect as *const u8);
     builder.symbol("bd_net_listen", runtime::bd_net_listen as *const u8);
     builder.symbol(

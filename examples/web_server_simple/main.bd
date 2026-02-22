@@ -3,6 +3,7 @@ import std::fs.
 import std::io.
 import std::net.
 import std::string.
+import std::thread.
 
 rule build_response(
   status_code: i64,
@@ -21,6 +22,13 @@ rule build_response(
   set head3: string = std::string::concat(len0, eol).
   set head: string = std::string::concat(std::string::concat(head0, head2), std::string::concat(head3, eol)).
   yield std::string::concat(head, body).
+end
+
+rule http_eol() -> string:
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  yield std::string::concat(cr, "\n").
 end
 
 rule route_path(request_line: string) -> string:
@@ -106,6 +114,25 @@ rule config_value(text: string, key: string) -> string:
   end
 end
 
+rule config_value_or(text: string, key: string, fallback: string) -> string:
+  set needle: string = std::string::concat(key, " ").
+  set idx: i64 = std::string::index_of(text, needle).
+  when idx == -1:
+    yield fallback.
+  otherwise:
+    set value_start: i64 = idx + std::string::len(needle).
+    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
+    set line_end: i64 = std::string::index_of(tail, "\n").
+    set line: string = "".
+    when line_end == -1:
+      put line = tail.
+    otherwise:
+      put line = std::string::slice(tail, 0, line_end).
+    end
+    yield trim_trailing_cr(line).
+  end
+end
+
 rule config_host(text: string) -> string:
   yield config_value(text, "host").
 end
@@ -118,6 +145,25 @@ end
 rule config_max_requests(text: string) -> i64:
   set raw: string = config_value(text, "max_requests").
   yield std::string::to_i64(raw).
+end
+
+rule config_mode(text: string) -> string:
+  set mode: string = config_value_or(text, "mode", "single").
+  when std::string::eq(mode, "single") || std::string::eq(mode, "threaded"):
+    yield mode.
+  otherwise:
+    throw std::string::concat("Invalid mode: ", mode).
+  end
+end
+
+rule config_workers(text: string) -> i64:
+  set raw: string = config_value_or(text, "workers", "4").
+  set value: i64 = std::string::to_i64(raw).
+  when value > 0:
+    yield value.
+  otherwise:
+    throw "Invalid workers: must be > 0".
+  end
 end
 
 rule route_file(path: string) -> string:
@@ -148,6 +194,30 @@ rule route_file(path: string) -> string:
   end
 end
 
+rule route_code(path: string) -> i64:
+  when std::string::eq(path, "/") || std::string::eq(path, "/hello"):
+    yield 1.
+  otherwise:
+    when std::string::eq(path, "/features"):
+      yield 2.
+    otherwise:
+      when std::string::eq(path, "/about"):
+        yield 3.
+      otherwise:
+        when std::string::eq(path, "/style.css"):
+          yield 4.
+        otherwise:
+          when std::string::eq(path, "/app.js"):
+            yield 5.
+          otherwise:
+            yield 0.
+          end
+        end
+      end
+    end
+  end
+end
+
 rule content_type_for_file(file_name: string) -> string:
   when std::string::eq(file_name, "style.css"):
     yield "text/css; charset=utf-8".
@@ -166,112 +236,275 @@ rule read_public_file(file_name: string) -> string:
   yield std::fs::read_text(full).
 end
 
+rule is_threaded_candidate(method: string, path: string) -> bool:
+  when !std::string::eq(method, "GET"):
+    yield false.
+  otherwise:
+    when std::string::eq(path, "/api/status") || std::string::eq(path, "/health") || std::string::eq(path, "/shutdown"):
+      yield false.
+    otherwise:
+      yield true.
+    end
+  end
+end
+
+rule serve_static_route_stream(stream: TcpStream, route: i64) -> i64:
+  set status: i64 = 200.
+  set reason: string = "OK".
+  set content_type: string = "text/html; charset=utf-8".
+  set file_name: string = "index.html".
+
+  when route == 1:
+    put file_name = "index.html".
+  otherwise:
+    when route == 2:
+      put file_name = "features.html".
+    otherwise:
+      when route == 3:
+        put file_name = "about.html".
+      otherwise:
+        when route == 4:
+          put file_name = "style.css".
+        otherwise:
+          when route == 5:
+            put file_name = "app.js".
+          otherwise:
+            put status = 404.
+            put reason = "Not Found".
+            put file_name = "404.html".
+          end
+        end
+      end
+    end
+  end
+
+  set body: string = "".
+  try:
+    put content_type = content_type_for_file(file_name).
+    put body = read_public_file(file_name).
+  catch read_error:
+    put status = 500.
+    put reason = "Internal Server Error".
+    put content_type = "text/plain; charset=utf-8".
+    put body = "failed to read asset\n".
+  end
+
+  set response: string = build_response(status, reason, content_type, body, http_eol()).
+  set wrote: i64 = std::net::write_text(stream, response).
+  std::net::close_stream(stream).
+
+  when wrote > 0:
+    yield 1.
+  otherwise:
+    yield -1.
+  end
+end
+
+rule serve_request_inline(stream: TcpStream, method: string, path: string, served: i64) -> i64:
+  set status: i64 = 200.
+  set reason: string = "OK".
+  set content_type: string = "text/html; charset=utf-8".
+  set body: string = "".
+  set shutdown_requested: bool = false.
+
+  when std::string::eq(method, "GET"):
+    when std::string::eq(path, "/api/status"):
+      set served_text: string = std::string::from_i64(served).
+      put content_type = "application/json; charset=utf-8".
+      put body = std::string::concat("{\"ok\":true,\"served\":", std::string::concat(served_text, "}")).
+    otherwise:
+      when std::string::eq(path, "/health"):
+        put content_type = "text/plain; charset=utf-8".
+        put body = "ok\n".
+      otherwise:
+        when std::string::eq(path, "/shutdown"):
+          put content_type = "text/plain; charset=utf-8".
+          put body = "shutting down\n".
+          put shutdown_requested = true.
+        otherwise:
+          set file_name: string = route_file(path).
+          when std::string::len(file_name) > 0:
+            try:
+              put content_type = content_type_for_file(file_name).
+              put body = read_public_file(file_name).
+            catch read_error:
+              put status = 500.
+              put reason = "Internal Server Error".
+              put content_type = "text/plain; charset=utf-8".
+              put body = "failed to read asset\n".
+            end
+          otherwise:
+            put status = 404.
+            put reason = "Not Found".
+            put content_type = "text/html; charset=utf-8".
+            try:
+              put body = read_public_file("404.html").
+            catch missing_error:
+              put content_type = "text/plain; charset=utf-8".
+              put body = "not found\n".
+            end
+          end
+        end
+      end
+    end
+  otherwise:
+    put status = 405.
+    put reason = "Method Not Allowed".
+    put content_type = "text/plain; charset=utf-8".
+    put body = "method not allowed\n".
+  end
+
+  set response: string = build_response(status, reason, content_type, body, http_eol()).
+  set wrote: i64 = std::net::write_text(stream, response).
+  std::net::close_stream(stream).
+
+  when wrote <= 0:
+    yield -1.
+  otherwise:
+    when shutdown_requested:
+      yield 2.
+    otherwise:
+      yield 1.
+    end
+  end
+end
+
 rule main() -> i64:
   set cfg: string = config_text().
   set host: string = config_host(cfg).
   set port: i64 = config_port(cfg).
   set max_requests: i64 = config_max_requests(cfg).
+  set mode: string = config_mode(cfg).
+  set workers: i64 = config_workers(cfg).
+
+  set threaded_mode: bool = std::string::eq(mode, "threaded").
+  set worker_cap: i64 = 1.
+  when threaded_mode:
+    put worker_cap = workers.
+  otherwise:
+    put worker_cap = 1.
+  end
+
   set addr: string = std::string::concat(std::string::concat(host, ":"), std::string::from_i64(port)).
   set listener: TcpListener = std::net::listen(addr).
   set listen_msg: string = std::string::concat("web server listening on http://", addr).
   std::io::print(listen_msg).
   std::io::print("\n").
 
-  set cr_bytes: u8[] = array(1).
-  put cr_bytes[0] = 13.
-  set cr: string = std::string::from_bytes(cr_bytes).
-  set eol: string = std::string::concat(cr, "\n").
-
   set served: i64 = 0.
   set running: bool = true.
   set failed: bool = false.
 
-  repeat while running:
-    set stream: TcpStream = std::net::accept(listener).
-    set request_line: string = std::net::read_line(stream).
+  when threaded_mode:
+    set pending_threads: Thread[] = array(worker_cap).
+    set pending_paths: string[] = array(worker_cap).
+    set queue_head: i64 = 0.
+    set queue_tail: i64 = 0.
+    set pending_count: i64 = 0.
 
-    set reading: bool = true.
-    repeat while reading:
-      set line: string = std::net::read_line(stream).
-      when std::string::len(line) == 0:
-        put reading = false.
-      otherwise:
-        put reading = true.
-      end
-    end
-
-    set method: string = request_method(request_line).
-    set path: string = route_path(request_line).
-
-    set status: i64 = 200.
-    set reason: string = "OK".
-    set content_type: string = "text/html; charset=utf-8".
-    set body: string = "".
-
-    when std::string::eq(method, "GET"):
-      when std::string::eq(path, "/api/status"):
-        set served_text: string = std::string::from_i64(served).
-        put content_type = "application/json; charset=utf-8".
-        put body = std::string::concat("{\"ok\":true,\"served\":", std::string::concat(served_text, "}")).
-      otherwise:
-        when std::string::eq(path, "/health"):
-          put content_type = "text/plain; charset=utf-8".
-          put body = "ok\n".
+    repeat while running:
+      when pending_count >= worker_cap:
+        set joined_path: string = pending_paths[queue_head].
+        set joined_done: i64 = std::thread::join(pending_threads[queue_head]).
+        put queue_head = (queue_head + 1) % worker_cap.
+        put pending_count = pending_count - 1.
+        when joined_done <= 0:
+          put failed = true.
+          put running = false.
         otherwise:
-          when std::string::eq(path, "/shutdown"):
-            put content_type = "text/plain; charset=utf-8".
-            put body = "shutting down\n".
+          put served = served + 1.
+          std::io::print(std::string::concat("served path: ", joined_path)).
+          std::io::print("\n").
+        end
+      otherwise:
+        set stream: TcpStream = std::net::accept(listener).
+        set request_line: string = std::net::read_line(stream).
+
+        set reading: bool = true.
+        repeat while reading:
+          set line: string = std::net::read_line(stream).
+          when std::string::len(line) == 0:
+            put reading = false.
+          otherwise:
+            put reading = true.
+          end
+        end
+
+        set method: string = request_method(request_line).
+        set path: string = route_path(request_line).
+        set thread_candidate: bool = is_threaded_candidate(method, path).
+
+        when thread_candidate:
+          set route: i64 = route_code(path).
+          set t: Thread = std::thread::spawn("serve_static_route_stream", stream, route).
+          put pending_threads[queue_tail] = t.
+          put pending_paths[queue_tail] = path.
+          put queue_tail = (queue_tail + 1) % worker_cap.
+          put pending_count = pending_count + 1.
+        otherwise:
+          set outcome: i64 = serve_request_inline(stream, method, path, served).
+          when outcome <= 0:
+            put failed = true.
             put running = false.
           otherwise:
-            set file_name: string = route_file(path).
-            when std::string::len(file_name) > 0:
-              try:
-                put content_type = content_type_for_file(file_name).
-                put body = read_public_file(file_name).
-              catch read_error:
-                put status = 500.
-                put reason = "Internal Server Error".
-                put content_type = "text/plain; charset=utf-8".
-                put body = "failed to read asset\n".
-              end
-            otherwise:
-              put status = 404.
-              put reason = "Not Found".
-              put content_type = "text/html; charset=utf-8".
-              try:
-                put body = read_public_file("404.html").
-              catch missing_error:
-                put content_type = "text/plain; charset=utf-8".
-                put body = "not found\n".
-              end
-            end
+            put served = served + 1.
+            std::io::print(std::string::concat("served path: ", path)).
+            std::io::print("\n").
+            set keep_after_outcome: bool = running && outcome != 2.
+            put running = keep_after_outcome.
           end
         end
       end
-    otherwise:
-      put status = 405.
-      put reason = "Method Not Allowed".
-      put content_type = "text/plain; charset=utf-8".
-      put body = "method not allowed\n".
+
+      set keep_after_limit_threaded: bool = running && served < max_requests.
+      put running = keep_after_limit_threaded.
     end
 
-    set response: string = build_response(status, reason, content_type, body, eol).
-    set wrote: i64 = std::net::write_text(stream, response).
-    std::net::close_stream(stream).
-    put served = served + 1.
-
-    set write_failed: bool = wrote <= 0.
-    when write_failed:
-      put failed = true.
-      put running = false.
-    otherwise:
-      std::io::print(std::string::concat("served path: ", path)).
-      std::io::print("\n").
+    repeat while pending_count > 0:
+      set drained_path: string = pending_paths[queue_head].
+      set drained_done: i64 = std::thread::join(pending_threads[queue_head]).
+      put queue_head = (queue_head + 1) % worker_cap.
+      put pending_count = pending_count - 1.
+      when drained_done <= 0:
+        put failed = true.
+      otherwise:
+        put served = served + 1.
+        std::io::print(std::string::concat("served path: ", drained_path)).
+        std::io::print("\n").
+      end
     end
+  otherwise:
+    repeat while running:
+      set stream_single: TcpStream = std::net::accept(listener).
+      set request_line_single: string = std::net::read_line(stream_single).
 
-    set reached_limit: bool = served >= max_requests.
-    set keep_running: bool = running && !reached_limit.
-    put running = keep_running.
+      set reading_single: bool = true.
+      repeat while reading_single:
+        set line_single: string = std::net::read_line(stream_single).
+        when std::string::len(line_single) == 0:
+          put reading_single = false.
+        otherwise:
+          put reading_single = true.
+        end
+      end
+
+      set method_single: string = request_method(request_line_single).
+      set path_single: string = route_path(request_line_single).
+      set outcome_single: i64 = serve_request_inline(stream_single, method_single, path_single, served).
+      when outcome_single <= 0:
+        put failed = true.
+        put running = false.
+      otherwise:
+        put served = served + 1.
+        std::io::print(std::string::concat("served path: ", path_single)).
+        std::io::print("\n").
+        set keep_after_outcome_single: bool = running && outcome_single != 2.
+        put running = keep_after_outcome_single.
+      end
+
+      set keep_after_limit_single: bool = running && served < max_requests.
+      put running = keep_after_limit_single.
+    end
   end
 
   std::net::close_listener(listener).

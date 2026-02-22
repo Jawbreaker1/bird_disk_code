@@ -765,7 +765,7 @@ impl<'a> Checker<'a> {
                     self.file,
                     arg.span,
                     vec![
-                        "Sendable types are i64, f64, bool, u8, string, and channel handles."
+                        "Sendable types are i64, f64, bool, u8, string, TcpStream, and channel handles."
                             .to_string(),
                     ],
                     vec!["SPEC.md#6-5-function-calls".to_string()],
@@ -790,6 +790,7 @@ impl<'a> Checker<'a> {
                     | "ChannelU8"
                     | "ChannelString"
                     | "ChannelBytes"
+                    | "TcpStream"
             ),
             Ty::Void | Ty::Array(_) | Ty::Enum(_) => false,
         }

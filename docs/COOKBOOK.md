@@ -473,6 +473,8 @@ cat examples/web_server_simple/web_server_simple.conf
 # host 127.0.0.1
 # port 18080
 # max_requests 200
+# mode single
+# workers 4
 
 # terminal 1
 cargo run -p birddiskc -- run examples/web_server_simple/main.bd --engine native
@@ -490,6 +492,9 @@ curl -i http://127.0.0.1:18080/shutdown
 
 # automated native smoke checks
 ./scripts/web_server_simple_smoke.sh
+
+# threaded-mode smoke checks
+./scripts/web_server_simple_threaded_smoke.sh
 
 # config validation/error-path checks
 ./scripts/web_server_simple_config_errors.sh

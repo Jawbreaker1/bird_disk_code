@@ -3,6 +3,7 @@ use crate::TraceFrame;
 
 type EntryI64_0 = extern "C-unwind" fn(i64) -> i64;
 type EntryI64_1 = extern "C-unwind" fn(i64, i64) -> i64;
+type EntryI64_2 = extern "C-unwind" fn(i64, i64, i64) -> i64;
 
 fn thread_handle_value(rt: &Runtime, raw: u64, op: &'static str) -> Option<HeapHandle> {
     let handle = heap_handle(rt, raw)?;
@@ -16,13 +17,12 @@ fn thread_handle_value(rt: &Runtime, raw: u64, op: &'static str) -> Option<HeapH
 
 fn run_thread_entry<F>(layout: Vec<Vec<usize>>, trace_frames: Vec<TraceFrame>, call: F) -> ThreadOutcome
 where
-    F: FnOnce(i64) -> i64,
+    F: FnOnce(&mut Runtime) -> i64,
 {
     let mut child = Runtime::new();
     child.set_layout(layout);
     child.set_trace(trace_frames);
-    let child_ptr = (&mut child as *mut Runtime as usize) as i64;
-    let result = call(child_ptr);
+    let result = call(&mut child);
     match child.take_error() {
         Some(trap) => ThreadOutcome::Trap(NativeTrap {
             code: trap.code,
@@ -72,7 +72,12 @@ pub extern "C-unwind" fn bd_thread_spawn_i64_0(rt: *mut Runtime, handle: u64, en
     let layout = rt.layout_clone();
     let trace_frames = rt.trace_frames_clone();
     let entry_fn: EntryI64_0 = unsafe { std::mem::transmute(entry as usize) };
-    let join = std::thread::spawn(move || run_thread_entry(layout, trace_frames, |child_ptr| entry_fn(child_ptr)));
+    let join = std::thread::spawn(move || {
+        run_thread_entry(layout, trace_frames, |child| {
+            let child_ptr = (child as *mut Runtime as usize) as i64;
+            entry_fn(child_ptr)
+        })
+    });
     rt.register_thread_host_handle(handle, join);
     1
 }
@@ -100,7 +105,74 @@ pub extern "C-unwind" fn bd_thread_spawn_i64_1(
     let trace_frames = rt.trace_frames_clone();
     let entry_fn: EntryI64_1 = unsafe { std::mem::transmute(entry as usize) };
     let join = std::thread::spawn(move || {
-        run_thread_entry(layout, trace_frames, |child_ptr| entry_fn(child_ptr, arg0))
+        run_thread_entry(layout, trace_frames, |child| {
+            let child_ptr = (child as *mut Runtime as usize) as i64;
+            entry_fn(child_ptr, arg0)
+        })
+    });
+    rt.register_thread_host_handle(handle, join);
+    1
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_thread_spawn_i64_stream_i64_2(
+    rt: *mut Runtime,
+    handle: u64,
+    entry: u64,
+    stream_handle: u64,
+    arg1: i64,
+) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match thread_handle_value(rt, handle, "std::thread::spawn expected a Thread handle.")
+    {
+        Some(value) => value,
+        None => return 0,
+    };
+    if entry == 0 {
+        thread_error(rt, "std::thread::spawn failed: invalid entry function.");
+        return 0;
+    }
+    let stream_handle = match heap_handle(rt, stream_handle) {
+        Some(value) => value,
+        None => {
+            thread_error(rt, "std::thread::spawn failed: TcpStream handle is invalid.");
+            return 0;
+        }
+    };
+    let stream_book_id = match heap_header(rt, stream_handle) {
+        Some(header) if header.kind() == HeapKind::Object => header.type_id(),
+        _ => {
+            thread_error(rt, "std::thread::spawn failed: TcpStream handle is invalid.");
+            return 0;
+        }
+    };
+    let stream = match rt.take_tcp_stream(stream_handle) {
+        Some(value) => value,
+        None => {
+            thread_error(rt, "std::thread::spawn failed: TcpStream handle is invalid.");
+            return 0;
+        }
+    };
+    let layout = rt.layout_clone();
+    let trace_frames = rt.trace_frames_clone();
+    let entry_fn: EntryI64_2 = unsafe { std::mem::transmute(entry as usize) };
+    let join = std::thread::spawn(move || {
+        run_thread_entry(layout, trace_frames, |child| {
+            maybe_collect(child);
+            let child_stream_handle = match child.heap_mut().alloc_object(stream_book_id, 0) {
+                Some(value) => value,
+                None => {
+                    oom_error(child);
+                    return 0;
+                }
+            };
+            child.register_tcp_stream(child_stream_handle, stream);
+            let child_ptr = (child as *mut Runtime as usize) as i64;
+            entry_fn(child_ptr, child_stream_handle.as_u32() as i64, arg1)
+        })
     });
     rt.register_thread_host_handle(handle, join);
     1

@@ -52,7 +52,8 @@ pub use test::{
     bd_test_assert, bd_test_assert_eq_bool, bd_test_assert_eq_i64, bd_test_assert_eq_string,
 };
 pub use thread::{
-    bd_thread_join, bd_thread_spawn_i64_0, bd_thread_spawn_i64_1, bd_thread_store,
+    bd_thread_join, bd_thread_spawn_i64_0, bd_thread_spawn_i64_1,
+    bd_thread_spawn_i64_stream_i64_2, bd_thread_store,
 };
 pub use time::{bd_time_now_ms, bd_time_sleep_ms};
 

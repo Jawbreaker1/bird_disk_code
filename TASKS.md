@@ -499,12 +499,13 @@ Implement:
 - [x] Add request method parsing + `405 Method Not Allowed` for unsupported verbs
 - [x] Add a lightweight JSON status route (`/api/status`) for browser-side UI updates
 - [x] Add static-file serving from disk for selected routes (HTML/CSS/JS files)
-- [ ] Add optional threaded accept/worker mode for higher concurrent request throughput
+- [x] Add optional threaded accept/worker mode for higher concurrent request throughput
 
 Add tests:
 - [x] Manual native AOT smoke validation (`/`, `/features`, `/about`, `/api/status`, `/shutdown`)
 - [x] Automated integration script for multi-route/multi-request runs against compiled executable
-- [x] Config validation/error-path tests (missing key, invalid port, invalid max_requests)
+- [x] Threaded-mode smoke validation for multi-request runs
+- [x] Config validation/error-path tests (missing key, invalid numbers, invalid mode/workers)
 
 Acceptance:
 - Native-compiled BirdDisk server can serve a small multi-page site with config-driven host/port and clean shutdown.

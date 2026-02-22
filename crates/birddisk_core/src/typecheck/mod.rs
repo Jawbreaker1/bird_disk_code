@@ -108,6 +108,7 @@ impl<'a> Checker<'a> {
     fn collect_signatures(&mut self, program: &Program) {
         self.collect_enums(program);
         self.collect_books(program);
+        self.register_stdlib(program);
         for function in &program.functions {
             if self.functions.contains_key(&function.name) {
                 self.diagnostics.push(diagnostic(
@@ -142,7 +143,6 @@ impl<'a> Checker<'a> {
             };
             self.functions.insert(function.name.clone(), sig);
         }
-        self.register_stdlib(program);
     }
 
     fn check_program(&mut self, program: &Program) {
@@ -668,6 +668,14 @@ mod tests {
     fn typecheck_accepts_std_thread_spawn_join() {
         let diags = check(
             "import std::thread.\nrule worker(value: i64) -> i64:\n  yield value + 1.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 2).\n  yield std::thread::join(t).\nend\n",
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_thread_spawn_with_tcpstream_arg() {
+        let diags = check(
+            "import std::net.\nimport std::thread.\nrule worker(stream: TcpStream, route: i64) -> i64:\n  std::net::close_stream(stream).\n  yield route.\nend\n\nrule main() -> i64:\n  set listener: TcpListener = std::net::listen(\"127.0.0.1:0\").\n  set addr: string = std::net::listener_addr(listener).\n  set client: TcpStream = std::net::connect(addr).\n  set server: TcpStream = std::net::accept(listener).\n  set t: Thread = std::thread::spawn(\"worker\", server, 1).\n  std::net::close_stream(client).\n  std::net::close_listener(listener).\n  yield std::thread::join(t).\nend\n",
         );
         assert!(diags.is_empty());
     }

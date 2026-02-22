@@ -133,6 +133,7 @@ pub(crate) struct RuntimeFuncs {
     pub(crate) thread_join: FuncId,
     pub(crate) thread_spawn_i64_0: FuncId,
     pub(crate) thread_spawn_i64_1: FuncId,
+    pub(crate) thread_spawn_i64_stream_i64_2: FuncId,
     pub(crate) net_connect: FuncId,
     pub(crate) net_listen: FuncId,
     pub(crate) net_listener_addr: FuncId,
@@ -852,6 +853,12 @@ impl RuntimeFuncs {
             &[types::I64, types::I64, types::I64, types::I64],
             &[types::I64],
         )?;
+        let thread_spawn_i64_stream_i64_2 = declare_runtime_func(
+            module,
+            "bd_thread_spawn_i64_stream_i64_2",
+            &[types::I64, types::I64, types::I64, types::I64, types::I64],
+            &[types::I64],
+        )?;
         let net_connect = declare_runtime_func(
             module,
             "bd_net_connect",
@@ -1067,6 +1074,7 @@ impl RuntimeFuncs {
             thread_join,
             thread_spawn_i64_0,
             thread_spawn_i64_1,
+            thread_spawn_i64_stream_i64_2,
             net_connect,
             net_listen,
             net_listener_addr,

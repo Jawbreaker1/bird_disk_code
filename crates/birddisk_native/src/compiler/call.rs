@@ -785,34 +785,42 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             .functions
             .get(&entry_name)
             .ok_or_else(|| native_error(format!("unknown function '{entry_name}'.")))?;
-        let async_i64 = entry_sig.return_type == Type::I64
-            && entry_sig.params.len() == args.len().saturating_sub(1)
-            && entry_sig.params.iter().all(|ty| ty == &Type::I64)
-            && entry_sig.params.len() <= 1;
-        if async_i64 {
+        let async_candidate =
+            entry_sig.return_type == Type::I64 && entry_sig.params.len() == args.len().saturating_sub(1);
+        if async_candidate {
             let func_id = *self
                 .func_ids
                 .get(&entry_name)
                 .ok_or_else(|| native_error(format!("missing function id for '{entry_name}'.")))?;
             let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
             let entry_ptr = self.builder.ins().func_addr(types::I64, func_ref);
-            match args.len().saturating_sub(1) {
-                0 => {
+            match entry_sig.params.as_slice() {
+                [] => {
                     let _ = self.call_runtime_value(
                         self.runtime.thread_spawn_i64_0,
                         &[self.rt_ptr, thread_handle, entry_ptr],
                     );
+                    return Ok(Some(thread_handle));
                 }
-                1 => {
+                [Type::I64] => {
                     let arg0 = self.emit_expr(&args[1], Some(&Type::I64))?;
                     let _ = self.call_runtime_value(
                         self.runtime.thread_spawn_i64_1,
                         &[self.rt_ptr, thread_handle, entry_ptr, arg0],
                     );
+                    return Ok(Some(thread_handle));
+                }
+                [Type::Book(name), Type::I64] if name == "TcpStream" => {
+                    let stream = self.emit_expr(&args[1], Some(&Type::Book("TcpStream".to_string())))?;
+                    let arg1 = self.emit_expr(&args[2], Some(&Type::I64))?;
+                    let _ = self.call_runtime_value(
+                        self.runtime.thread_spawn_i64_stream_i64_2,
+                        &[self.rt_ptr, thread_handle, entry_ptr, stream, arg1],
+                    );
+                    return Ok(Some(thread_handle));
                 }
                 _ => {}
             }
-            return Ok(Some(thread_handle));
         }
 
         let result = self
