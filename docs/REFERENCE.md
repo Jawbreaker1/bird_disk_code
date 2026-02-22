@@ -266,11 +266,14 @@ See `docs/DIAGNOSTICS.md` for full error list.
 ### std::thread
 - `spawn(entry: string, args...) -> Thread` (VM + native; WASM rejects with E0325)
   - VM deterministic mode (`--deterministic`) runs spawned work in FIFO scheduler order.
+  - In non-deterministic VM/native mode, host-OS threaded execution is enabled for entry rules with `i64` return type and `i64` arguments.
+  - Other signatures currently execute eagerly in the caller thread for compatibility with existing channel/reference behavior.
 - `join(handle: Thread) -> i64` (VM + native; WASM rejects with E0325)
 
 ### std::net
 - `connect(addr: string) -> TcpStream` (VM + native; WASM rejects with E0326)
 - `listen(addr: string) -> TcpListener` (VM + native; WASM rejects with E0326)
+- `listener_addr(listener: TcpListener) -> string` (VM + native; WASM rejects with E0326)
 - `accept(listener: TcpListener) -> TcpStream` (VM + native; WASM rejects with E0326)
 - `write_text(stream: TcpStream, text: string) -> i64` (VM + native; WASM rejects with E0326)
 - `read_line(stream: TcpStream) -> string` (VM + native; WASM rejects with E0326)

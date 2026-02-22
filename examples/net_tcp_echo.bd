@@ -1,12 +1,10 @@
 import std::io.
 import std::net.
 import std::string.
-import std::time.
 
 rule main() -> i64:
-  set port: i64 = 40000 + (std::time::now_ms() % 20000).
-  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
-  set listener: TcpListener = std::net::listen(addr).
+  set listener: TcpListener = std::net::listen("127.0.0.1:0").
+  set addr: string = std::net::listener_addr(listener).
 
   set client: TcpStream = std::net::connect(addr).
   set server: TcpStream = std::net::accept(listener).

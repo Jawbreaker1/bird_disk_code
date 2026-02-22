@@ -17,9 +17,12 @@ mod tests {
     use super::*;
     use birddisk_core::{attach_sources, lexer, parse_and_typecheck, parser};
     use std::fs;
-    use std::net::TcpListener;
+    use std::io::{BufRead, BufReader, Read, Write};
+    use std::net::{TcpListener, TcpStream};
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::thread::JoinHandle;
+    use std::time::Duration;
 
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -63,9 +66,55 @@ mod tests {
         eval(&program).unwrap()
     }
 
+    fn spawn_tcp_server_once<F>(handler: F) -> Option<(u16, JoinHandle<()>)>
+    where
+        F: FnOnce(TcpStream) + Send + 'static,
+    {
+        let listener = TcpListener::bind("127.0.0.1:0").ok()?;
+        let port = listener.local_addr().ok()?.port();
+        let handle = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("server accept failed");
+            handler(stream);
+        });
+        Some((port, handle))
+    }
+
     fn free_tcp_port() -> Option<u16> {
         let listener = TcpListener::bind("127.0.0.1:0").ok()?;
         Some(listener.local_addr().ok()?.port())
+    }
+
+    fn spawn_delayed_echo_client(port: u16, delay: Duration) -> JoinHandle<()> {
+        std::thread::spawn(move || {
+            std::thread::sleep(delay);
+            let addr = format!("127.0.0.1:{port}");
+            let mut connected = None;
+            for _ in 0..200 {
+                match TcpStream::connect(&addr) {
+                    Ok(stream) => {
+                        connected = Some(stream);
+                        break;
+                    }
+                    Err(_) => std::thread::sleep(Duration::from_millis(10)),
+                }
+            }
+            let mut stream =
+                connected.unwrap_or_else(|| panic!("client failed to connect to {addr}"));
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .expect("client read timeout");
+            stream.write_all(b"ping\n").expect("client write failed");
+            stream.flush().expect("client flush failed");
+            let mut reader = BufReader::new(stream);
+            let line = trimmed_line(&mut reader);
+            assert_eq!(line, "ping");
+        })
+    }
+
+    fn trimmed_line(reader: &mut BufReader<TcpStream>) -> String {
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line);
+        line.trim_end_matches(['\r', '\n']).to_string()
     }
 
     #[test]
@@ -278,6 +327,23 @@ mod tests {
     }
 
     #[test]
+    fn eval_thread_net_server_roundtrip_i64_arg() {
+        for _ in 0..3 {
+            let Some(port) = free_tcp_port() else {
+                return;
+            };
+            let client = spawn_delayed_echo_client(port, Duration::from_millis(180));
+            let spawn_budget_ms = 120;
+            let source = format!(
+                "import std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set line: string = std::net::read_line(stream).\n  set wrote: i64 = std::net::write_text(stream, std::string::concat(line, \"\\n\")).\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  yield wrote.\nend\n\nrule main() -> i64:\n  set before: i64 = std::time::now_ms().\n  set t: Thread = std::thread::spawn(\"server\", {port}).\n  set after: i64 = std::time::now_ms().\n  set done: i64 = std::thread::join(t).\n  set delta: i64 = after - before.\n  when done > 0 && delta >= 0 && delta < {spawn_budget_ms}:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+            );
+            let result = eval_source(&source);
+            assert_eq!(result, 1);
+            client.join().expect("client join failed");
+        }
+    }
+
+    #[test]
     fn eval_deterministic_thread_scheduler_progresses_on_recv() {
         let source = "import std::channel.\nimport std::thread.\nimport std::time.\n\nrule worker(ch: ChannelI64) -> i64:\n  set ignored: i64 = std::time::sleep_ms(5).\n  set sent: bool = ch::send(1).\n  when sent:\n    yield 0.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set ch: ChannelI64 = std::channel::i64().\n  set t: Thread = std::thread::spawn(\"worker\", ch).\n  set before: i64 = std::time::now_ms().\n  set msg: RecvI64 = ch::recv().\n  set after: i64 = std::time::now_ms().\n  set done: i64 = std::thread::join(t).\n  match msg:\n    case RecvI64::Ok(v):\n      yield done + v + before + after.\n    case RecvI64::Closed:\n      yield -1.\n    otherwise:\n      yield -2.\n  end\nend\n";
         let program = parse_program(source);
@@ -319,75 +385,169 @@ mod tests {
     }
 
     #[test]
+    fn eval_net_listener_addr_roundtrip() {
+        let source = "import std::net.\nimport std::string.\n\nrule main() -> i64:\n  set listener: TcpListener = std::net::listen(\"127.0.0.1:0\").\n  set addr: string = std::net::listener_addr(listener).\n  set client: TcpStream = std::net::connect(addr).\n  set server: TcpStream = std::net::accept(listener).\n  std::net::close_stream(client).\n  std::net::close_stream(server).\n  std::net::close_listener(listener).\n  when std::string::contains(addr, \"127.0.0.1:\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_source(source);
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn eval_net_tcp_roundtrip() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            let mut reader = BufReader::new(stream.try_clone().expect("server clone failed"));
+            let line = trimmed_line(&mut reader);
+            assert_eq!(line, "ping");
+            let mut stream = stream;
+            stream.write_all(b"ping\n").expect("server write failed");
+            stream.flush().expect("server flush failed");
+        }) else {
             return;
         };
         let source = format!(
-            "import std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set line: string = std::net::read_line(stream).\n  set echoed: i64 = std::net::write_text(stream, std::string::concat(line, \"\\n\")).\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  yield echoed.\nend\n\nrule client(port: i64) -> i64:\n  set ignored: i64 = std::time::sleep_ms(30).\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set stream: TcpStream = std::net::connect(addr).\n  set wrote: i64 = std::net::write_text(stream, \"ping\\n\").\n  set recv: string = std::net::read_line(stream).\n  std::net::close_stream(stream).\n  when std::string::eq(recv, \"ping\"):\n    yield wrote.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set server_thread: Thread = std::thread::spawn(\"server\", port).\n  set client_bytes: i64 = client(port).\n  set server_bytes: i64 = std::thread::join(server_thread).\n  yield client_bytes + server_bytes + 1.\nend\n"
+            "import std::net.\nimport std::string.\n\nrule main() -> i64:\n  set addr: string = \"127.0.0.1:{port}\".\n  set stream: TcpStream = std::net::connect(addr).\n  set wrote: i64 = std::net::write_text(stream, \"ping\\n\").\n  set recv: string = std::net::read_line(stream).\n  std::net::close_stream(stream).\n  when wrote > 0 && std::string::eq(recv, \"ping\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
         );
         let result = eval_source(&source);
-        assert_eq!(result, 11);
+        assert_eq!(result, 1);
+        server.join().expect("server join failed");
     }
 
     #[test]
     fn eval_net_pool_reuses_connection() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            let mut reader = BufReader::new(stream.try_clone().expect("server clone failed"));
+            let mut stream = stream;
+            let line1 = trimmed_line(&mut reader);
+            assert_eq!(line1, "a");
+            stream.write_all(b"a\n").expect("server write1 failed");
+            stream.flush().expect("server flush1 failed");
+            let line2 = trimmed_line(&mut reader);
+            assert_eq!(line2, "b");
+            stream.write_all(b"b\n").expect("server write2 failed");
+            stream.flush().expect("server flush2 failed");
+        }) else {
             return;
         };
         let source = format!(
-            "import std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set line1: string = std::net::read_line(stream).\n  set echoed1: i64 = std::net::write_text(stream, std::string::concat(line1, \"\\n\")).\n  set line2: string = std::net::read_line(stream).\n  set echoed2: i64 = std::net::write_text(stream, std::string::concat(line2, \"\\n\")).\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  yield echoed1 + echoed2.\nend\n\nrule client(port: i64) -> i64:\n  set ignored: i64 = std::time::sleep_ms(30).\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set pool: TcpPool = std::net::pool(addr, 1).\n  set s1: TcpStream = std::net::pool_get(pool).\n  set w1: i64 = std::net::write_text(s1, \"a\\n\").\n  set r1: string = std::net::read_line(s1).\n  set keep1: bool = std::net::pool_put(pool, s1).\n  set s2: TcpStream = std::net::pool_get(pool).\n  set w2: i64 = std::net::write_text(s2, \"b\\n\").\n  set r2: string = std::net::read_line(s2).\n  set keep2: bool = std::net::pool_put(pool, s2).\n  std::net::pool_close(pool).\n  when std::string::eq(r1, \"a\") && std::string::eq(r2, \"b\") && keep1 && keep2:\n    yield w1 + w2.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set t: Thread = std::thread::spawn(\"server\", port).\n  set client_bytes: i64 = client(port).\n  set server_bytes: i64 = std::thread::join(t).\n  yield client_bytes + server_bytes + 1.\nend\n"
+            "import std::net.\nimport std::string.\n\nrule main() -> i64:\n  set addr: string = \"127.0.0.1:{port}\".\n  set pool: TcpPool = std::net::pool(addr, 1).\n  set s1: TcpStream = std::net::pool_get(pool).\n  set w1: i64 = std::net::write_text(s1, \"a\\n\").\n  set r1: string = std::net::read_line(s1).\n  set keep1: bool = std::net::pool_put(pool, s1).\n  set s2: TcpStream = std::net::pool_get(pool).\n  set w2: i64 = std::net::write_text(s2, \"b\\n\").\n  set r2: string = std::net::read_line(s2).\n  set keep2: bool = std::net::pool_put(pool, s2).\n  std::net::pool_close(pool).\n  when w1 > 0 && w2 > 0 && keep1 && keep2 && std::string::eq(r1, \"a\") && std::string::eq(r2, \"b\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
         );
         let result = eval_source(&source);
-        assert_eq!(result, 9);
+        assert_eq!(result, 1);
+        server.join().expect("server join failed");
     }
 
     #[test]
     fn eval_std_http_get_roundtrip() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            let mut reader = BufReader::new(stream.try_clone().expect("server clone failed"));
+            let req = trimmed_line(&mut reader);
+            assert_eq!(req, "GET /ping HTTP/1.1");
+            loop {
+                if trimmed_line(&mut reader).is_empty() {
+                    break;
+                }
+            }
+            let mut stream = stream;
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncOnTeNt-LeNgTh: 11\r\nX-Test: 1\r\n\r\nhello\nworld",
+                )
+                .expect("server write failed");
+            stream.flush().expect("server flush failed");
+        }) else {
             return;
         };
         let source = format!(
-            "import std::http.\nimport std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set req: string = std::net::read_line(stream).\n  set sink: i64 = 0.\n  set reading: bool = true.\n  repeat while reading:\n    set line: string = std::net::read_line(stream).\n    when std::string::len(line) == 0:\n      put reading = false.\n    otherwise:\n      put sink = sink + std::string::len(line).\n    end\n  end\n  set ignored: i64 = std::net::write_text(stream, \"HTTP/1.1 200 OK\\n\").\n  put ignored = std::net::write_text(stream, \"cOnTeNt-LeNgTh: 11\\n\").\n  put ignored = std::net::write_text(stream, \"X-Test: 1\\n\").\n  put ignored = std::net::write_text(stream, \"\\n\").\n  put ignored = std::net::write_text(stream, \"hello\\nworld\").\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  when std::string::eq(req, \"GET /ping HTTP/1.1\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set t: Thread = std::thread::spawn(\"server\", port).\n  set ignored: i64 = std::time::sleep_ms(30).\n  set url0: string = std::string::concat(\"http://127.0.0.1:\", std::string::from_i64(port)).\n  set url: string = std::string::concat(url0, \"/ping\").\n  set response: string = std::http::get(url).\n  set status: i64 = std::http::status(response).\n  set headers: string = std::http::headers(response).\n  set body: string = std::http::body(response).\n  set done: i64 = std::thread::join(t).\n  when done == 1 && status == 200 && std::string::contains(headers, \"X-Test: 1\") && std::string::eq(body, \"hello\\nworld\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+            "import std::http.\nimport std::string.\n\nrule main() -> i64:\n  set url: string = \"http://127.0.0.1:{port}/ping\".\n  set response: string = std::http::get(url).\n  set status: i64 = std::http::status(response).\n  set headers: string = std::http::headers(response).\n  set body: string = std::http::body(response).\n  when status == 200 && std::string::contains(headers, \"X-Test: 1\") && std::string::eq(body, \"hello\\nworld\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
         );
         let result = eval_module_source(&source, "http_get_vm");
         assert_eq!(result, 1);
+        server.join().expect("server join failed");
     }
 
     #[test]
     fn eval_std_http_get_chunked_roundtrip() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            let mut reader = BufReader::new(stream.try_clone().expect("server clone failed"));
+            let req = trimmed_line(&mut reader);
+            assert_eq!(req, "GET /chunk HTTP/1.1");
+            loop {
+                if trimmed_line(&mut reader).is_empty() {
+                    break;
+                }
+            }
+            let mut stream = stream;
+            stream
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ntRaNsFeR-EnCoDiNg: ChUnKeD\r\nX-Test: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n",
+                )
+                .expect("server write failed");
+            stream.flush().expect("server flush failed");
+        }) else {
             return;
         };
         let source = format!(
-            "import std::http.\nimport std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set req: string = std::net::read_line(stream).\n  set sink: i64 = 0.\n  set reading: bool = true.\n  repeat while reading:\n    set line: string = std::net::read_line(stream).\n    when std::string::len(line) == 0:\n      put reading = false.\n    otherwise:\n      put sink = sink + std::string::len(line).\n    end\n  end\n  set ignored: i64 = std::net::write_text(stream, \"HTTP/1.1 200 OK\\n\").\n  put ignored = std::net::write_text(stream, \"tRaNsFeR-EnCoDiNg: ChUnKeD\\n\").\n  put ignored = std::net::write_text(stream, \"X-Test: chunked\\n\").\n  put ignored = std::net::write_text(stream, \"\\n\").\n  put ignored = std::net::write_text(stream, \"5\\n\").\n  put ignored = std::net::write_text(stream, \"hello\\n\").\n  put ignored = std::net::write_text(stream, \"6\\n\").\n  put ignored = std::net::write_text(stream, \" world\\n\").\n  put ignored = std::net::write_text(stream, \"0\\n\").\n  put ignored = std::net::write_text(stream, \"\\n\").\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  when std::string::eq(req, \"GET /chunk HTTP/1.1\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set t: Thread = std::thread::spawn(\"server\", port).\n  set ignored: i64 = std::time::sleep_ms(30).\n  set url0: string = std::string::concat(\"http://127.0.0.1:\", std::string::from_i64(port)).\n  set url: string = std::string::concat(url0, \"/chunk\").\n  set response: string = std::http::get(url).\n  set status: i64 = std::http::status(response).\n  set headers: string = std::http::headers(response).\n  set body: string = std::http::body(response).\n  set done: i64 = std::thread::join(t).\n  when done == 1 && status == 200 && std::string::contains(headers, \"tRaNsFeR-EnCoDiNg: ChUnKeD\") && std::string::eq(body, \"hello world\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+            "import std::http.\nimport std::string.\n\nrule main() -> i64:\n  set url: string = \"http://127.0.0.1:{port}/chunk\".\n  set response: string = std::http::get(url).\n  set status: i64 = std::http::status(response).\n  set headers: string = std::http::headers(response).\n  set body: string = std::http::body(response).\n  when status == 200 && std::string::contains(headers, \"tRaNsFeR-EnCoDiNg: ChUnKeD\") && std::string::eq(body, \"hello world\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
         );
         let result = eval_module_source(&source, "http_get_chunked_vm");
         assert_eq!(result, 1);
+        server.join().expect("server join failed");
     }
 
     #[test]
     fn eval_std_http_get_fallback_read_to_end_preserves_body() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            let mut reader = BufReader::new(stream.try_clone().expect("server clone failed"));
+            let req = trimmed_line(&mut reader);
+            assert_eq!(req, "GET /fallback HTTP/1.1");
+            loop {
+                if trimmed_line(&mut reader).is_empty() {
+                    break;
+                }
+            }
+            let mut stream = stream;
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nX-Test: fallback\r\n\r\nline1\n\nline3\n")
+                .expect("server write failed");
+            stream.flush().expect("server flush failed");
+        }) else {
             return;
         };
         let source = format!(
-            "import std::http.\nimport std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set req: string = std::net::read_line(stream).\n  set sink: i64 = 0.\n  set reading: bool = true.\n  repeat while reading:\n    set line: string = std::net::read_line(stream).\n    when std::string::len(line) == 0:\n      put reading = false.\n    otherwise:\n      put sink = sink + std::string::len(line).\n    end\n  end\n  set ignored: i64 = std::net::write_text(stream, \"HTTP/1.1 200 OK\\n\").\n  put ignored = std::net::write_text(stream, \"X-Test: fallback\\n\").\n  put ignored = std::net::write_text(stream, \"\\n\").\n  put ignored = std::net::write_text(stream, \"line1\\n\\nline3\\n\").\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  when std::string::eq(req, \"GET /fallback HTTP/1.1\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set t: Thread = std::thread::spawn(\"server\", port).\n  set ignored: i64 = std::time::sleep_ms(30).\n  set url0: string = std::string::concat(\"http://127.0.0.1:\", std::string::from_i64(port)).\n  set url: string = std::string::concat(url0, \"/fallback\").\n  set response: string = std::http::get(url).\n  set status: i64 = std::http::status(response).\n  set headers: string = std::http::headers(response).\n  set body: string = std::http::body(response).\n  set done: i64 = std::thread::join(t).\n  when done == 1 && status == 200 && std::string::contains(headers, \"X-Test: fallback\") && std::string::eq(body, \"line1\\n\\nline3\\n\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+            "import std::http.\nimport std::string.\n\nrule main() -> i64:\n  set url: string = \"http://127.0.0.1:{port}/fallback\".\n  set response: string = std::http::get(url).\n  set status: i64 = std::http::status(response).\n  set headers: string = std::http::headers(response).\n  set body: string = std::http::body(response).\n  when status == 200 && std::string::contains(headers, \"X-Test: fallback\") && std::string::eq(body, \"line1\\n\\nline3\\n\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
         );
         let result = eval_module_source(&source, "http_get_fallback_vm");
         assert_eq!(result, 1);
+        server.join().expect("server join failed");
     }
 
     #[test]
     fn eval_std_http_post_roundtrip() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            let mut reader = BufReader::new(stream.try_clone().expect("server clone failed"));
+            let req = trimmed_line(&mut reader);
+            assert_eq!(req, "POST /submit HTTP/1.1");
+            loop {
+                if trimmed_line(&mut reader).is_empty() {
+                    break;
+                }
+            }
+            let mut payload = [0u8; 4];
+            reader.read_exact(&mut payload).expect("server read payload failed");
+            assert_eq!(&payload, b"ping");
+            let mut stream = stream;
+            stream
+                .write_all(b"HTTP/1.1 201 Created\r\nContent-Length: 2\r\n\r\nok")
+                .expect("server write failed");
+            stream.flush().expect("server flush failed");
+        }) else {
             return;
         };
         let source = format!(
-            "import std::http.\nimport std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set req: string = std::net::read_line(stream).\n  set sink: i64 = 0.\n  set reading: bool = true.\n  repeat while reading:\n    set line: string = std::net::read_line(stream).\n    when std::string::len(line) == 0:\n      put reading = false.\n    otherwise:\n      put sink = sink + std::string::len(line).\n    end\n  end\n  set payload: string = std::net::read_exact(stream, 4).\n  set ignored: i64 = std::net::write_text(stream, \"HTTP/1.1 201 Created\\n\").\n  put ignored = std::net::write_text(stream, \"Content-Length: 2\\n\").\n  put ignored = std::net::write_text(stream, \"\\n\").\n  put ignored = std::net::write_text(stream, \"ok\").\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  when std::string::eq(req, \"POST /submit HTTP/1.1\") && std::string::eq(payload, \"ping\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set t: Thread = std::thread::spawn(\"server\", port).\n  set ignored: i64 = std::time::sleep_ms(30).\n  set url0: string = std::string::concat(\"http://127.0.0.1:\", std::string::from_i64(port)).\n  set url: string = std::string::concat(url0, \"/submit\").\n  set response: string = std::http::post(url, \"ping\").\n  set status: i64 = std::http::status(response).\n  set body: string = std::http::body(response).\n  set done: i64 = std::thread::join(t).\n  when done == 1 && status == 201 && std::string::eq(body, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+            "import std::http.\nimport std::string.\n\nrule main() -> i64:\n  set url: string = \"http://127.0.0.1:{port}/submit\".\n  set response: string = std::http::post(url, \"ping\").\n  set status: i64 = std::http::status(response).\n  set body: string = std::http::body(response).\n  when status == 201 && std::string::eq(body, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
         );
         let result = eval_module_source(&source, "http_post_vm");
         assert_eq!(result, 1);
+        server.join().expect("server join failed");
     }
 
     #[test]
@@ -421,15 +581,19 @@ mod tests {
 
     #[test]
     fn eval_std_http_timeout_errors() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            std::thread::sleep(Duration::from_millis(120));
+            drop(stream);
+        }) else {
             return;
         };
         let source = format!(
-            "import std::http.\nimport std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set ignored: i64 = std::time::sleep_ms(120).\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  yield ignored.\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set t: Thread = std::thread::spawn(\"server\", port).\n  set ignored: i64 = std::time::sleep_ms(30).\n  set url0: string = std::string::concat(\"http://127.0.0.1:\", std::string::from_i64(port)).\n  set url: string = std::string::concat(url0, \"/slow\").\n  set response: string = std::http::get_with_timeout(url, 20).\n  set done: i64 = std::thread::join(t).\n  yield done + std::string::len(response).\nend\n"
+            "import std::http.\n\nrule main() -> i64:\n  set url: string = \"http://127.0.0.1:{port}/slow\".\n  set response: string = std::http::get_with_timeout(url, 20).\n  yield 0.\nend\n"
         );
         let program = parse_program_with_modules(&source, "http_timeout_vm");
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0408");
+        server.join().expect("server join failed");
     }
 
     #[test]
@@ -442,14 +606,18 @@ mod tests {
 
     #[test]
     fn eval_net_read_timeout_errors() {
-        let Some(port) = free_tcp_port() else {
+        let Some((port, server)) = spawn_tcp_server_once(|stream| {
+            std::thread::sleep(Duration::from_millis(120));
+            drop(stream);
+        }) else {
             return;
         };
         let source = format!(
-            "import std::net.\nimport std::string.\nimport std::thread.\nimport std::time.\n\nrule server(port: i64) -> i64:\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set listener: TcpListener = std::net::listen(addr).\n  set stream: TcpStream = std::net::accept(listener).\n  set ignored: i64 = std::time::sleep_ms(120).\n  std::net::close_stream(stream).\n  std::net::close_listener(listener).\n  yield 0.\nend\n\nrule main() -> i64:\n  set port: i64 = {port}.\n  set server_thread: Thread = std::thread::spawn(\"server\", port).\n  set ignored: i64 = std::time::sleep_ms(30).\n  set addr: string = std::string::concat(\"127.0.0.1:\", std::string::from_i64(port)).\n  set stream: TcpStream = std::net::connect(addr).\n  set timeout: i64 = std::net::set_read_timeout_ms(stream, 20).\n  set line: string = std::net::read_line(stream).\n  std::net::close_stream(stream).\n  set done: i64 = std::thread::join(server_thread).\n  yield timeout + done + std::string::len(line).\nend\n"
+            "import std::net.\n\nrule main() -> i64:\n  set addr: string = \"127.0.0.1:{port}\".\n  set stream: TcpStream = std::net::connect(addr).\n  set ignored: i64 = std::net::set_read_timeout_ms(stream, 20).\n  set line: string = std::net::read_line(stream).\n  std::net::close_stream(stream).\n  yield 0.\nend\n"
         );
         let program = parse_program(&source);
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0408");
+        server.join().expect("server join failed");
     }
 }

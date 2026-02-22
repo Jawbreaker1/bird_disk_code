@@ -11,6 +11,8 @@ use crate::value::{coerce_value, value_type, Value};
 use birddisk_core::ast::{Program, Type};
 use birddisk_core::TraceFrame;
 use std::collections::{HashMap, VecDeque};
+use std::net::{TcpListener, TcpStream};
+use std::thread::JoinHandle;
 use std::time::Instant;
 
 const RAND_SEED_DEFAULT: u64 = 0x9E37_79B9_7F4A_7C15;
@@ -69,6 +71,7 @@ pub fn eval_with_io_streaming_options(
 }
 
 pub(crate) struct Vm<'a> {
+    program: &'a Program,
     functions: HashMap<String, &'a birddisk_core::ast::Function>,
     books: HashMap<String, BookInfo>,
     enums: HashMap<String, EnumInfo>,
@@ -82,6 +85,10 @@ pub(crate) struct Vm<'a> {
     roots: RootStack,
     channels: HashMap<u32, ChannelState>,
     threads: HashMap<u32, ThreadState>,
+    pending_threads: VecDeque<PendingThreadJob>,
+    net_streams: HashMap<u32, TcpStream>,
+    net_listeners: HashMap<u32, TcpListener>,
+    net_pools: HashMap<u32, TcpPoolState>,
     gc_layout: GcLayout,
     gc_threshold: usize,
     stdin_fallback: bool,
@@ -145,6 +152,8 @@ impl ChannelState {
 }
 
 pub(crate) enum ThreadStatus {
+    Running,
+    RunningHost(JoinHandle<Result<i64, RuntimeError>>),
     Completed(i64),
     Joined,
 }
@@ -154,11 +163,35 @@ pub(crate) struct ThreadState {
 }
 
 impl ThreadState {
+    fn running() -> Self {
+        Self {
+            status: ThreadStatus::Running,
+        }
+    }
+
     fn completed(result: i64) -> Self {
         Self {
             status: ThreadStatus::Completed(result),
         }
     }
+
+    fn running_host(handle: JoinHandle<Result<i64, RuntimeError>>) -> Self {
+        Self {
+            status: ThreadStatus::RunningHost(handle),
+        }
+    }
+}
+
+pub(crate) struct PendingThreadJob {
+    pub(crate) handle: HeapHandle,
+    pub(crate) entry_name: String,
+    pub(crate) args: Vec<Value>,
+}
+
+pub(crate) struct TcpPoolState {
+    pub(crate) addr: String,
+    pub(crate) max_idle: usize,
+    pub(crate) idle: Vec<TcpStream>,
 }
 
 impl ChannelKind {
@@ -250,7 +283,12 @@ impl Scope {
 }
 
 impl<'a> Vm<'a> {
-    fn new(program: &'a Program, input: &str, args: &[String], options: VmOptions) -> Self {
+    pub(crate) fn new(
+        program: &'a Program,
+        input: &str,
+        args: &[String],
+        options: VmOptions,
+    ) -> Self {
         let mut functions = HashMap::new();
         for func in &program.functions {
             functions.insert(func.name.clone(), func);
@@ -266,6 +304,9 @@ impl<'a> Vm<'a> {
         });
         let has_std_thread = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "thread"
+        });
+        let has_std_net = program.imports.iter().any(|import| {
+            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "net"
         });
         let mut books = HashMap::new();
         let mut ref_fields = Vec::new();
@@ -327,6 +368,23 @@ impl<'a> Vm<'a> {
             );
             ref_fields.push(Vec::new());
         }
+        if has_std_net {
+            for name in ["TcpStream", "TcpListener", "TcpPool"] {
+                if books.contains_key(name) {
+                    continue;
+                }
+                let book_id = ref_fields.len() as u32;
+                books.insert(
+                    name.to_string(),
+                    BookInfo {
+                        id: book_id,
+                        field_types: Vec::new(),
+                        field_index: HashMap::new(),
+                    },
+                );
+                ref_fields.push(Vec::new());
+            }
+        }
         let mut enums = HashMap::new();
         for (enum_id, enum_decl) in program.enums.iter().enumerate() {
             let mut variants = HashMap::new();
@@ -384,6 +442,7 @@ impl<'a> Vm<'a> {
             }
         }
         Self {
+            program,
             functions,
             books,
             enums,
@@ -397,6 +456,10 @@ impl<'a> Vm<'a> {
             roots: RootStack::new(),
             channels: HashMap::new(),
             threads: HashMap::new(),
+            pending_threads: VecDeque::new(),
+            net_streams: HashMap::new(),
+            net_listeners: HashMap::new(),
+            net_pools: HashMap::new(),
             gc_layout: GcLayout { ref_fields },
             gc_threshold: GC_MIN_THRESHOLD,
             stdin_fallback: false,
@@ -460,11 +523,66 @@ impl<'a> Vm<'a> {
     ) -> Result<&mut ChannelState, RuntimeError> {
         self.channels
             .get_mut(&handle.as_u32())
-            .ok_or_else(|| runtime_error("E0400", "Channel state missing at runtime."))
+            .ok_or_else(|| runtime_error("E0406", "Channel state missing at runtime."))
+    }
+
+    pub(crate) fn tcp_stream_mut(
+        &mut self,
+        handle: HeapHandle,
+    ) -> Result<&mut TcpStream, RuntimeError> {
+        self.net_streams
+            .get_mut(&handle.as_u32())
+            .ok_or_else(|| runtime_error("E0408", "TcpStream handle is invalid."))
+    }
+
+    pub(crate) fn tcp_listener_mut(
+        &mut self,
+        handle: HeapHandle,
+    ) -> Result<&mut TcpListener, RuntimeError> {
+        self.net_listeners
+            .get_mut(&handle.as_u32())
+            .ok_or_else(|| runtime_error("E0408", "TcpListener handle is invalid."))
+    }
+
+    pub(crate) fn register_tcp_stream(&mut self, handle: HeapHandle, stream: TcpStream) {
+        self.net_streams.insert(handle.as_u32(), stream);
+    }
+
+    pub(crate) fn register_tcp_listener(&mut self, handle: HeapHandle, listener: TcpListener) {
+        self.net_listeners.insert(handle.as_u32(), listener);
+    }
+
+    pub(crate) fn close_tcp_stream(&mut self, handle: HeapHandle) -> Option<TcpStream> {
+        self.net_streams.remove(&handle.as_u32())
+    }
+
+    pub(crate) fn close_tcp_listener(&mut self, handle: HeapHandle) -> bool {
+        self.net_listeners.remove(&handle.as_u32()).is_some()
+    }
+
+    pub(crate) fn tcp_pool_mut(
+        &mut self,
+        handle: HeapHandle,
+    ) -> Result<&mut TcpPoolState, RuntimeError> {
+        self.net_pools
+            .get_mut(&handle.as_u32())
+            .ok_or_else(|| runtime_error("E0408", "TcpPool handle is invalid."))
+    }
+
+    pub(crate) fn register_tcp_pool(&mut self, handle: HeapHandle, state: TcpPoolState) {
+        self.net_pools.insert(handle.as_u32(), state);
+    }
+
+    pub(crate) fn close_tcp_pool(&mut self, handle: HeapHandle) -> Option<TcpPoolState> {
+        self.net_pools.remove(&handle.as_u32())
     }
 
     pub(crate) fn function_by_name(&self, name: &str) -> Option<&'a birddisk_core::ast::Function> {
         self.functions.get(name).copied()
+    }
+
+    pub(crate) fn program_clone(&self) -> Program {
+        self.program.clone()
     }
 
     pub(crate) fn register_thread(&mut self, handle: HeapHandle, result: i64) {
@@ -472,17 +590,121 @@ impl<'a> Vm<'a> {
             .insert(handle.as_u32(), ThreadState::completed(result));
     }
 
+    pub(crate) fn register_thread_running(&mut self, handle: HeapHandle) {
+        self.threads.insert(handle.as_u32(), ThreadState::running());
+    }
+
+    pub(crate) fn register_thread_running_host(
+        &mut self,
+        handle: HeapHandle,
+        join: JoinHandle<Result<i64, RuntimeError>>,
+    ) {
+        self.threads
+            .insert(handle.as_u32(), ThreadState::running_host(join));
+    }
+
+    pub(crate) fn enqueue_thread_job(
+        &mut self,
+        handle: HeapHandle,
+        entry_name: String,
+        args: Vec<Value>,
+    ) {
+        self.pending_threads.push_back(PendingThreadJob {
+            handle,
+            entry_name,
+            args,
+        });
+    }
+
+    pub(crate) fn has_pending_thread_jobs(&self) -> bool {
+        !self.pending_threads.is_empty()
+    }
+
+    pub(crate) fn is_deterministic(&self) -> bool {
+        self.deterministic
+    }
+
+    pub(crate) fn run_next_pending_thread(&mut self) -> Result<bool, RuntimeError> {
+        let Some(job) = self.pending_threads.pop_front() else {
+            return Ok(false);
+        };
+        let function = self.function_by_name(&job.entry_name).ok_or_else(|| {
+            runtime_error(
+                "E0400",
+                format!("Unknown thread entry rule '{}'.", job.entry_name),
+            )
+        })?;
+        let result = self.eval_function(function, &job.args)?;
+        let result_i64 = match result {
+            Value::I64(value) => value,
+            _ => return Err(runtime_error("E0400", "Thread entry rule must return i64.")),
+        };
+        self.register_thread(job.handle, result_i64);
+        Ok(true)
+    }
+
+    fn schedule_until_thread_resolved(&mut self, handle: HeapHandle) -> Result<(), RuntimeError> {
+        loop {
+            let running = self
+                .threads
+                .get(&handle.as_u32())
+                .map(|state| matches!(state.status, ThreadStatus::Running))
+                .unwrap_or(false);
+            if !running {
+                break;
+            }
+            if !self.run_next_pending_thread()? {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn join_thread(&mut self, handle: HeapHandle) -> Result<i64, RuntimeError> {
+        if self.deterministic {
+            self.schedule_until_thread_resolved(handle)?;
+        }
+        let id = handle.as_u32();
         let state = self
             .threads
-            .get_mut(&handle.as_u32())
-            .ok_or_else(|| runtime_error("E0400", "Thread handle is invalid."))?;
+            .remove(&id)
+            .ok_or_else(|| runtime_error("E0405", "Thread handle is invalid."))?;
         match state.status {
+            ThreadStatus::Running => {
+                self.threads.insert(id, state);
+                Err(runtime_error("E0405", "Thread is still running."))
+            }
+            ThreadStatus::RunningHost(join) => {
+                let result = match join.join() {
+                    Ok(result) => result,
+                    Err(_) => Err(runtime_error("E0405", "Thread panicked.")),
+                };
+                self.threads.insert(
+                    id,
+                    ThreadState {
+                        status: ThreadStatus::Joined,
+                    },
+                );
+                result
+            }
             ThreadStatus::Completed(result) => {
-                state.status = ThreadStatus::Joined;
+                self.threads.insert(
+                    id,
+                    ThreadState {
+                        status: ThreadStatus::Joined,
+                    },
+                );
                 Ok(result)
             }
-            ThreadStatus::Joined => Err(runtime_error("E0400", "Thread has already been joined.")),
+            ThreadStatus::Joined => {
+                self.threads.insert(
+                    id,
+                    ThreadState {
+                        status: ThreadStatus::Joined,
+                    },
+                );
+                Err(runtime_error("E0405", "Thread has already been joined."))
+            }
         }
     }
 
@@ -499,7 +721,8 @@ impl<'a> Vm<'a> {
         if stats.bytes_in_use < self.gc_threshold {
             return;
         }
-        let extra_roots = self.channel_ref_handles();
+        let mut extra_roots = self.channel_ref_handles();
+        extra_roots.extend(self.pending_thread_ref_handles());
         let extra_count = extra_roots.len();
         let base = if extra_count == 0 {
             None
@@ -545,6 +768,18 @@ impl<'a> Vm<'a> {
             for value in &state.queue {
                 if let ChannelValue::Ref(handle) = value {
                     handles.push(*handle);
+                }
+            }
+        }
+        handles
+    }
+
+    fn pending_thread_ref_handles(&self) -> Vec<HeapHandle> {
+        let mut handles = Vec::new();
+        for job in &self.pending_threads {
+            for value in &job.args {
+                if let Some(handle) = value.heap_handle() {
+                    handles.push(handle);
                 }
             }
         }

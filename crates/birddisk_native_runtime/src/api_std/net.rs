@@ -121,6 +121,41 @@ pub extern "C-unwind" fn bd_net_listen(rt: *mut Runtime, addr: u64, listener_boo
 }
 
 #[no_mangle]
+pub extern "C-unwind" fn bd_net_listener_addr(rt: *mut Runtime, listener: u64) -> u64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let listener_handle = match tcp_listener_handle(rt, listener, "std::net::listener_addr") {
+        Some(value) => value,
+        None => return 0,
+    };
+    let addr = match rt.tcp_listener_mut(listener_handle) {
+        Some(value) => match value.local_addr() {
+            Ok(addr) => addr.to_string(),
+            Err(err) => {
+                net_error(rt, format!("std::net::listener_addr failed: {err}"));
+                return 0;
+            }
+        },
+        None => {
+            net_error(
+                rt,
+                "std::net::listener_addr failed: TcpListener handle is invalid.",
+            );
+            return 0;
+        }
+    };
+    match alloc_string_from_bytes(rt, addr.as_bytes()) {
+        Some(handle) => handle.as_u32() as u64,
+        None => {
+            net_error(rt, "std::net::listener_addr failed: out of memory.");
+            0
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C-unwind" fn bd_net_accept(
     rt: *mut Runtime,
     listener: u64,

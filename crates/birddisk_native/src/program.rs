@@ -415,6 +415,10 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::Book("TcpListener".to_string()),
         }),
+        "std::net::listener_addr" => Some(FunctionSig {
+            params: vec![Type::Book("TcpListener".to_string())],
+            return_type: Type::String,
+        }),
         "std::net::accept" => Some(FunctionSig {
             params: vec![Type::Book("TcpListener".to_string())],
             return_type: Type::Book("TcpStream".to_string()),

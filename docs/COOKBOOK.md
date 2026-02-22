@@ -443,7 +443,7 @@ end
 ```
 
 ## 27) TCP loopback with std::net (VM/native)
-Runnable file: `examples/net_tcp_echo.bd` (single-process loopback: listen/connect/accept/read/write/close).
+Runnable file: `examples/net_tcp_echo.bd` (single-process loopback with ephemeral bind + `listener_addr`: listen/connect/accept/read/write/close).
 ```sh
 cargo run -p birddiskc -- run examples/net_tcp_echo.bd --engine vm --json
 cargo run -p birddiskc -- run examples/net_tcp_echo.bd --engine native --json
@@ -455,6 +455,33 @@ Runnable file: `examples/http_local_get.bd` (demonstrates `build_request`, `stat
 ```sh
 cargo run -p birddiskc -- run examples/http_local_get.bd --engine vm --json
 cargo run -p birddiskc -- run examples/http_local_get.bd --engine native --json
+```
+
+## 29) Threaded TCP echo with std::thread + std::net
+Runnable file: `examples/net_thread_echo.bd` (spawns a TCP server rule, then connects from main and validates roundtrip + non-blocking spawn timing).
+```sh
+cargo run -p birddiskc -- run examples/net_thread_echo.bd --engine vm --json
+cargo run -p birddiskc -- run examples/net_thread_echo.bd --engine native --json
+```
+
+## 30) Minimal web server (native-friendly)
+Runnable file: `examples/web_server_simple.bd` (serves linked HTML pages plus `/style.css` and `/app.js`, handles multiple requests, and stops on `/shutdown`).
+```sh
+# optional: configure port (single line number)
+cat examples/web_server_simple.conf
+
+# terminal 1
+cargo run -p birddiskc -- run examples/web_server_simple.bd --engine native
+
+# terminal 2
+curl -i http://127.0.0.1:18080/hello
+curl -i http://127.0.0.1:18080/
+curl -i http://127.0.0.1:18080/features
+curl -i http://127.0.0.1:18080/about
+curl -i http://127.0.0.1:18080/style.css
+curl -i http://127.0.0.1:18080/app.js
+curl -i http://127.0.0.1:18080/health
+curl -i http://127.0.0.1:18080/shutdown
 ```
 
 ---

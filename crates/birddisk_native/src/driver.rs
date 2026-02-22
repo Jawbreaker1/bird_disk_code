@@ -333,8 +333,20 @@ pub fn run_with_io(
     );
     builder.symbol("bd_thread_store", runtime::bd_thread_store as *const u8);
     builder.symbol("bd_thread_join", runtime::bd_thread_join as *const u8);
+    builder.symbol(
+        "bd_thread_spawn_i64_0",
+        runtime::bd_thread_spawn_i64_0 as *const u8,
+    );
+    builder.symbol(
+        "bd_thread_spawn_i64_1",
+        runtime::bd_thread_spawn_i64_1 as *const u8,
+    );
     builder.symbol("bd_net_connect", runtime::bd_net_connect as *const u8);
     builder.symbol("bd_net_listen", runtime::bd_net_listen as *const u8);
+    builder.symbol(
+        "bd_net_listener_addr",
+        runtime::bd_net_listener_addr as *const u8,
+    );
     builder.symbol("bd_net_accept", runtime::bd_net_accept as *const u8);
     builder.symbol("bd_net_write_text", runtime::bd_net_write_text as *const u8);
     builder.symbol("bd_net_read_line", runtime::bd_net_read_line as *const u8);

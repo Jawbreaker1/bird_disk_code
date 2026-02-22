@@ -48,12 +48,18 @@ fn split_lines_strips_cr() {
 fn thread_registry_join_bookkeeping() {
     let mut rt = Runtime::new();
     let thread_id = rt.register_thread();
-    assert_eq!(rt.join_thread(thread_id), Err(ThreadJoinError::Running));
+    assert!(matches!(
+        rt.join_thread(thread_id),
+        Err(ThreadJoinError::Running)
+    ));
     rt.complete_thread(thread_id, 42);
-    assert_eq!(rt.join_thread(thread_id), Ok(42));
-    assert_eq!(
+    assert!(matches!(rt.join_thread(thread_id), Ok(42)));
+    assert!(matches!(
         rt.join_thread(thread_id),
         Err(ThreadJoinError::AlreadyJoined)
-    );
-    assert_eq!(rt.join_thread(9_999), Err(ThreadJoinError::Missing));
+    ));
+    assert!(matches!(
+        rt.join_thread(9_999),
+        Err(ThreadJoinError::Missing)
+    ));
 }

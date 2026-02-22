@@ -418,15 +418,15 @@ Acceptance:
 Implement:
 - [x] Define `std::thread` + `std::channel` API (spawn/join, send/recv)
 - [x] Decide value ownership across threads (copy/clone rules, allowed types)
-- [ ] VM deterministic scheduler (opt-in, e.g. `--deterministic` or test-only)
+- [x] VM deterministic scheduler (opt-in, e.g. `--deterministic` or test-only)
   - [x] CLI flag + docs (virtual time + deterministic clock)
-  - [ ] Deterministic thread scheduling (once threads exist)
+  - [x] Deterministic thread scheduling (once threads exist)
 - [x] Native threading runtime scaffolding (thread registry + join bookkeeping)
-- [ ] WASM behavior: compile-time error for threading (clear diagnostic)
+- [x] WASM behavior: compile-time error for threading (clear diagnostic)
   - [x] WASM compile-time error for std::thread/std::channel + tests
 
 Add tests:
-- [ ] VM: deterministic scheduling fixture tests
+- [x] VM: deterministic scheduling fixture tests
 - [x] Compile-time error tests for WASM threading
 
 Acceptance:
@@ -437,14 +437,15 @@ Acceptance:
 ## Sprint 19 — Concurrency implementation (VM + native)
 Implement:
 - [x] VM: spawn/join + channels (message passing only)
-- [ ] Native: spawn/join + channels (OS threads)
-- [ ] CLI/test harness support for concurrency fixtures
-- [ ] Error codes for thread/channel failures (closed channel, join error)
+- [x] Native: spawn/join + channels (host-thread spawn enabled for `i64` entry signatures; shared-reference/channel parallel execution model remains future work)
+- [x] CLI/test harness support for concurrency fixtures
+- [x] Error codes for thread/channel failures (join misuse, channel misuse/would-block)
+  - `send` on closed channel still returns `false` by design (not a runtime error)
 
 Add tests:
 - [x] VM spawn/join fixtures (`vm_tests/`)
-- [ ] VM vs native parity tests (deterministic mode in VM)
-- [ ] Stress tests with multiple threads + channels
+- [x] VM vs native parity tests (deterministic mode in VM)
+- [x] Stress tests with multiple threads + channels
 
 Acceptance:
 - Basic concurrent programs run in VM + native with parity coverage
@@ -453,15 +454,17 @@ Acceptance:
 
 ## Sprint 20 — std::net TCP (blocking)
 Implement:
-- [ ] std::net TCP client (connect, read, write, close, timeouts)
-- [ ] std::net TCP server (listen, accept, read, write, close)
-- [ ] Error mapping (IO failures -> stable runtime codes)
-- [ ] WASM: compile-time error when `std::net` is imported/used
+- [x] std::net TCP client (connect, read, write, close, timeouts)
+- [x] std::net TCP server (listen, accept, read, write, close)
+- [x] std::net minimal TCP pooling (pool/pool_get/pool_put/pool_close)
+- [x] Error mapping (IO failures -> stable runtime codes)
+- [x] WASM: compile-time error when `std::net` is imported/used
 
 Add tests:
-- [ ] VM/native TCP roundtrip tests (localhost)
-- [ ] Error cases (refused connect, timeout)
-- [ ] WASM compile error fixtures for std::net usage
+- [x] VM/native TCP roundtrip tests (localhost)
+- [x] VM/native TcpPool reuse tests (localhost)
+- [x] Error cases (refused connect, timeout)
+- [x] WASM compile error fixtures for std::net usage
 
 Acceptance:
 - Blocking TCP works in VM + native; WASM rejects net usage clearly
@@ -470,13 +473,18 @@ Acceptance:
 
 ## Sprint 21 — std::http (minimal client)
 Implement:
-- [ ] HTTP client on top of std::net (GET/POST, status, headers, body)
-- [ ] Response parsing (status line + headers + body)
-- [ ] Minimal request builder (method, url, headers, body)
+- [x] HTTP client on top of std::net (GET/POST, status, headers, body)
+- [x] Response parsing (status line + headers + body)
+- [x] `Content-Length` exact body parsing (`std::net::read_exact`) with line-based fallback
+- [x] `Transfer-Encoding: chunked` body decoding
+- [x] Minimal request builder (method, url, headers, body)
 
 Add tests:
-- [ ] Local HTTP server fixtures (VM/native) for GET/POST
-- [ ] Error handling tests (invalid response, timeout)
+- [x] Local HTTP server fixtures (VM/native) for GET/POST
+- [x] Error handling tests (invalid response, timeout)
+  - [x] Invalid response tests (VM/native)
+  - [x] Timeout tests (VM/native)
+- [x] Typechecker import propagation: stdlib module builtin imports should not require duplicate entry-file imports
 
 Acceptance:
 - Minimal HTTP client works in VM + native for local endpoints

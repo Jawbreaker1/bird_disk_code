@@ -35,8 +35,8 @@ pub use api_std::{
     bd_fs_write_bytes, bd_fs_write_text, bd_io_print, bd_io_read_line, bd_json_decode_bool,
     bd_json_decode_i64, bd_json_decode_string, bd_json_encode_bool, bd_json_encode_i64,
     bd_json_encode_string, bd_net_accept, bd_net_close_listener, bd_net_close_stream,
-    bd_net_connect, bd_net_listen, bd_net_pool, bd_net_pool_close, bd_net_pool_get,
-    bd_net_pool_put, bd_net_read_exact, bd_net_read_line, bd_net_read_to_end,
+    bd_net_connect, bd_net_listener_addr, bd_net_listen, bd_net_pool, bd_net_pool_close,
+    bd_net_pool_get, bd_net_pool_put, bd_net_read_exact, bd_net_read_line, bd_net_read_to_end,
     bd_net_set_read_timeout_ms, bd_net_write_text, bd_path_basename, bd_path_dirname,
     bd_path_join, bd_path_normalize,
     bd_profiler_alloc_count, bd_profiler_bytes_allocated, bd_profiler_bytes_in_use,
@@ -46,5 +46,6 @@ pub use api_std::{
     bd_string_contains, bd_string_eq, bd_string_from_bytes, bd_string_from_i64, bd_string_index_of,
     bd_string_len, bd_string_replace, bd_string_slice, bd_string_to_i64, bd_test_assert,
     bd_test_assert_eq_bool, bd_test_assert_eq_i64, bd_test_assert_eq_string, bd_thread_join,
-    bd_thread_store, bd_time_now_ms, bd_time_sleep_ms,
+    bd_thread_spawn_i64_0, bd_thread_spawn_i64_1, bd_thread_store, bd_time_now_ms,
+    bd_time_sleep_ms,
 };

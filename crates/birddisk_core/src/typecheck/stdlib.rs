@@ -301,6 +301,11 @@ impl<'a> Checker<'a> {
             Ty::Book("TcpListener".to_string()),
         );
         self.insert_function(
+            "std::net::listener_addr",
+            vec![Ty::Book("TcpListener".to_string())],
+            Ty::String,
+        );
+        self.insert_function(
             "std::net::accept",
             vec![Ty::Book("TcpListener".to_string())],
             Ty::Book("TcpStream".to_string()),

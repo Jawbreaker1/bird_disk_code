@@ -3,6 +3,7 @@ use birddisk_core::TraceFrame;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, Write};
+use std::net::{TcpListener, TcpStream};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,14 +75,15 @@ impl ChannelState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) enum ThreadStatus {
     Running,
+    RunningHost(std::thread::JoinHandle<ThreadOutcome>),
     Completed(i64),
     Joined,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct ThreadState {
     pub(crate) status: ThreadStatus,
 }
@@ -92,13 +94,27 @@ impl ThreadState {
             status: ThreadStatus::Running,
         }
     }
+
+    fn running_host(handle: std::thread::JoinHandle<ThreadOutcome>) -> Self {
+        Self {
+            status: ThreadStatus::RunningHost(handle),
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
+pub(crate) enum ThreadOutcome {
+    Ok(i64),
+    Trap(NativeTrap),
+}
+
+#[derive(Debug)]
 pub(crate) enum ThreadJoinError {
     Missing,
     Running,
     AlreadyJoined,
+    Trap(NativeTrap),
+    Panicked,
 }
 
 #[derive(Debug, Clone)]
@@ -128,6 +144,22 @@ pub(crate) fn set_error(
 
 pub(crate) fn runtime_error(rt: &Runtime, message: &'static str) {
     set_error(rt, "E0400", message, None);
+}
+
+pub(crate) fn thread_error(rt: &Runtime, message: &'static str) {
+    set_error(rt, "E0405", message, None);
+}
+
+pub(crate) fn channel_error(rt: &Runtime, message: &'static str) {
+    set_error(rt, "E0406", message, None);
+}
+
+pub(crate) fn channel_would_block_error(rt: &Runtime) {
+    set_error(rt, "E0407", "Channel recv would block.", None);
+}
+
+pub(crate) fn net_error(rt: &Runtime, message: impl Into<String>) {
+    set_error(rt, "E0408", message, None);
 }
 
 pub(crate) fn array_oob_error(rt: &Runtime) {
@@ -326,6 +358,16 @@ pub struct Runtime {
     pub(crate) channels: HashMap<u32, ChannelState>,
     pub(crate) threads: HashMap<u64, ThreadState>,
     pub(crate) next_thread_id: u64,
+    pub(crate) tcp_streams: HashMap<u32, TcpStream>,
+    pub(crate) tcp_listeners: HashMap<u32, TcpListener>,
+    pub(crate) tcp_pools: HashMap<u32, TcpPoolState>,
+}
+
+#[derive(Debug)]
+pub(crate) struct TcpPoolState {
+    pub(crate) addr: String,
+    pub(crate) max_idle: usize,
+    pub(crate) idle: Vec<TcpStream>,
 }
 
 impl Runtime {
@@ -348,6 +390,9 @@ impl Runtime {
             channels: HashMap::new(),
             threads: HashMap::new(),
             next_thread_id: 1,
+            tcp_streams: HashMap::new(),
+            tcp_listeners: HashMap::new(),
+            tcp_pools: HashMap::new(),
         }
     }
 
@@ -376,6 +421,31 @@ impl Runtime {
         id
     }
 
+    pub(crate) fn register_thread_handle(&mut self, handle: HeapHandle, result: i64) {
+        self.threads.insert(
+            handle.as_u32() as u64,
+            ThreadState {
+                status: ThreadStatus::Completed(result),
+            },
+        );
+    }
+
+    pub(crate) fn register_thread_host_handle(
+        &mut self,
+        handle: HeapHandle,
+        join: std::thread::JoinHandle<ThreadOutcome>,
+    ) {
+        self.threads
+            .insert(handle.as_u32() as u64, ThreadState::running_host(join));
+    }
+
+    pub(crate) fn join_thread_handle(
+        &mut self,
+        handle: HeapHandle,
+    ) -> Result<i64, ThreadJoinError> {
+        self.join_thread(handle.as_u32() as u64)
+    }
+
     pub(crate) fn complete_thread(&mut self, id: u64, result: i64) {
         if let Some(state) = self.threads.get_mut(&id) {
             state.status = ThreadStatus::Completed(result);
@@ -383,15 +453,80 @@ impl Runtime {
     }
 
     pub(crate) fn join_thread(&mut self, id: u64) -> Result<i64, ThreadJoinError> {
-        let state = self.threads.get_mut(&id).ok_or(ThreadJoinError::Missing)?;
+        let state = self.threads.remove(&id).ok_or(ThreadJoinError::Missing)?;
         match state.status {
-            ThreadStatus::Running => Err(ThreadJoinError::Running),
+            ThreadStatus::Running => {
+                self.threads.insert(id, state);
+                Err(ThreadJoinError::Running)
+            }
+            ThreadStatus::RunningHost(join) => {
+                let outcome = join.join().map_err(|_| ThreadJoinError::Panicked)?;
+                self.threads.insert(
+                    id,
+                    ThreadState {
+                        status: ThreadStatus::Joined,
+                    },
+                );
+                match outcome {
+                    ThreadOutcome::Ok(result) => Ok(result),
+                    ThreadOutcome::Trap(trap) => Err(ThreadJoinError::Trap(trap)),
+                }
+            }
             ThreadStatus::Completed(result) => {
-                state.status = ThreadStatus::Joined;
+                self.threads.insert(
+                    id,
+                    ThreadState {
+                        status: ThreadStatus::Joined,
+                    },
+                );
                 Ok(result)
             }
-            ThreadStatus::Joined => Err(ThreadJoinError::AlreadyJoined),
+            ThreadStatus::Joined => {
+                self.threads.insert(
+                    id,
+                    ThreadState {
+                        status: ThreadStatus::Joined,
+                    },
+                );
+                Err(ThreadJoinError::AlreadyJoined)
+            }
         }
+    }
+
+    pub(crate) fn register_tcp_stream(&mut self, handle: HeapHandle, stream: TcpStream) {
+        self.tcp_streams.insert(handle.as_u32(), stream);
+    }
+
+    pub(crate) fn register_tcp_listener(&mut self, handle: HeapHandle, listener: TcpListener) {
+        self.tcp_listeners.insert(handle.as_u32(), listener);
+    }
+
+    pub(crate) fn tcp_stream_mut(&mut self, handle: HeapHandle) -> Option<&mut TcpStream> {
+        self.tcp_streams.get_mut(&handle.as_u32())
+    }
+
+    pub(crate) fn tcp_listener_mut(&mut self, handle: HeapHandle) -> Option<&mut TcpListener> {
+        self.tcp_listeners.get_mut(&handle.as_u32())
+    }
+
+    pub(crate) fn take_tcp_stream(&mut self, handle: HeapHandle) -> Option<TcpStream> {
+        self.tcp_streams.remove(&handle.as_u32())
+    }
+
+    pub(crate) fn close_tcp_listener(&mut self, handle: HeapHandle) -> bool {
+        self.tcp_listeners.remove(&handle.as_u32()).is_some()
+    }
+
+    pub(crate) fn register_tcp_pool(&mut self, handle: HeapHandle, state: TcpPoolState) {
+        self.tcp_pools.insert(handle.as_u32(), state);
+    }
+
+    pub(crate) fn tcp_pool_mut(&mut self, handle: HeapHandle) -> Option<&mut TcpPoolState> {
+        self.tcp_pools.get_mut(&handle.as_u32())
+    }
+
+    pub(crate) fn close_tcp_pool(&mut self, handle: HeapHandle) -> Option<TcpPoolState> {
+        self.tcp_pools.remove(&handle.as_u32())
     }
 
     fn heap_ref(&self) -> &Heap {
@@ -405,6 +540,14 @@ impl Runtime {
     pub fn set_trace(&mut self, frames: Vec<TraceFrame>) {
         self.trace_frames = frames;
         self.trace.clear();
+    }
+
+    pub(crate) fn layout_clone(&self) -> Vec<Vec<usize>> {
+        self.layout.clone()
+    }
+
+    pub(crate) fn trace_frames_clone(&self) -> Vec<TraceFrame> {
+        self.trace_frames.clone()
     }
 
     pub fn set_input(&mut self, input: &str) {

@@ -1,0 +1,203 @@
+import std::fs.
+import std::io.
+import std::net.
+import std::string.
+
+rule build_response(
+  status_code: i64,
+  reason: string,
+  content_type: string,
+  body: string,
+  eol: string
+) -> string:
+  set status0: string = std::string::concat("HTTP/1.1 ", std::string::from_i64(status_code)).
+  set status1: string = std::string::concat(status0, " ").
+  set status_line: string = std::string::concat(status1, reason).
+  set head0: string = std::string::concat(status_line, eol).
+  set head1: string = std::string::concat("Content-Type: ", content_type).
+  set head2: string = std::string::concat(head1, eol).
+  set len0: string = std::string::concat("Content-Length: ", std::string::from_i64(std::string::len(body))).
+  set head3: string = std::string::concat(len0, eol).
+  set head: string = std::string::concat(std::string::concat(head0, head2), std::string::concat(head3, eol)).
+  yield std::string::concat(head, body).
+end
+
+rule route_path(request_line: string) -> string:
+  set s0: i64 = std::string::index_of(request_line, " ").
+  when s0 == -1:
+    yield "/".
+  otherwise:
+    set start: i64 = s0 + 1.
+    set tail: string = std::string::slice(request_line, start, std::string::len(request_line) - start).
+    set s1: i64 = std::string::index_of(tail, " ").
+    when s1 == -1:
+      yield "/".
+    otherwise:
+      yield std::string::slice(tail, 0, s1).
+    end
+  end
+end
+
+rule trim_trailing_cr(line: string) -> string:
+  set n: i64 = std::string::len(line).
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  when n <= 0:
+    yield line.
+  otherwise:
+    set last: string = std::string::slice(line, n - 1, 1).
+    when std::string::eq(last, cr):
+      yield std::string::slice(line, 0, n - 1).
+    otherwise:
+      yield line.
+    end
+  end
+end
+
+rule config_port() -> i64:
+  set text: string = std::fs::read_text("examples/web_server_simple.conf").
+  set line_end: i64 = std::string::index_of(text, "\n").
+  set first_line: string = "".
+  when line_end == -1:
+    put first_line = text.
+  otherwise:
+    put first_line = std::string::slice(text, 0, line_end).
+  end
+  set clean: string = trim_trailing_cr(first_line).
+  yield std::string::to_i64(clean).
+end
+
+rule page_home() -> string:
+  set a: string = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>BirdDisk Demo</title>\n<link rel=\"stylesheet\" href=\"/style.css\">\n<script defer src=\"/app.js\"></script>\n</head>\n<body data-page=\"home\">\n<header class=\"shell\">\n<div class=\"brand\">BirdDisk Native Site</div>\n<nav class=\"nav\">\n<a href=\"/\">Home</a>\n<a href=\"/features\">Features</a>\n<a href=\"/about\">About</a>\n</nav>\n</header>\n<main class=\"shell\">\n<section class=\"hero\">\n<h1>Native-compiled BirdDisk web server</h1>\n<p>Routing, HTML, CSS, and JavaScript served from one BirdDisk executable.</p>\n<a class=\"cta\" href=\"/features\">See Features</a>\n</section>\n<section class=\"grid\">\n<article class=\"card\">\n<h2>Fast demo loop</h2>\n<p>Edit BirdDisk, compile native, and reload your browser.</p>\n</article>\n<article class=\"card\">\n<h2>Multiple routes</h2>\n<p>Each page has a direct URL and shared navigation.</p>\n</article>\n<article class=\"card\">\n<h2>Client-side polish</h2>\n<p>CSS and JS are static assets served by the same process.</p>\n</article>\n</section>\n<p class=\"meta\">Server status: <span id=\"status-pill\">loading</span></p>\n</main>\n</body>\n</html>\n".
+  yield a.
+end
+
+rule page_features() -> string:
+  set a: string = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>BirdDisk Features</title>\n<link rel=\"stylesheet\" href=\"/style.css\">\n<script defer src=\"/app.js\"></script>\n</head>\n<body data-page=\"features\">\n<header class=\"shell\">\n<div class=\"brand\">BirdDisk Native Site</div>\n<nav class=\"nav\">\n<a href=\"/\">Home</a>\n<a href=\"/features\">Features</a>\n<a href=\"/about\">About</a>\n</nav>\n</header>\n<main class=\"shell\">\n<section class=\"hero hero-small\">\n<h1>What this demo proves</h1>\n<p>A simple BirdDisk runtime can already host routed web pages.</p>\n</section>\n<section class=\"grid\">\n<article class=\"card\">\n<h2>HTTP routing</h2>\n<p>Path dispatch for pages and static assets.</p>\n</article>\n<article class=\"card\">\n<h2>Static files</h2>\n<p>Correct content-types for CSS and JavaScript.</p>\n</article>\n<article class=\"card\">\n<h2>Native execution</h2>\n<p>Compiled executable handles multiple sequential connections.</p>\n</article>\n</section>\n<p class=\"meta\"><a href=\"/about\">Read implementation notes</a></p>\n</main>\n</body>\n</html>\n".
+  yield a.
+end
+
+rule page_about() -> string:
+  set a: string = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>About This Demo</title>\n<link rel=\"stylesheet\" href=\"/style.css\">\n<script defer src=\"/app.js\"></script>\n</head>\n<body data-page=\"about\">\n<header class=\"shell\">\n<div class=\"brand\">BirdDisk Native Site</div>\n<nav class=\"nav\">\n<a href=\"/\">Home</a>\n<a href=\"/features\">Features</a>\n<a href=\"/about\">About</a>\n</nav>\n</header>\n<main class=\"shell\">\n<section class=\"hero hero-small\">\n<h1>About this server</h1>\n<p>Built in BirdDisk with std::net. Browser handles all CSS and JS.</p>\n</section>\n<article class=\"card prose\">\n<p>The server accepts a TCP stream, parses the request line, routes by path, and writes a full HTTP/1.1 response including content-length.</p>\n<p>Use <code>/shutdown</code> to stop the process cleanly after testing.</p>\n</article>\n<p class=\"meta\"><a href=\"/shutdown\">Shutdown server</a></p>\n</main>\n</body>\n</html>\n".
+  yield a.
+end
+
+rule page_not_found() -> string:
+  set a: string = "<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>404 Not Found</title>\n<link rel=\"stylesheet\" href=\"/style.css\">\n</head>\n<body data-page=\"missing\">\n<header class=\"shell\">\n<div class=\"brand\">BirdDisk Native Site</div>\n<nav class=\"nav\">\n<a href=\"/\">Home</a>\n<a href=\"/features\">Features</a>\n<a href=\"/about\">About</a>\n</nav>\n</header>\n<main class=\"shell\">\n<section class=\"hero hero-small\">\n<h1>404</h1>\n<p>The page you requested does not exist.</p>\n<a class=\"cta\" href=\"/\">Back to Home</a>\n</section>\n</main>\n</body>\n</html>\n".
+  yield a.
+end
+
+rule style_css() -> string:
+  set a: string = ":root {\n  --bg-a: #071126;\n  --bg-b: #10345a;\n  --ink: #e8f2ff;\n  --muted: #b9cde6;\n  --card: rgba(255, 255, 255, 0.08);\n  --line: rgba(255, 255, 255, 0.24);\n  --accent: #4dd9ff;\n}\n* { box-sizing: border-box; }\nbody {\n  margin: 0;\n  color: var(--ink);\n  font-family: \"Trebuchet MS\", \"Segoe UI\", sans-serif;\n  background: radial-gradient(circle at 20% 20%, #1e4c7c, var(--bg-a) 45%), linear-gradient(135deg, var(--bg-a), var(--bg-b));\n  min-height: 100vh;\n}\n.shell { width: min(960px, 92vw); margin: 0 auto; }\nheader { padding: 28px 0 18px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }\n.brand { font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }\n.nav { display: flex; gap: 14px; }\n.nav a {\n  color: var(--muted);\n  text-decoration: none;\n  padding: 8px 12px;\n  border: 1px solid transparent;\n  border-radius: 10px;\n}\n.nav a:hover, .nav a.active { color: var(--ink); border-color: var(--line); background: rgba(255, 255, 255, 0.06); }\nmain { padding-bottom: 34px; }\n.hero {\n  padding: 36px;\n  border: 1px solid var(--line);\n  border-radius: 22px;\n  background: rgba(6, 14, 31, 0.62);\n  backdrop-filter: blur(2px);\n}\n.hero-small { padding-top: 24px; padding-bottom: 24px; }\nh1 { margin: 0 0 10px; font-size: clamp(1.7rem, 4vw, 2.7rem); line-height: 1.15; }\np { margin: 0; color: var(--muted); line-height: 1.6; }\n.cta {\n  margin-top: 20px;\n  display: inline-block;\n  color: #04213c;\n  background: linear-gradient(90deg, #7be7ff, #4dd9ff);\n  font-weight: 700;\n  text-decoration: none;\n  border-radius: 12px;\n  padding: 10px 16px;\n}\n.grid {\n  margin-top: 18px;\n  display: grid;\n  gap: 14px;\n  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));\n}\n.card {\n  border: 1px solid var(--line);\n  border-radius: 16px;\n  background: var(--card);\n  padding: 18px;\n}\n.card h2 { margin: 0 0 8px; font-size: 1.1rem; }\n.prose p + p { margin-top: 10px; }\n.meta { margin-top: 16px; color: var(--muted); }\n#status-pill {\n  display: inline-block;\n  min-width: 90px;\n  text-align: center;\n  border-radius: 999px;\n  border: 1px solid var(--line);\n  padding: 2px 10px;\n}\n@media (max-width: 700px) {\n  header { flex-direction: column; align-items: flex-start; }\n  .hero { padding: 24px; }\n}\n".
+  yield a.
+end
+
+rule app_js() -> string:
+  set a: string = "(function () {\n  var page = document.body.getAttribute(\"data-page\");\n  var links = document.querySelectorAll(\".nav a\");\n  for (var i = 0; i < links.length; i += 1) {\n    var href = links[i].getAttribute(\"href\");\n    if ((page === \"home\" && href === \"/\") || (page === \"features\" && href === \"/features\") || (page === \"about\" && href === \"/about\")) {\n      links[i].classList.add(\"active\");\n    }\n  }\n  var pill = document.getElementById(\"status-pill\");\n  if (pill) {\n    var now = new Date();\n    pill.textContent = \"live \" + now.toLocaleTimeString();\n  }\n})();\n".
+  yield a.
+end
+
+rule main() -> i64:
+  set port: i64 = config_port().
+  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
+  set listener: TcpListener = std::net::listen(addr).
+  set listen_msg: string = std::string::concat("web server listening on http://", addr).
+  std::io::print(listen_msg).
+  std::io::print("\n").
+
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  set eol: string = std::string::concat(cr, "\n").
+
+  set served: i64 = 0.
+  set running: bool = true.
+  set failed: bool = false.
+  repeat while running:
+    set stream: TcpStream = std::net::accept(listener).
+    set request_line: string = std::net::read_line(stream).
+
+    set header_bytes: i64 = 0.
+    set reading: bool = true.
+    repeat while reading:
+      set line: string = std::net::read_line(stream).
+      when std::string::len(line) == 0:
+        put reading = false.
+      otherwise:
+        put header_bytes = header_bytes + std::string::len(line).
+      end
+    end
+
+    set path: string = route_path(request_line).
+    set status: i64 = 200.
+    set reason: string = "OK".
+    set content_type: string = "text/html; charset=utf-8".
+    set body: string = page_home().
+
+    when std::string::eq(path, "/"):
+      put body = page_home().
+    otherwise:
+      when std::string::eq(path, "/hello"):
+        put body = page_home().
+      otherwise:
+        when std::string::eq(path, "/features"):
+          put body = page_features().
+        otherwise:
+          when std::string::eq(path, "/about"):
+            put body = page_about().
+          otherwise:
+            when std::string::eq(path, "/style.css"):
+              put content_type = "text/css; charset=utf-8".
+              put body = style_css().
+            otherwise:
+              when std::string::eq(path, "/app.js"):
+                put content_type = "text/javascript; charset=utf-8".
+                put body = app_js().
+              otherwise:
+                when std::string::eq(path, "/health"):
+                  put content_type = "text/plain; charset=utf-8".
+                  put body = "ok\n".
+                otherwise:
+                  when std::string::eq(path, "/shutdown"):
+                    put content_type = "text/plain; charset=utf-8".
+                    put body = "shutting down\n".
+                    put running = false.
+                  otherwise:
+                    put status = 404.
+                    put reason = "Not Found".
+                    put body = page_not_found().
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+    set response: string = build_response(status, reason, content_type, body, eol).
+    set wrote: i64 = std::net::write_text(stream, response).
+    std::net::close_stream(stream).
+    put served = served + 1.
+
+    set write_failed: bool = wrote <= 0.
+    when write_failed:
+      put failed = true.
+      put running = false.
+    otherwise:
+      std::io::print(std::string::concat("served path: ", path)).
+      std::io::print("\n").
+    end
+  end
+
+  std::net::close_listener(listener).
+  std::io::print(std::string::concat("served total: ", std::string::from_i64(served))).
+  std::io::print("\n").
+
+  when failed:
+    yield -1.
+  otherwise:
+    yield served.
+  end
+end

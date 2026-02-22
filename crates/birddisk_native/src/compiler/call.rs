@@ -617,6 +617,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     &[self.rt_ptr, arg_vals[0], book_id],
                 ))
             }
+            "std::net::listener_addr" => Some(self.call_runtime_value(
+                self.runtime.net_listener_addr,
+                &[self.rt_ptr, arg_vals[0]],
+            )),
             "std::net::accept" => {
                 let layout = self
                     .books
@@ -766,10 +770,6 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 ))
             }
         };
-        let result = self
-            .emit_call(&entry_name, &args[1..], Some(&Type::I64))?
-            .ok_or_else(|| native_error("Thread entry rule must return i64.".to_string()))?;
-
         let layout = self
             .books
             .get("Thread")
@@ -780,6 +780,44 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             self.runtime.alloc_object,
             &[self.rt_ptr, book_id, field_count],
         );
+
+        let entry_sig = self
+            .functions
+            .get(&entry_name)
+            .ok_or_else(|| native_error(format!("unknown function '{entry_name}'.")))?;
+        let async_i64 = entry_sig.return_type == Type::I64
+            && entry_sig.params.len() == args.len().saturating_sub(1)
+            && entry_sig.params.iter().all(|ty| ty == &Type::I64)
+            && entry_sig.params.len() <= 1;
+        if async_i64 {
+            let func_id = *self
+                .func_ids
+                .get(&entry_name)
+                .ok_or_else(|| native_error(format!("missing function id for '{entry_name}'.")))?;
+            let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
+            let entry_ptr = self.builder.ins().func_addr(types::I64, func_ref);
+            match args.len().saturating_sub(1) {
+                0 => {
+                    let _ = self.call_runtime_value(
+                        self.runtime.thread_spawn_i64_0,
+                        &[self.rt_ptr, thread_handle, entry_ptr],
+                    );
+                }
+                1 => {
+                    let arg0 = self.emit_expr(&args[1], Some(&Type::I64))?;
+                    let _ = self.call_runtime_value(
+                        self.runtime.thread_spawn_i64_1,
+                        &[self.rt_ptr, thread_handle, entry_ptr, arg0],
+                    );
+                }
+                _ => {}
+            }
+            return Ok(Some(thread_handle));
+        }
+
+        let result = self
+            .emit_call(&entry_name, &args[1..], Some(&Type::I64))?
+            .ok_or_else(|| native_error("Thread entry rule must return i64.".to_string()))?;
         self.call_runtime_void(
             self.runtime.thread_store,
             &[self.rt_ptr, thread_handle, result],

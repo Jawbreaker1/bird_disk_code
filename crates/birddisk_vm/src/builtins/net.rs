@@ -15,6 +15,7 @@ impl<'a> Vm<'a> {
         match name {
             "std::net::connect" => self.eval_net_connect(args).map(Some),
             "std::net::listen" => self.eval_net_listen(args).map(Some),
+            "std::net::listener_addr" => self.eval_net_listener_addr(args).map(Some),
             "std::net::accept" => self.eval_net_accept(args).map(Some),
             "std::net::write_text" => self.eval_net_write_text(args).map(Some),
             "std::net::read_line" => self.eval_net_read_line(args).map(Some),
@@ -91,6 +92,24 @@ impl<'a> Vm<'a> {
         let stream_handle = tcp_handle_from_value(&value, "TcpStream")?;
         self.register_tcp_stream(stream_handle, stream);
         Ok(value)
+    }
+
+    fn eval_net_listener_addr(&mut self, args: &[Value]) -> Result<Value, RuntimeError> {
+        if args.len() != 1 {
+            return Err(runtime_error(
+                "E0400",
+                "std::net::listener_addr expects 1 argument",
+            ));
+        }
+        let listener_handle = tcp_handle_from_value(&args[0], "TcpListener")?;
+        let addr = self
+            .tcp_listener_mut(listener_handle)?
+            .local_addr()
+            .map_err(|err| {
+                runtime_error("E0408", format!("std::net::listener_addr failed: {err}"))
+            })?;
+        let addr_text = addr.to_string();
+        Ok(self.alloc_string(addr_text.as_str()))
     }
 
     fn eval_net_write_text(&mut self, args: &[Value]) -> Result<Value, RuntimeError> {

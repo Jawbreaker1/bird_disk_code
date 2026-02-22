@@ -1,0 +1,150 @@
+use crate::rt_core::*;
+use crate::TraceFrame;
+
+type EntryI64_0 = extern "C-unwind" fn(i64) -> i64;
+type EntryI64_1 = extern "C-unwind" fn(i64, i64) -> i64;
+
+fn thread_handle_value(rt: &Runtime, raw: u64, op: &'static str) -> Option<HeapHandle> {
+    let handle = heap_handle(rt, raw)?;
+    let header = heap_header(rt, handle)?;
+    if header.kind() != HeapKind::Object {
+        thread_error(rt, op);
+        return None;
+    }
+    Some(handle)
+}
+
+fn run_thread_entry<F>(layout: Vec<Vec<usize>>, trace_frames: Vec<TraceFrame>, call: F) -> ThreadOutcome
+where
+    F: FnOnce(i64) -> i64,
+{
+    let mut child = Runtime::new();
+    child.set_layout(layout);
+    child.set_trace(trace_frames);
+    let child_ptr = (&mut child as *mut Runtime as usize) as i64;
+    let result = call(child_ptr);
+    match child.take_error() {
+        Some(trap) => ThreadOutcome::Trap(NativeTrap {
+            code: trap.code,
+            message: trap.message,
+            message_handle: None,
+            trace: trap.trace,
+        }),
+        None => ThreadOutcome::Ok(result),
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_thread_store(rt: *mut Runtime, handle: u64, result: i64) {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    let header = match heap_header(rt, handle) {
+        Some(value) => value,
+        None => return,
+    };
+    if header.kind() != HeapKind::Object {
+        thread_error(rt, "std::thread::spawn expected a Thread handle.");
+        return;
+    }
+    rt.register_thread_handle(handle, result);
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_thread_spawn_i64_0(rt: *mut Runtime, handle: u64, entry: u64) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match thread_handle_value(rt, handle, "std::thread::spawn expected a Thread handle.") {
+        Some(value) => value,
+        None => return 0,
+    };
+    if entry == 0 {
+        thread_error(rt, "std::thread::spawn failed: invalid entry function.");
+        return 0;
+    }
+    let layout = rt.layout_clone();
+    let trace_frames = rt.trace_frames_clone();
+    let entry_fn: EntryI64_0 = unsafe { std::mem::transmute(entry as usize) };
+    let join = std::thread::spawn(move || run_thread_entry(layout, trace_frames, |child_ptr| entry_fn(child_ptr)));
+    rt.register_thread_host_handle(handle, join);
+    1
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_thread_spawn_i64_1(
+    rt: *mut Runtime,
+    handle: u64,
+    entry: u64,
+    arg0: i64,
+) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match thread_handle_value(rt, handle, "std::thread::spawn expected a Thread handle.") {
+        Some(value) => value,
+        None => return 0,
+    };
+    if entry == 0 {
+        thread_error(rt, "std::thread::spawn failed: invalid entry function.");
+        return 0;
+    }
+    let layout = rt.layout_clone();
+    let trace_frames = rt.trace_frames_clone();
+    let entry_fn: EntryI64_1 = unsafe { std::mem::transmute(entry as usize) };
+    let join = std::thread::spawn(move || {
+        run_thread_entry(layout, trace_frames, |child_ptr| entry_fn(child_ptr, arg0))
+    });
+    rt.register_thread_host_handle(handle, join);
+    1
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn bd_thread_join(rt: *mut Runtime, handle: u64) -> i64 {
+    let rt = runtime_mut(rt);
+    if rt.has_error() {
+        return 0;
+    }
+    let handle = match heap_handle(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    let header = match heap_header(rt, handle) {
+        Some(value) => value,
+        None => return 0,
+    };
+    if header.kind() != HeapKind::Object {
+        thread_error(rt, "std::thread::join expects a Thread handle.");
+        return 0;
+    }
+    match rt.join_thread_handle(handle) {
+        Ok(value) => value,
+        Err(ThreadJoinError::Missing) => {
+            thread_error(rt, "Thread handle is invalid.");
+            0
+        }
+        Err(ThreadJoinError::Running) => {
+            thread_error(rt, "Thread is still running.");
+            0
+        }
+        Err(ThreadJoinError::AlreadyJoined) => {
+            thread_error(rt, "Thread has already been joined.");
+            0
+        }
+        Err(ThreadJoinError::Panicked) => {
+            thread_error(rt, "Thread panicked.");
+            0
+        }
+        Err(ThreadJoinError::Trap(trap)) => {
+            set_error(rt, trap.code, trap.message, None);
+            0
+        }
+    }
+}

@@ -30,9 +30,10 @@ pub use json::{
     bd_json_encode_i64, bd_json_encode_string,
 };
 pub use net::{
-    bd_net_accept, bd_net_close_listener, bd_net_close_stream, bd_net_connect, bd_net_listen,
-    bd_net_pool, bd_net_pool_close, bd_net_pool_get, bd_net_pool_put, bd_net_read_exact,
-    bd_net_read_line, bd_net_read_to_end, bd_net_set_read_timeout_ms, bd_net_write_text,
+    bd_net_accept, bd_net_close_listener, bd_net_close_stream, bd_net_connect,
+    bd_net_listener_addr, bd_net_listen, bd_net_pool, bd_net_pool_close, bd_net_pool_get,
+    bd_net_pool_put, bd_net_read_exact, bd_net_read_line, bd_net_read_to_end,
+    bd_net_set_read_timeout_ms, bd_net_write_text,
 };
 pub use path::{bd_path_basename, bd_path_dirname, bd_path_join, bd_path_normalize};
 pub use profiler::{
@@ -50,7 +51,9 @@ pub use string::{
 pub use test::{
     bd_test_assert, bd_test_assert_eq_bool, bd_test_assert_eq_i64, bd_test_assert_eq_string,
 };
-pub use thread::{bd_thread_join, bd_thread_store};
+pub use thread::{
+    bd_thread_join, bd_thread_spawn_i64_0, bd_thread_spawn_i64_1, bd_thread_store,
+};
 pub use time::{bd_time_now_ms, bd_time_sleep_ms};
 
 use crate::rt_core::*;

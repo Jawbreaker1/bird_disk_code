@@ -1,0 +1,45 @@
+import std::io.
+import std::net.
+import std::string.
+import std::thread.
+import std::time.
+
+rule server(port: i64) -> i64:
+  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
+  set listener: TcpListener = std::net::listen(addr).
+  set stream: TcpStream = std::net::accept(listener).
+  set line: string = std::net::read_line(stream).
+  set wrote: i64 = std::net::write_text(stream, std::string::concat("echo:", std::string::concat(line, "\n"))).
+  std::net::close_stream(stream).
+  std::net::close_listener(listener).
+  yield wrote.
+end
+
+rule main() -> i64:
+  set probe: TcpListener = std::net::listen("127.0.0.1:0").
+  set probed_addr: string = std::net::listener_addr(probe).
+  std::net::close_listener(probe).
+  set port_text: string = std::string::slice(probed_addr, 10, std::string::len(probed_addr) - 10).
+  set port: i64 = std::string::to_i64(port_text).
+  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
+
+  set before_spawn: i64 = std::time::now_ms().
+  set t: Thread = std::thread::spawn("server", port).
+  set spawn_delta: i64 = std::time::now_ms() - before_spawn.
+
+  set ignored: i64 = std::time::sleep_ms(220).
+  set client: TcpStream = std::net::connect(addr).
+  set sent: i64 = std::net::write_text(client, "ping\n").
+  set recv: string = std::net::read_line(client).
+  std::net::close_stream(client).
+  set done: i64 = std::thread::join(t).
+
+  std::io::print(std::string::concat("threaded tcp reply: ", recv)).
+  std::io::print("\n").
+
+  when sent > 0 && done > 0 && spawn_delta >= 0 && spawn_delta < 100 && std::string::eq(recv, "echo:ping"):
+    yield 1.
+  otherwise:
+    yield -1.
+  end
+end
