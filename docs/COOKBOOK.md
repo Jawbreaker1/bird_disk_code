@@ -467,7 +467,7 @@ cargo run -p birddiskc -- run examples/net_thread_echo.bd --engine native --json
 ## 30) Minimal web server (native-friendly)
 Runnable file: `examples/web_server_simple.bd` (serves linked HTML pages plus `/style.css` and `/app.js`, handles multiple requests, and stops on `/shutdown`).
 ```sh
-# optional: configure port (single line number)
+# optional: configure settings (key value entries)
 cat examples/web_server_simple.conf
 
 # terminal 1

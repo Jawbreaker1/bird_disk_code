@@ -56,6 +56,25 @@ rule trim_trailing_cr(line: string) -> string:
   end
 end
 
+rule config_value(text: string, key: string) -> string:
+  set needle: string = std::string::concat(key, " ").
+  set idx: i64 = std::string::index_of(text, needle).
+  when idx == -1:
+    throw std::string::concat("Missing config key: ", key).
+  otherwise:
+    set value_start: i64 = idx + std::string::len(needle).
+    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
+    set line_end: i64 = std::string::index_of(tail, "\n").
+    set line: string = "".
+    when line_end == -1:
+      put line = tail.
+    otherwise:
+      put line = std::string::slice(tail, 0, line_end).
+    end
+    yield trim_trailing_cr(line).
+  end
+end
+
 rule config_port() -> i64:
   set cwd: string = std::env::cwd().
   set path: string = "examples/web_server_simple.conf".
@@ -65,15 +84,8 @@ rule config_port() -> i64:
     put path = "examples/web_server_simple.conf".
   end
   set text: string = std::fs::read_text(path).
-  set line_end: i64 = std::string::index_of(text, "\n").
-  set first_line: string = "".
-  when line_end == -1:
-    put first_line = text.
-  otherwise:
-    put first_line = std::string::slice(text, 0, line_end).
-  end
-  set clean: string = trim_trailing_cr(first_line).
-  yield std::string::to_i64(clean).
+  set port_text: string = config_value(text, "port").
+  yield std::string::to_i64(port_text).
 end
 
 rule page_home() -> string:
