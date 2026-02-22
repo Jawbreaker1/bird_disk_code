@@ -1,47 +1,31 @@
 import std::io.
 import std::net.
 import std::string.
-import std::thread.
 import std::time.
 
-rule server(port: i64) -> i64:
+rule main() -> i64:
+  set port: i64 = 40000 + (std::time::now_ms() % 20000).
   set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
   set listener: TcpListener = std::net::listen(addr).
-  set stream: TcpStream = std::net::accept(listener).
-  set line: string = std::net::read_line(stream).
-  set wrote: i64 = 0.
-  when std::string::eq(line, "ping"):
-    put wrote = std::net::write_text(stream, "pong\n").
-  otherwise:
-    put wrote = std::net::write_text(stream, "bad\n").
-  end
-  std::net::close_stream(stream).
+
+  set client: TcpStream = std::net::connect(addr).
+  set server: TcpStream = std::net::accept(listener).
+  set c_to: i64 = std::net::set_read_timeout_ms(client, 3000).
+  set s_to: i64 = std::net::set_read_timeout_ms(server, 3000).
+
+  set c_sent: i64 = std::net::write_text(client, "ping\n").
+  set s_line: string = std::net::read_line(server).
+  set s_sent: i64 = std::net::write_text(server, "pong\n").
+  set c_line: string = std::net::read_line(client).
+
+  std::net::close_stream(client).
+  std::net::close_stream(server).
   std::net::close_listener(listener).
-  yield wrote.
-end
 
-rule client(port: i64) -> i64:
-  set ignored: i64 = std::time::sleep_ms(30).
-  set addr: string = std::string::concat("127.0.0.1:", std::string::from_i64(port)).
-  set stream: TcpStream = std::net::connect(addr).
-  set sent: i64 = std::net::write_text(stream, "ping\n").
-  set line: string = std::net::read_line(stream).
-  std::net::close_stream(stream).
-  std::io::print(std::string::concat("tcp reply: ", line)).
+  std::io::print(std::string::concat("tcp reply: ", c_line)).
   std::io::print("\n").
-  when std::string::eq(line, "pong"):
-    yield sent.
-  otherwise:
-    yield -1.
-  end
-end
 
-rule main() -> i64:
-  set port: i64 = 18081.
-  set t: Thread = std::thread::spawn("server", port).
-  set client_ok: i64 = client(port).
-  set server_wrote: i64 = std::thread::join(t).
-  when client_ok > 0 && server_wrote > 0:
+  when c_sent > 0 && s_sent > 0 && std::string::eq(s_line, "ping") && std::string::eq(c_line, "pong"):
     yield 1.
   otherwise:
     yield -1.
