@@ -201,11 +201,7 @@ impl Lexer {
                         self.advance();
                         TokenKind::AndAnd
                     } else {
-                        return Err(self.error(
-                            "E0100",
-                            "Unexpected character '&'.",
-                            start,
-                        ));
+                        return Err(self.error("E0100", "Unexpected character '&'.", start));
                     }
                 }
                 '|' => {
@@ -214,11 +210,7 @@ impl Lexer {
                         self.advance();
                         TokenKind::OrOr
                     } else {
-                        return Err(self.error(
-                            "E0100",
-                            "Unexpected character '|'.",
-                            start,
-                        ));
+                        return Err(self.error("E0100", "Unexpected character '|'.", start));
                     }
                 }
                 '/' => {

@@ -170,11 +170,7 @@ pub extern "C-unwind" fn bd_alloc_array(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_alloc_object(
-    rt: *mut Runtime,
-    book_id: u64,
-    field_count: u64,
-) -> u64 {
+pub extern "C-unwind" fn bd_alloc_object(rt: *mut Runtime, book_id: u64, field_count: u64) -> u64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return 0;
@@ -191,9 +187,7 @@ pub extern "C-unwind" fn bd_alloc_object(
         invalid_heap_error(rt);
         return 0;
     }
-    let handle = rt
-        .heap_mut()
-        .alloc_object(book_id as u32, field_count);
+    let handle = rt.heap_mut().alloc_object(book_id as u32, field_count);
     let handle = match handle {
         Some(value) => value,
         None => {
@@ -241,17 +235,16 @@ pub extern "C-unwind" fn bd_alloc_enum(
         };
         kind as u32
     };
-    let handle = match rt.heap_mut().alloc_enum(
-        enum_id as u32,
-        variant_id as u32,
-        payload_kind,
-        payload_len,
-    ) {
-        Some(value) => value,
-        None => {
-            oom_error(rt);
-            return 0;
-        }
-    };
+    let handle =
+        match rt
+            .heap_mut()
+            .alloc_enum(enum_id as u32, variant_id as u32, payload_kind, payload_len)
+        {
+            Some(value) => value,
+            None => {
+                oom_error(rt);
+                return 0;
+            }
+        };
     handle.as_u32() as u64
 }

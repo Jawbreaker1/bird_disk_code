@@ -5,8 +5,8 @@ pub(crate) fn render_docs(
     path: &str,
     config: &birddisk_core::ModuleConfig,
 ) -> Result<String, String> {
-    let program = birddisk_core::parse_and_typecheck_with_config(path, config)
-        .map_err(|diags| {
+    let program =
+        birddisk_core::parse_and_typecheck_with_config(path, config).map_err(|diags| {
             let message = diags
                 .first()
                 .map(|diag| diag.message.as_str())
@@ -158,8 +158,7 @@ mod tests {
         fs::write(&path, source).expect("write temp file");
         let path_str = path.to_string_lossy().to_string();
 
-        let output =
-            render_docs(&path_str, &birddisk_core::ModuleConfig::default()).expect("docs");
+        let output = render_docs(&path_str, &birddisk_core::ModuleConfig::default()).expect("docs");
         assert!(output.contains("# BirdDisk Docs"));
         assert!(output.contains("## Functions"));
         assert!(output.contains("rule add_one"));
@@ -173,9 +172,11 @@ mod tests {
         let root = find_repo_root(manifest_dir).expect("workspace root");
         let entry_path = root.join("docs/fixtures/docgen/sample.bd");
         let expected_path = root.join("docs/fixtures/docgen/sample.md");
-        let output =
-            render_docs(entry_path.to_str().unwrap(), &birddisk_core::ModuleConfig::default())
-                .expect("docs");
+        let output = render_docs(
+            entry_path.to_str().unwrap(),
+            &birddisk_core::ModuleConfig::default(),
+        )
+        .expect("docs");
         let normalized = output.replace(
             entry_path.to_str().unwrap(),
             "docs/fixtures/docgen/sample.bd",

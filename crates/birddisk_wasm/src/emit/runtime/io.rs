@@ -1,13 +1,6 @@
 use crate::emit::{
-    WatEmitter,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    STRING_HEADER_SIZE,
-    TRAP_KIND_STRING,
-    TRAP_NULL_DEREF,
+    WatEmitter, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_SHIFT, HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET, STRING_HEADER_SIZE, TRAP_KIND_STRING, TRAP_NULL_DEREF,
 };
 
 pub(in crate::emit) fn emit_io_runtime(emitter: &mut WatEmitter) {

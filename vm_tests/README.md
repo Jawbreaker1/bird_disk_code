@@ -1,9 +1,10 @@
-# VM-only fixtures
+# VM/native fixtures
 
-This folder is reserved for BirdDisk programs that only run in the VM.
-Use it for future features that are not yet implemented in WASM.
+This folder contains BirdDisk fixtures focused on VM/native behavior.
+Use it for features that are not yet available in WASM.
 
 Run them with:
 ```sh
 ./target/debug/birddiskc test --json --engine vm --dir vm_tests
+./target/debug/birddiskc test --json --engine native --dir vm_tests
 ```

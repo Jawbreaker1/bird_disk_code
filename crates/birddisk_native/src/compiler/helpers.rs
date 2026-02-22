@@ -48,9 +48,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             .last()
             .copied()
             .unwrap_or(self.error_block);
-        self.builder
-            .ins()
-            .brif(cond, target, &[], ok_block, &[]);
+        self.builder.ins().brif(cond, target, &[], ok_block, &[]);
         self.builder.switch_to_block(ok_block);
         self.builder.seal_block(ok_block);
     }

@@ -61,10 +61,7 @@ impl<'a> Vm<'a> {
                 };
                 let state = self.channel_state_mut(handle)?;
                 if state.kind != kind {
-                    return Err(runtime_error(
-                        "E0400",
-                        "Channel kind mismatch at runtime.",
-                    ));
+                    return Err(runtime_error("E0406", "Channel kind mismatch at runtime."));
                 }
                 if state.closed {
                     Ok(Some(Value::Bool(false)))
@@ -80,48 +77,56 @@ impl<'a> Vm<'a> {
                         format!("{book}::recv expects 0 arguments"),
                     ));
                 }
-                let (closed, value) = {
-                    let state = self.channel_state_mut(handle)?;
-                    if state.kind != kind {
-                        return Err(runtime_error(
-                            "E0400",
-                            "Channel kind mismatch at runtime.",
-                        ));
-                    }
-                    if let Some(value) = state.queue.pop_front() {
-                        (state.closed, Some(value))
-                    } else {
-                        (state.closed, None)
-                    }
-                };
-                if let Some(value) = value {
-                    let payload = match value {
-                        ChannelValue::I64(value) => Value::I64(value),
-                        ChannelValue::Bool(value) => Value::Bool(value),
-                        ChannelValue::F64(value) => Value::F64(value),
-                        ChannelValue::U8(value) => Value::U8(value),
-                        ChannelValue::Ref(handle) => match kind.payload_type() {
-                            Type::String => Value::String(handle),
-                            Type::Array(inner) => Value::Array {
-                                handle,
-                                elem_type: *inner,
-                            },
-                            _ => {
-                                return Err(runtime_error(
-                                    "E0400",
-                                    "Channel recv payload mismatch.",
-                                ))
-                            }
-                        },
+                loop {
+                    let (closed, value) = {
+                        let state = self.channel_state_mut(handle)?;
+                        if state.kind != kind {
+                            return Err(runtime_error(
+                                "E0406",
+                                "Channel kind mismatch at runtime.",
+                            ));
+                        }
+                        if let Some(value) = state.queue.pop_front() {
+                            (state.closed, Some(value))
+                        } else {
+                            (state.closed, None)
+                        }
                     };
-                    let result = self.alloc_enum_variant(kind.recv_name(), "Ok", Some(payload))?;
-                    return Ok(Some(result));
+                    if let Some(value) = value {
+                        let payload = match value {
+                            ChannelValue::I64(value) => Value::I64(value),
+                            ChannelValue::Bool(value) => Value::Bool(value),
+                            ChannelValue::F64(value) => Value::F64(value),
+                            ChannelValue::U8(value) => Value::U8(value),
+                            ChannelValue::Ref(handle) => match kind.payload_type() {
+                                Type::String => Value::String(handle),
+                                Type::Array(inner) => Value::Array {
+                                    handle,
+                                    elem_type: *inner,
+                                },
+                                _ => {
+                                    return Err(runtime_error(
+                                        "E0406",
+                                        "Channel recv payload mismatch.",
+                                    ))
+                                }
+                            },
+                        };
+                        let result =
+                            self.alloc_enum_variant(kind.recv_name(), "Ok", Some(payload))?;
+                        return Ok(Some(result));
+                    }
+                    if closed {
+                        let result = self.alloc_enum_variant(kind.recv_name(), "Closed", None)?;
+                        return Ok(Some(result));
+                    }
+                    if self.is_deterministic() && self.has_pending_thread_jobs() {
+                        if self.run_next_pending_thread()? {
+                            continue;
+                        }
+                    }
+                    return Err(runtime_error("E0407", "Channel recv would block."));
                 }
-                if closed {
-                    let result = self.alloc_enum_variant(kind.recv_name(), "Closed", None)?;
-                    return Ok(Some(result));
-                }
-                Err(runtime_error("E0400", "Channel recv would block."))
             }
             "close" => {
                 if !args.is_empty() {
@@ -132,16 +137,13 @@ impl<'a> Vm<'a> {
                 }
                 let state = self.channel_state_mut(handle)?;
                 if state.kind != kind {
-                    return Err(runtime_error(
-                        "E0400",
-                        "Channel kind mismatch at runtime.",
-                    ));
+                    return Err(runtime_error("E0406", "Channel kind mismatch at runtime."));
                 }
                 state.closed = true;
                 Ok(Some(Value::Void))
             }
             _ => Err(runtime_error(
-                "E0400",
+                "E0406",
                 format!("Unknown channel method '{method}' at runtime."),
             )),
         }

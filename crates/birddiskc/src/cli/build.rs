@@ -1,6 +1,6 @@
 use super::args::EmitFormat;
 use super::diagnostics::format_diagnostics_human;
-use super::threading::{native_threading_guard, wasm_threading_guard};
+use super::threading::wasm_threading_guard;
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -14,11 +14,6 @@ pub(crate) fn emit_compiled(
 ) -> Result<(), String> {
     if engine == birddisk_core::Engine::Wasm {
         if let Some(diag) = wasm_threading_guard(path, config) {
-            return Err(format_diagnostics_human(&[diag]));
-        }
-    }
-    if engine == birddisk_core::Engine::Native {
-        if let Some(diag) = native_threading_guard(path, config) {
             return Err(format_diagnostics_human(&[diag]));
         }
     }
@@ -65,10 +60,10 @@ pub(crate) fn emit_compiled(
             EmitFormat::Exe => {
                 let out_path = out.unwrap_or_else(|| default_exe_path(path));
                 let bytes = birddisk_native::emit_object(&program).map_err(|err| err.message)?;
-                let layout = birddisk_native::layout_for_program(&program)
-                    .map_err(|err| err.message)?;
-                let trace = birddisk_native::trace_for_program(&program)
-                    .map_err(|err| err.message)?;
+                let layout =
+                    birddisk_native::layout_for_program(&program).map_err(|err| err.message)?;
+                let trace =
+                    birddisk_native::trace_for_program(&program).map_err(|err| err.message)?;
                 build_native_executable(&bytes, path, &out_path, &layout, &trace)
             }
             _ => Err("emit format not supported for --engine native".to_string()),
@@ -378,7 +373,11 @@ fn native_work_dir() -> Result<PathBuf, String> {
 
 fn target_profile_dir() -> Result<PathBuf, String> {
     let root = workspace_root()?;
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
+    let profile = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
     Ok(root.join("target").join(profile))
 }
 

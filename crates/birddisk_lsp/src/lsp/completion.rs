@@ -36,8 +36,20 @@ pub(crate) fn completion_items(
 ) -> Vec<Value> {
     let mut items = Vec::new();
     let keywords = [
-        "rule", "set", "put", "yield", "when", "otherwise", "repeat", "while", "end",
-        "import", "book", "field", "new", "as",
+        "rule",
+        "set",
+        "put",
+        "yield",
+        "when",
+        "otherwise",
+        "repeat",
+        "while",
+        "end",
+        "import",
+        "book",
+        "field",
+        "new",
+        "as",
     ];
     if let Some(line) = line_at_position(text, pos.line) {
         if line.trim_start().starts_with("import ") {
@@ -61,7 +73,8 @@ pub(crate) fn completion_items(
                     return items;
                 }
                 let module_name = path.segments.join("::");
-                let stdlib_root = uri_to_path(uri).and_then(|path| super::imports::find_stdlib_root(&path));
+                let stdlib_root =
+                    uri_to_path(uri).and_then(|path| super::imports::find_stdlib_root(&path));
                 let functions = stdlib_module_functions(&module_name, stdlib_root.as_deref());
                 for func in functions {
                     items.push(completion_item(&func, 3));
@@ -122,7 +135,8 @@ pub(crate) fn completion_items(
             }
             if let Some(program) = program {
                 let index = build_symbol_index(uri, program);
-                let stdlib_root = uri_to_path(uri).and_then(|path| super::imports::find_stdlib_root(&path));
+                let stdlib_root =
+                    uri_to_path(uri).and_then(|path| super::imports::find_stdlib_root(&path));
                 let stdlib = stdlib_signatures(program, stdlib_root.as_deref());
                 let env = env_for_position(program, pos, &index, &stdlib);
                 let book_name = match env.get(&base) {

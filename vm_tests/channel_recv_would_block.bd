@@ -1,0 +1,14 @@
+import std::channel.
+
+rule main() -> i64:
+  set ch: ChannelI64 = std::channel::i64().
+  set value: RecvI64 = ch::recv().
+  match value:
+    case RecvI64::Ok(v):
+      yield v.
+    case RecvI64::Closed:
+      yield -1.
+    otherwise:
+      yield -2.
+  end
+end

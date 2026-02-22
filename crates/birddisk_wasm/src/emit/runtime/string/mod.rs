@@ -2,7 +2,7 @@ mod basic;
 mod convert;
 mod search;
 
-use crate::emit::{ARRAY_HEADER_SIZE, STRING_HEADER_SIZE, WatEmitter};
+use crate::emit::{WatEmitter, ARRAY_HEADER_SIZE, STRING_HEADER_SIZE};
 
 pub(in crate::emit) fn emit_string_runtime(emitter: &mut WatEmitter, allow_from_bytes: bool) {
     let max_len = i32::MAX as i64 - STRING_HEADER_SIZE as i64;

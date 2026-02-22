@@ -1,12 +1,12 @@
-use super::FuncCompiler;
+use super::super::types::array_elem_kind;
 use super::super::{
     wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_HEADER_SIZE,
     HEAP_KIND_ARRAY, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
     OBJECT_FIELD_SIZE, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB,
     TRAP_ARRAY_OOM, TRAP_KIND_ARRAY, TRAP_KIND_OBJECT, TRAP_NULL_DEREF,
 };
+use super::FuncCompiler;
 use birddisk_core::ast::Type;
-use super::super::types::array_elem_kind;
 
 impl<'a> FuncCompiler<'a> {
     pub(super) fn emit_len_non_negative_check(&mut self, len_local: u32) -> Result<(), WasmError> {
@@ -21,7 +21,11 @@ impl<'a> FuncCompiler<'a> {
         Ok(())
     }
 
-    pub(super) fn emit_len_max_check(&mut self, len_local: u32, elem_size: i32) -> Result<(), WasmError> {
+    pub(super) fn emit_len_max_check(
+        &mut self,
+        len_local: u32,
+        elem_size: i32,
+    ) -> Result<(), WasmError> {
         let max_len = (i32::MAX as i64 - ARRAY_HEADER_SIZE as i64) / elem_size as i64;
         self.push_line(format!("local.get {len_local}"));
         self.push_line(format!("i64.const {max_len}"));
@@ -34,7 +38,11 @@ impl<'a> FuncCompiler<'a> {
         Ok(())
     }
 
-    pub(super) fn emit_bounds_check(&mut self, base_local: u32, idx_local: u32) -> Result<(), WasmError> {
+    pub(super) fn emit_bounds_check(
+        &mut self,
+        base_local: u32,
+        idx_local: u32,
+    ) -> Result<(), WasmError> {
         self.emit_null_check(base_local);
         self.emit_kind_check(base_local, HEAP_KIND_ARRAY, TRAP_KIND_ARRAY);
         let len_local = self.temp_local(Type::I64);
@@ -72,7 +80,12 @@ impl<'a> FuncCompiler<'a> {
         self.push_line("i32.add");
     }
 
-    pub(super) fn emit_array_address_index(&mut self, base_local: u32, idx_local: u32, elem_size: i32) {
+    pub(super) fn emit_array_address_index(
+        &mut self,
+        base_local: u32,
+        idx_local: u32,
+        elem_size: i32,
+    ) {
         self.push_line(format!("local.get {base_local}"));
         self.push_line(format!("i32.const {ARRAY_HEADER_SIZE}"));
         self.push_line("i32.add");
@@ -203,7 +216,11 @@ impl<'a> FuncCompiler<'a> {
         }
     }
 
-    pub(super) fn emit_enum_payload(&mut self, base_local: u32, ty: &Type) -> Result<(), WasmError> {
+    pub(super) fn emit_enum_payload(
+        &mut self,
+        base_local: u32,
+        ty: &Type,
+    ) -> Result<(), WasmError> {
         self.push_line(format!("local.get {base_local}"));
         self.push_line(format!("i32.const {HEAP_HEADER_SIZE}"));
         self.push_line("i32.add");
@@ -216,10 +233,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("i32.wrap_i64");
             }
             Type::Void => {
-                return Err(wasm_error(
-                    "E0400",
-                    "Enum payload cannot be void.",
-                ));
+                return Err(wasm_error("E0400", "Enum payload cannot be void."));
             }
         }
         Ok(())
@@ -272,10 +286,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("i32.const 0");
             }
             Type::Void => {
-                return Err(wasm_error(
-                    "E0400",
-                    "Void has no default value.",
-                ));
+                return Err(wasm_error("E0400", "Void has no default value."));
             }
         }
         Ok(())

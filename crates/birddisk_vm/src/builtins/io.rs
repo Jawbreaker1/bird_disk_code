@@ -11,10 +11,7 @@ impl<'a> Vm<'a> {
         match name {
             "std::io::print" => {
                 if args.len() != 1 {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::io::print expects 1 argument",
-                    ));
+                    return Err(runtime_error("E0400", "std::io::print expects 1 argument"));
                 }
                 match &args[0] {
                     Value::String(handle) => {
@@ -22,7 +19,10 @@ impl<'a> Vm<'a> {
                         self.push_output(&text);
                         Ok(Some(Value::Void))
                     }
-                    _ => Err(runtime_error("E0400", "std::io::print expects string argument")),
+                    _ => Err(runtime_error(
+                        "E0400",
+                        "std::io::print expects string argument",
+                    )),
                 }
             }
             "std::io::read_line" => {

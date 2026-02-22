@@ -215,7 +215,10 @@ impl Server {
         let Some(uri) = text_doc.get("uri").and_then(|value| value.as_str()) else {
             return;
         };
-        let Some(changes) = params.get("contentChanges").and_then(|value| value.as_array()) else {
+        let Some(changes) = params
+            .get("contentChanges")
+            .and_then(|value| value.as_array())
+        else {
             return;
         };
         let Some(change) = changes.first() else {
@@ -247,18 +250,20 @@ impl Server {
         json!({"data": data})
     }
 
-    pub(crate) fn publish_diagnostics<W: Write>(&self, writer: &mut W, uri: &str) -> io::Result<()> {
+    pub(crate) fn publish_diagnostics<W: Write>(
+        &self,
+        writer: &mut W,
+        uri: &str,
+    ) -> io::Result<()> {
         let Some(path) = uri_to_path(uri) else {
             return Ok(());
         };
-        let diagnostics = match birddisk_core::parse_and_typecheck(path.to_string_lossy().as_ref()) {
+        let diagnostics = match birddisk_core::parse_and_typecheck(path.to_string_lossy().as_ref())
+        {
             Ok(program) => birddisk_core::lint_program(&program),
             Err(diags) => diags,
         };
-        let lsp_diags: Vec<Value> = diagnostics
-            .into_iter()
-            .map(to_lsp_diagnostic)
-            .collect();
+        let lsp_diags: Vec<Value> = diagnostics.into_iter().map(to_lsp_diagnostic).collect();
         send_notification(
             writer,
             "textDocument/publishDiagnostics",
@@ -513,17 +518,17 @@ pub(crate) fn semantic_tokens(tokens: &[Token]) -> Vec<u32> {
         }
         let line = token.span.start.line.saturating_sub(1);
         let col = token.span.start.col.saturating_sub(1);
-        let len = token
-            .span
-            .end
-            .col
-            .saturating_sub(token.span.start.col);
+        let len = token.span.end.col.saturating_sub(token.span.start.col);
         if len == 0 {
             continue;
         }
         let token_type = semantic_token_type_index(kind);
         let delta_line = line.saturating_sub(prev_line);
-        let delta_start = if delta_line == 0 { col.saturating_sub(prev_col) } else { col };
+        let delta_start = if delta_line == 0 {
+            col.saturating_sub(prev_col)
+        } else {
+            col
+        };
         results.push(delta_line);
         results.push(delta_start);
         results.push(len);

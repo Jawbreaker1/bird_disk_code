@@ -1,9 +1,11 @@
-use crate::emit::{
-    WatEmitter,
-    TRAP_TRACE_OOM,
-};
+use crate::emit::{WatEmitter, TRAP_TRACE_OOM};
 
-pub(super) fn emit_gc_roots(emitter: &mut WatEmitter, root_ptr_offset: i32, root_data_offset: i32, root_slots: i32) {
+pub(super) fn emit_gc_roots(
+    emitter: &mut WatEmitter,
+    root_ptr_offset: i32,
+    root_data_offset: i32,
+    root_slots: i32,
+) {
     emitter.push_line("(func $bd_root_push (param $count i32) (result i32)");
     emitter.indent();
     emitter.push_line("(local $base i32)");
@@ -69,5 +71,4 @@ pub(super) fn emit_gc_roots(emitter: &mut WatEmitter, root_ptr_offset: i32, root
     emitter.push_line("i32.store");
     emitter.dedent();
     emitter.push_line(")");
-
 }

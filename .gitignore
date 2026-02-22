@@ -7,3 +7,4 @@ target/
 *.rs.bk
 *.wasm
 *.wat
+tmp_http_*.bd

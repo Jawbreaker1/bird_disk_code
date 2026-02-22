@@ -145,16 +145,16 @@ pub(crate) fn wasm_threading_diagnostic(path: &str) -> birddisk_core::Diagnostic
     }
 }
 
-pub(crate) fn native_threading_diagnostic(path: &str) -> birddisk_core::Diagnostic {
+pub(crate) fn wasm_net_diagnostic(path: &str) -> birddisk_core::Diagnostic {
     birddisk_core::Diagnostic {
         code: "E0326",
         severity: "error",
-        message: "Native backend does not support std::thread yet.".to_string(),
+        message: "WASM backend does not support std::net.".to_string(),
         file: path.to_string(),
         span: default_span(),
         trace: Vec::new(),
-        notes: vec!["Threading is supported only in the VM backend for now.".to_string()],
-        spec_refs: vec!["SPEC.md#14-concurrency-planned-not-implemented-in-v0-1".to_string()],
+        notes: vec!["TCP networking is supported only in VM/native backends for now.".to_string()],
+        spec_refs: vec!["SPEC.md#144-stdnet-module-planned".to_string()],
         fixits: Vec::new(),
         help: None,
     }
@@ -189,6 +189,10 @@ pub(crate) fn runtime_spec_refs(code: &str) -> Vec<String> {
         "E0402" => vec!["SPEC.md#6-4-binary-operators".to_string()],
         "E0403" => vec!["SPEC.md#8-4-indexing".to_string()],
         "E0404" => vec!["SPEC.md#5-7-error-handling-try-catch-throw".to_string()],
+        "E0405" => vec!["SPEC.md#142-stdthread-module-planned".to_string()],
+        "E0406" => vec!["SPEC.md#143-stdchannel-module-planned".to_string()],
+        "E0407" => vec!["SPEC.md#143-stdchannel-module-planned".to_string()],
+        "E0408" => vec!["SPEC.md#144-stdnet-module-planned".to_string()],
         _ => Vec::new(),
     }
 }
@@ -227,7 +231,9 @@ pub(crate) fn require_tests_rule_diagnostic(
     }
 }
 
-pub(crate) fn require_tests_config_diagnostic(message: impl Into<String>) -> birddisk_core::Diagnostic {
+pub(crate) fn require_tests_config_diagnostic(
+    message: impl Into<String>,
+) -> birddisk_core::Diagnostic {
     birddisk_core::Diagnostic {
         code: "L2001",
         severity: "error",
@@ -258,7 +264,10 @@ pub(crate) fn format_diagnostics_human(diagnostics: &[birddisk_core::Diagnostic]
         if idx > 0 {
             out.push('\n');
         }
-        out.push_str(&format!("{}[{}]: {}\n", diag.severity, diag.code, diag.message));
+        out.push_str(&format!(
+            "{}[{}]: {}\n",
+            diag.severity, diag.code, diag.message
+        ));
         if let Some(location) = primary_location(diag) {
             out.push_str(&format!(
                 "  --> {}:{}:{}\n",
@@ -276,10 +285,7 @@ pub(crate) fn format_diagnostics_human(diagnostics: &[birddisk_core::Diagnostic]
             for (i, frame) in diag.trace.iter().enumerate() {
                 out.push_str(&format!(
                     "    {i}: {} ({}:{}:{})\n",
-                    frame.function,
-                    frame.file,
-                    frame.span.start.line,
-                    frame.span.start.col
+                    frame.function, frame.file, frame.span.start.line, frame.span.start.col
                 ));
             }
         }

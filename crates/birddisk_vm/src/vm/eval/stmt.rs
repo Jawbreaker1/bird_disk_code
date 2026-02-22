@@ -1,7 +1,6 @@
 use super::*;
 use birddisk_core::ast::{ExprKind, Stmt, Type};
 
-
 impl<'a> Vm<'a> {
     pub(super) fn eval_block(&mut self, stmts: &[Stmt]) -> Result<Option<Value>, RuntimeError> {
         for stmt in stmts {
@@ -11,7 +10,6 @@ impl<'a> Vm<'a> {
         }
         Ok(None)
     }
-
 
     pub(super) fn eval_stmt(&mut self, stmt: &Stmt) -> Result<Option<Value>, RuntimeError> {
         match stmt {
@@ -34,7 +32,9 @@ impl<'a> Vm<'a> {
                     ExprKind::ArrayLit(elements) => {
                         if let Some(elem_ty) = ty {
                             match elem_ty {
-                                Type::Array(inner) => self.eval_array_literal(elements, Some(inner))?,
+                                Type::Array(inner) => {
+                                    self.eval_array_literal(elements, Some(inner))?
+                                }
                                 _ => {
                                     return Err(runtime_error(
                                         "E0400",
@@ -104,10 +104,7 @@ impl<'a> Vm<'a> {
                 Ok(None)
             }
             Stmt::PutIndex {
-                name,
-                index,
-                expr,
-                ..
+                name, index, expr, ..
             } => {
                 let idx = self.eval_index_value(index)?;
                 let value = self.eval_expr(expr)?;
@@ -123,17 +120,12 @@ impl<'a> Vm<'a> {
                 }
             }
             Stmt::PutField {
-                base,
-                field,
-                expr,
-                ..
+                base, field, expr, ..
             } => {
                 let value = self.eval_expr(expr)?;
                 let (book_name, handle) = match self.lookup(base) {
                     Some(Value::Object { book, handle }) => (book.clone(), *handle),
-                    Some(_) => {
-                        return Err(runtime_error("E0400", "Field assignment on non-book."))
-                    }
+                    Some(_) => return Err(runtime_error("E0400", "Field assignment on non-book.")),
                     None => {
                         return Err(runtime_error(
                             "E0400",
@@ -157,12 +149,7 @@ impl<'a> Vm<'a> {
                 let value = self.eval_expr(expr)?;
                 let message = match value {
                     Value::String(handle) => self.string_text(handle)?,
-                    _ => {
-                        return Err(runtime_error(
-                            "E0400",
-                            "throw expects a string message.",
-                        ))
-                    }
+                    _ => return Err(runtime_error("E0400", "throw expects a string message.")),
                 };
                 Err(runtime_error("E0404", message))
             }
@@ -285,5 +272,4 @@ impl<'a> Vm<'a> {
             }
         }
     }
-
 }

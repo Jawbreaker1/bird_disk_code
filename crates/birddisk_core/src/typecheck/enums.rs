@@ -1,4 +1,4 @@
-use super::{EnumInfo, EnumVariantInfo, Checker};
+use super::{Checker, EnumInfo, EnumVariantInfo};
 use crate::ast::Program;
 use crate::diagnostics::diagnostic;
 use std::collections::{HashMap, HashSet};
@@ -38,8 +38,12 @@ impl<'a> Checker<'a> {
                 ));
                 continue;
             }
-            self.enums
-                .insert(enum_decl.name.clone(), EnumInfo { variants: HashMap::new() });
+            self.enums.insert(
+                enum_decl.name.clone(),
+                EnumInfo {
+                    variants: HashMap::new(),
+                },
+            );
         }
 
         for enum_decl in &program.enums {
@@ -72,7 +76,9 @@ impl<'a> Checker<'a> {
                 });
                 variants.insert(
                     variant.name.clone(),
-                    EnumVariantInfo { payload: payload_ty },
+                    EnumVariantInfo {
+                        payload: payload_ty,
+                    },
                 );
             }
             if let Some(info) = self.enums.get_mut(&enum_decl.name) {

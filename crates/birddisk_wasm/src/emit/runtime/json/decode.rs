@@ -1,20 +1,11 @@
 use crate::emit::{
-    WatEmitter,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    STRING_HEADER_SIZE,
-    TRAP_JSON_PARSE,
-    TRAP_KIND_STRING,
-    TRAP_NULL_DEREF,
+    WatEmitter, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_SHIFT, HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET, STRING_HEADER_SIZE, TRAP_JSON_PARSE, TRAP_KIND_STRING, TRAP_NULL_DEREF,
 };
 
 pub(super) fn emit_json_decode(emitter: &mut WatEmitter) {
-    emitter.push_line(
-        "(func $bd_json_trim_range (param $data i32) (param $len i32) (result i32 i32)",
-    );
+    emitter
+        .push_line("(func $bd_json_trim_range (param $data i32) (param $len i32) (result i32 i32)");
     emitter.indent();
     emitter.push_line("(local $start i32)");
     emitter.push_line("(local $end i32)");

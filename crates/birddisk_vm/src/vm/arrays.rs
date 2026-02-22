@@ -127,9 +127,7 @@ impl<'a> Vm<'a> {
 
     pub(crate) fn alloc_u8_array(&mut self, bytes: &[u8]) -> Value {
         self.maybe_collect();
-        let handle = self
-            .heap
-            .alloc_array(ElemKind::U8, bytes.len(), 1);
+        let handle = self.heap.alloc_array(ElemKind::U8, bytes.len(), 1);
         let payload = self.heap.payload_mut(handle);
         if let Some(target) = payload.get_mut(..bytes.len()) {
             target.copy_from_slice(bytes);
@@ -215,33 +213,33 @@ impl<'a> Vm<'a> {
         let offset = index * elem_size(elem_kind);
         let value = match elem_kind {
             ElemKind::I64 => {
-                let bytes = payload.get(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let bytes = payload
+                    .get(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 Value::I64(i64::from_le_bytes(bytes.try_into().unwrap()))
             }
             ElemKind::F64 => {
-                let bytes = payload.get(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let bytes = payload
+                    .get(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 Value::F64(f64::from_le_bytes(bytes.try_into().unwrap()))
             }
             ElemKind::Bool => {
-                let byte = *payload.get(offset).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let byte = *payload
+                    .get(offset)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 Value::Bool(byte != 0)
             }
             ElemKind::U8 => {
-                let byte = *payload.get(offset).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let byte = *payload
+                    .get(offset)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 Value::U8(byte)
             }
             ElemKind::Ref => {
-                let bytes = payload.get(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let bytes = payload
+                    .get(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 let raw = u64::from_le_bytes(bytes.try_into().unwrap());
                 let handle = HeapHandle::from_u32(raw as u32);
                 self.value_from_handle(handle, elem_ty)?
@@ -275,36 +273,36 @@ impl<'a> Vm<'a> {
         let offset = index * elem_size(elem_kind);
         match (elem_kind, value) {
             (ElemKind::I64, Value::I64(value)) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 target.copy_from_slice(&value.to_le_bytes());
             }
             (ElemKind::F64, Value::F64(value)) => {
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 target.copy_from_slice(&value.to_le_bytes());
             }
             (ElemKind::Bool, Value::Bool(value)) => {
-                let slot = payload.get_mut(offset).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let slot = payload
+                    .get_mut(offset)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 *slot = if value { 1 } else { 0 };
             }
             (ElemKind::U8, Value::U8(value)) => {
-                let slot = payload.get_mut(offset).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let slot = payload
+                    .get_mut(offset)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 *slot = value;
             }
             (ElemKind::Ref, value) => {
                 let handle = value
                     .heap_handle()
                     .ok_or_else(|| runtime_error("E0400", "Expected reference value."))?;
-                let target = payload.get_mut(offset..offset + 8).ok_or_else(|| {
-                    runtime_error("E0400", "Array payload out of bounds.")
-                })?;
+                let target = payload
+                    .get_mut(offset..offset + 8)
+                    .ok_or_else(|| runtime_error("E0400", "Array payload out of bounds."))?;
                 target.copy_from_slice(&(handle.as_u32() as u64).to_le_bytes());
             }
             _ => {

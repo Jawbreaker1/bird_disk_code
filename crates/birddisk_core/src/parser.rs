@@ -116,9 +116,10 @@ impl<'a> Parser<'a> {
                 TokenKind::Book => books.push(self.parse_book()?),
                 TokenKind::Rule => functions.push(self.parse_function()?),
                 _ => {
-                    return Err(
-                        self.error("E0201", "Expected 'import', 'enum', 'book', or 'rule' at top level.")
-                    );
+                    return Err(self.error(
+                        "E0201",
+                        "Expected 'import', 'enum', 'book', or 'rule' at top level.",
+                    ));
                 }
             }
         }
@@ -150,10 +151,7 @@ impl<'a> Parser<'a> {
             match self.peek_kind() {
                 TokenKind::Case => variants.push(self.parse_enum_case()?),
                 _ => {
-                    return Err(self.error(
-                        "E0200",
-                        "Expected 'case' or 'end' inside enum.",
-                    ));
+                    return Err(self.error("E0200", "Expected 'case' or 'end' inside enum."));
                 }
             }
         }
@@ -241,10 +239,9 @@ impl<'a> Parser<'a> {
                 TokenKind::Field => fields.push(self.parse_field()?),
                 TokenKind::Rule => methods.push(self.parse_function()?),
                 _ => {
-                    return Err(self.error(
-                        "E0201",
-                        "Expected 'field', 'rule', or 'end' inside book.",
-                    ));
+                    return Err(
+                        self.error("E0201", "Expected 'field', 'rule', or 'end' inside book.")
+                    );
                 }
             }
         }
@@ -289,7 +286,8 @@ impl<'a> Parser<'a> {
             }
         };
 
-        if let Err(err) = self.expect_simple(TokenKind::LParen, "Expected '(' after function name.") {
+        if let Err(err) = self.expect_simple(TokenKind::LParen, "Expected '(' after function name.")
+        {
             errors.push(err);
             self.sync_to_next_rule();
             return None;
@@ -406,10 +404,9 @@ impl<'a> Parser<'a> {
                     }
                 }
                 _ => {
-                    errors.push(self.error(
-                        "E0201",
-                        "Expected 'field', 'rule', or 'end' inside book.",
-                    ));
+                    errors.push(
+                        self.error("E0201", "Expected 'field', 'rule', or 'end' inside book."),
+                    );
                     self.sync_to_next_top_level();
                     return None;
                 }
@@ -470,10 +467,7 @@ impl<'a> Parser<'a> {
                     }
                 },
                 _ => {
-                    errors.push(self.error(
-                        "E0200",
-                        "Expected 'case' or 'end' inside enum.",
-                    ));
+                    errors.push(self.error("E0200", "Expected 'case' or 'end' inside enum."));
                     self.sync_to_next_top_level();
                     return None;
                 }
@@ -898,9 +892,7 @@ impl<'a> Parser<'a> {
         let expr = self.parse_expr("Expected expression after 'match'.")?;
         self.expect_colon_with_fixit()?;
         let mut cases = Vec::new();
-        while !self.is_eof()
-            && !matches!(self.peek_kind(), TokenKind::Otherwise | TokenKind::End)
-        {
+        while !self.is_eof() && !matches!(self.peek_kind(), TokenKind::Otherwise | TokenKind::End) {
             cases.push(self.parse_match_case()?);
         }
         if matches!(self.peek_kind(), TokenKind::End) {
@@ -930,10 +922,7 @@ impl<'a> Parser<'a> {
         let start = self.expect_simple(TokenKind::Case, "Expected 'case'.")?;
         let (segments, _span, qualified) = self.parse_qualified_name()?;
         if !qualified || segments.len() != 2 {
-            return Err(self.error(
-                "E0211",
-                "Expected enum variant in the form Enum::Variant.",
-            ));
+            return Err(self.error("E0211", "Expected enum variant in the form Enum::Variant."));
         }
         let enum_name = segments[0].clone();
         let variant_name = segments[1].clone();
@@ -1238,10 +1227,7 @@ impl<'a> Parser<'a> {
                 Err(err) => {
                     if self.recovering {
                         self.pending_errors.push(err);
-                        let span_end = args
-                            .last()
-                            .map(|expr| expr.span.end)
-                            .unwrap_or(start);
+                        let span_end = args.last().map(|expr| expr.span.end).unwrap_or(start);
                         Ok(Expr {
                             kind: ExprKind::Call {
                                 name: segments.join("::"),
@@ -1264,10 +1250,7 @@ impl<'a> Parser<'a> {
                     span,
                 })
             } else {
-                Err(self.error(
-                    "E0203",
-                    "Expected function call after module path.",
-                ))
+                Err(self.error("E0203", "Expected function call after module path."))
             }
         } else {
             Ok(Expr {
@@ -1339,10 +1322,7 @@ impl<'a> Parser<'a> {
             Err(err) => {
                 if self.recovering {
                     self.pending_errors.push(err);
-                    let span_end = elements
-                        .last()
-                        .map(|expr| expr.span.end)
-                        .unwrap_or(start);
+                    let span_end = elements.last().map(|expr| expr.span.end).unwrap_or(start);
                     Ok(Expr {
                         kind: ExprKind::ArrayLit(elements),
                         span: Span::new(start, span_end),
@@ -1360,9 +1340,7 @@ impl<'a> Parser<'a> {
         let len = self.parse_expr("Expected length expression for array.")?;
         let end = self.expect_rparen_with_fixit("Expected ')' after array length.")?;
         Ok(Expr {
-            kind: ExprKind::ArrayNew {
-                len: Box::new(len),
-            },
+            kind: ExprKind::ArrayNew { len: Box::new(len) },
             span: Span::new(start, end.span.end),
         })
     }
@@ -1648,10 +1626,14 @@ impl<'a> Parser<'a> {
     }
 
     fn error(&self, code: &'static str, message: &str) -> ParseError {
-        let span = self.tokens.get(self.index).map(|t| t.span).unwrap_or_else(|| {
-            let pos = Position::new(1, 1);
-            Span::new(pos, pos)
-        });
+        let span = self
+            .tokens
+            .get(self.index)
+            .map(|t| t.span)
+            .unwrap_or_else(|| {
+                let pos = Position::new(1, 1);
+                Span::new(pos, pos)
+            });
         ParseError {
             code,
             message: message.to_string(),
@@ -1660,16 +1642,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error_with_fixit(
-        &self,
-        code: &'static str,
-        message: &str,
-        fixit: FixItHint,
-    ) -> ParseError {
-        let span = self.tokens.get(self.index).map(|t| t.span).unwrap_or_else(|| {
-            let pos = Position::new(1, 1);
-            Span::new(pos, pos)
-        });
+    fn error_with_fixit(&self, code: &'static str, message: &str, fixit: FixItHint) -> ParseError {
+        let span = self
+            .tokens
+            .get(self.index)
+            .map(|t| t.span)
+            .unwrap_or_else(|| {
+                let pos = Position::new(1, 1);
+                Span::new(pos, pos)
+            });
         ParseError {
             code,
             message: message.to_string(),
@@ -1718,7 +1699,8 @@ mod tests {
 
     #[test]
     fn parse_repeat() {
-        let source = "rule main() -> i64:\n  repeat while true:\n    yield 1.\n  end\n  yield 0.\nend\n";
+        let source =
+            "rule main() -> i64:\n  repeat while true:\n    yield 1.\n  end\n  yield 0.\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = parse(&tokens).unwrap();
         assert_eq!(program.functions.len(), 1);
@@ -1780,7 +1762,8 @@ mod tests {
 
     #[test]
     fn parse_missing_end_fixit() {
-        let source = "rule main() -> i64:\n  when true:\n    yield 1.\n  otherwise:\n    yield 2.\n";
+        let source =
+            "rule main() -> i64:\n  when true:\n    yield 1.\n  otherwise:\n    yield 2.\n";
         let tokens = lexer::lex(source).unwrap();
         let err = parse(&tokens).unwrap_err();
         assert_eq!(err.code, "E0202");
@@ -1848,7 +1831,8 @@ mod tests {
 
     #[test]
     fn parse_put_index() {
-        let source = "rule main() -> i64:\n  set xs: i64[] = [0].\n  put xs[0] = 1.\n  yield xs[0].\nend\n";
+        let source =
+            "rule main() -> i64:\n  set xs: i64[] = [0].\n  put xs[0] = 1.\n  yield xs[0].\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = parse(&tokens).unwrap();
         assert_eq!(program.functions.len(), 1);
@@ -1866,7 +1850,8 @@ mod tests {
 
     #[test]
     fn parse_with_recovery_reports_multiple_errors() {
-        let source = "rule main() -> i64:\n  yield 0\nend\n\nrule other() -> i64:\n  yield 1\nend\n";
+        let source =
+            "rule main() -> i64:\n  yield 0\nend\n\nrule other() -> i64:\n  yield 1\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let err = parse_with_recovery(&tokens).unwrap_err();
         assert!(err.len() >= 2);

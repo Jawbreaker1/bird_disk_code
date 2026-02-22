@@ -76,18 +76,21 @@ fn collect_local_types_in_block(
             Stmt::Repeat { body, .. } => {
                 collect_local_types_in_block(body, locals, functions, books, enums)?;
             }
-            Stmt::Match { cases, otherwise, .. } => {
+            Stmt::Match {
+                cases, otherwise, ..
+            } => {
                 for case in cases {
                     if let Some(binding) = &case.binding {
                         let enum_info = enums.get(&case.enum_name).ok_or_else(|| {
                             native_error(format!("unknown enum '{}'.", case.enum_name))
                         })?;
-                        let variant = enum_info.variants.get(&case.variant_name).ok_or_else(|| {
-                            native_error(format!(
-                                "unknown enum variant '{}::{}'.",
-                                case.enum_name, case.variant_name
-                            ))
-                        })?;
+                        let variant =
+                            enum_info.variants.get(&case.variant_name).ok_or_else(|| {
+                                native_error(format!(
+                                    "unknown enum variant '{}::{}'.",
+                                    case.enum_name, case.variant_name
+                                ))
+                            })?;
                         let Some(payload_ty) = variant.payload.as_ref() else {
                             return Err(native_error(format!(
                                 "variant '{}::{}' has no payload.",
@@ -162,12 +165,11 @@ pub(crate) fn infer_expr_type(
             let left_ty = infer_expr_type(left, locals, functions, books, enums);
             let right_ty = infer_expr_type(right, locals, functions, books, enums);
             match op {
-                BinaryOp::Add
-                | BinaryOp::Sub
-                | BinaryOp::Mul
-                | BinaryOp::Div
-                | BinaryOp::Mod => {
-                    if matches!((left_ty.as_ref(), right_ty.as_ref()), (Some(Type::F64), Some(Type::F64))) {
+                BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod => {
+                    if matches!(
+                        (left_ty.as_ref(), right_ty.as_ref()),
+                        (Some(Type::F64), Some(Type::F64))
+                    ) {
                         Some(Type::F64)
                     } else {
                         Some(Type::I64)
@@ -221,7 +223,13 @@ pub(crate) fn build_root_slots(locals: &HashMap<String, Type>) -> HashMap<String
     let mut slots = HashMap::new();
     let mut names: Vec<String> = locals
         .iter()
-        .filter_map(|(name, ty)| if is_ref_type(ty) { Some(name.clone()) } else { None })
+        .filter_map(|(name, ty)| {
+            if is_ref_type(ty) {
+                Some(name.clone())
+            } else {
+                None
+            }
+        })
         .collect();
     names.sort();
     for (index, name) in names.into_iter().enumerate() {

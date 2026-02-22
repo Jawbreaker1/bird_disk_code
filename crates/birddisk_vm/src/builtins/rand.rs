@@ -11,10 +11,7 @@ impl<'a> Vm<'a> {
         match name {
             "std::rand::seed" => {
                 if args.len() != 1 {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::rand::seed expects 1 argument",
-                    ));
+                    return Err(runtime_error("E0400", "std::rand::seed expects 1 argument"));
                 }
                 match &args[0] {
                     Value::I64(seed) => {

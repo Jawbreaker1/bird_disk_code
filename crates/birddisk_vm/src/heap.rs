@@ -135,23 +135,13 @@ impl Heap {
         elem_count: usize,
         elem_size: usize,
     ) -> HeapHandle {
-        let header = HeapHeader::new(
-            HeapKind::Array,
-            0,
-            elem_count as u32,
-            elem_kind as u32,
-        );
+        let header = HeapHeader::new(HeapKind::Array, 0, elem_count as u32, elem_kind as u32);
         let payload_len = elem_count.saturating_mul(elem_size);
         self.alloc(header, payload_len)
     }
 
     pub(crate) fn alloc_object(&mut self, book_id: u32, field_count: usize) -> HeapHandle {
-        let header = HeapHeader::new(
-            HeapKind::Object,
-            book_id,
-            field_count as u32,
-            0,
-        );
+        let header = HeapHeader::new(HeapKind::Object, book_id, field_count as u32, 0);
         let payload_len = field_count.saturating_mul(8);
         self.alloc(header, payload_len)
     }
@@ -337,7 +327,6 @@ impl Heap {
             _ => {}
         }
     }
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -479,10 +468,7 @@ mod tests {
                 }
                 _ => Err("array aux must be a valid ElemKind"),
             },
-            value
-                if value == abi::HEAP_KIND_OBJECT as u8
-                    || value == abi::HEAP_KIND_FREE as u8 =>
-            {
+            value if value == abi::HEAP_KIND_OBJECT as u8 || value == abi::HEAP_KIND_FREE as u8 => {
                 Ok(())
             }
             value if value == abi::HEAP_KIND_ENUM as u8 => match header.aux {

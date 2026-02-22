@@ -131,7 +131,11 @@ pub extern "C-unwind" fn bd_enum_payload_bool(rt: *mut Runtime, handle: u64) -> 
             return 0;
         }
     };
-    if byte == 0 { 0 } else { 1 }
+    if byte == 0 {
+        0
+    } else {
+        1
+    }
 }
 
 #[no_mangle]
@@ -204,11 +208,7 @@ pub extern "C-unwind" fn bd_enum_payload_ref(rt: *mut Runtime, handle: u64) -> u
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_enum_set_payload_i64(
-    rt: *mut Runtime,
-    handle: u64,
-    value: i64,
-) {
+pub extern "C-unwind" fn bd_enum_set_payload_i64(rt: *mut Runtime, handle: u64, value: i64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -240,11 +240,7 @@ pub extern "C-unwind" fn bd_enum_set_payload_i64(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_enum_set_payload_f64(
-    rt: *mut Runtime,
-    handle: u64,
-    value: f64,
-) {
+pub extern "C-unwind" fn bd_enum_set_payload_f64(rt: *mut Runtime, handle: u64, value: f64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -276,11 +272,7 @@ pub extern "C-unwind" fn bd_enum_set_payload_f64(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_enum_set_payload_bool(
-    rt: *mut Runtime,
-    handle: u64,
-    value: i64,
-) {
+pub extern "C-unwind" fn bd_enum_set_payload_bool(rt: *mut Runtime, handle: u64, value: i64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -312,11 +304,7 @@ pub extern "C-unwind" fn bd_enum_set_payload_bool(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_enum_set_payload_u8(
-    rt: *mut Runtime,
-    handle: u64,
-    value: i64,
-) {
+pub extern "C-unwind" fn bd_enum_set_payload_u8(rt: *mut Runtime, handle: u64, value: i64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -352,11 +340,7 @@ pub extern "C-unwind" fn bd_enum_set_payload_u8(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_enum_set_payload_ref(
-    rt: *mut Runtime,
-    handle: u64,
-    value: u64,
-) {
+pub extern "C-unwind" fn bd_enum_set_payload_ref(rt: *mut Runtime, handle: u64, value: u64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;

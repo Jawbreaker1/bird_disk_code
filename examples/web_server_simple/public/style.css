@@ -1,0 +1,146 @@
+:root {
+  --bg-a: #071126;
+  --bg-b: #10345a;
+  --ink: #e8f2ff;
+  --muted: #b9cde6;
+  --card: rgba(255, 255, 255, 0.08);
+  --line: rgba(255, 255, 255, 0.24);
+  --accent: #4dd9ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at 20% 20%, #1e4c7c, var(--bg-a) 45%), linear-gradient(135deg, var(--bg-a), var(--bg-b));
+  min-height: 100vh;
+}
+
+.shell {
+  width: min(960px, 92vw);
+  margin: 0 auto;
+}
+
+header {
+  padding: 28px 0 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav {
+  display: flex;
+  gap: 14px;
+}
+
+.nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+
+.nav a:hover,
+.nav a.active {
+  color: var(--ink);
+  border-color: var(--line);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+main {
+  padding-bottom: 34px;
+}
+
+.hero {
+  padding: 36px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(6, 14, 31, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.hero-small {
+  padding-top: 24px;
+  padding-bottom: 24px;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: clamp(1.7rem, 4vw, 2.7rem);
+  line-height: 1.15;
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.cta {
+  margin-top: 20px;
+  display: inline-block;
+  color: #04213c;
+  background: linear-gradient(90deg, #7be7ff, #4dd9ff);
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 12px;
+  padding: 10px 16px;
+}
+
+.grid {
+  margin-top: 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  padding: 18px;
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.prose p + p {
+  margin-top: 10px;
+}
+
+.meta {
+  margin-top: 16px;
+  color: var(--muted);
+}
+
+#status-pill {
+  display: inline-block;
+  min-width: 90px;
+  text-align: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 2px 10px;
+}
+
+@media (max-width: 700px) {
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero {
+    padding: 24px;
+  }
+}

@@ -50,7 +50,11 @@ mod tests {
         let items = completion_items("file:///tmp/test.bd", source, &tokens, Some(&program), pos);
         let labels: Vec<String> = items
             .into_iter()
-            .filter_map(|item| item.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .filter_map(|item| {
+                item.get("label")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect();
         assert!(labels.contains(&"main".to_string()));
         assert!(labels.contains(&"Test".to_string()));
@@ -72,7 +76,11 @@ mod tests {
         let items = completion_items("file:///tmp/test.bd", source, &tokens, None, pos);
         let labels: Vec<String> = items
             .into_iter()
-            .filter_map(|item| item.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .filter_map(|item| {
+                item.get("label")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect();
         assert!(labels.contains(&"len".to_string()));
         assert!(labels.contains(&"concat".to_string()));
@@ -170,7 +178,8 @@ mod tests {
 
     #[test]
     fn signature_help_for_stdlib() {
-        let source = "import std::string.\nrule main() -> i64:\n  yield std::string::len(\"hi\").\nend\n";
+        let source =
+            "import std::string.\nrule main() -> i64:\n  yield std::string::len(\"hi\").\nend\n";
         let tokens = lexer::lex(source).unwrap();
         let program = birddisk_core::parser::parse(&tokens).unwrap();
         let index = SymbolIndex::new(&program, "file:///tmp/test.bd");
@@ -233,8 +242,7 @@ mod tests {
         let module_dir = dir.join("testlib");
         std::fs::create_dir_all(&module_dir).unwrap();
         let module_path = module_dir.join("util.bd");
-        let module_source =
-            "rule double(value: i64) -> i64:\n  yield value + value.\nend\n";
+        let module_source = "rule double(value: i64) -> i64:\n  yield value + value.\nend\n";
         std::fs::write(&module_path, module_source).unwrap();
 
         let main_path = dir.join("main.bd");
@@ -311,7 +319,11 @@ mod tests {
         let items = completion_items("file:///tmp/test.bd", source, &tokens, Some(&program), pos);
         let labels: Vec<String> = items
             .into_iter()
-            .filter_map(|item| item.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .filter_map(|item| {
+                item.get("label")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect();
         assert!(labels.contains(&"value".to_string()));
         assert!(labels.contains(&"add".to_string()));
@@ -323,8 +335,7 @@ mod tests {
         let module_dir = dir.join("testlib");
         std::fs::create_dir_all(&module_dir).unwrap();
         let module_path = module_dir.join("util.bd");
-        let module_source =
-            "rule double(value: i64) -> i64:\n  yield value + value.\nend\n";
+        let module_source = "rule double(value: i64) -> i64:\n  yield value + value.\nend\n";
         std::fs::write(&module_path, module_source).unwrap();
 
         let main_path = dir.join("main.bd");
@@ -354,7 +365,11 @@ mod tests {
         let prefix_items = completion_items(&uri, main_source, &tokens, Some(&program), prefix_pos);
         let prefix_labels: Vec<String> = prefix_items
             .into_iter()
-            .filter_map(|item| item.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .filter_map(|item| {
+                item.get("label")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect();
         assert!(prefix_labels.contains(&"util".to_string()));
 
@@ -377,7 +392,11 @@ mod tests {
         let func_items = completion_items(&uri, main_source, &tokens, Some(&program), func_pos);
         let func_labels: Vec<String> = func_items
             .into_iter()
-            .filter_map(|item| item.get("label").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .filter_map(|item| {
+                item.get("label")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect();
         assert!(func_labels.contains(&"double".to_string()));
     }
@@ -388,8 +407,7 @@ mod tests {
         let module_dir = dir.join("testlib");
         std::fs::create_dir_all(&module_dir).unwrap();
         let module_path = module_dir.join("util.bd");
-        let module_source =
-            "rule double(value: i64) -> i64:\n  yield value + value.\nend\n";
+        let module_source = "rule double(value: i64) -> i64:\n  yield value + value.\nend\n";
         std::fs::write(&module_path, module_source).unwrap();
 
         let main_path = dir.join("main.bd");

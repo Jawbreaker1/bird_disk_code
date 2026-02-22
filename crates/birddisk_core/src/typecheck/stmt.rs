@@ -5,7 +5,12 @@ use crate::diagnostics::diagnostic;
 impl<'a> Checker<'a> {
     pub(super) fn check_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Set { name, ty, expr, span } => {
+            Stmt::Set {
+                name,
+                ty,
+                expr,
+                span,
+            } => {
                 let mut skip_infer_error = false;
                 let expr_ty = match (&expr.kind, ty.as_ref()) {
                     (ExprKind::ArrayNew { len }, _) => {
@@ -15,20 +20,16 @@ impl<'a> Checker<'a> {
                         let expected = ty.as_ref().map(|ty| self.type_from_ast(ty.clone()));
                         self.check_array_new(len, expected.as_ref(), *span)
                     }
-                    (ExprKind::ArrayLit(elements), Some(ty)) => {
-                        self.check_array_literal_expected(
-                            elements,
-                            expr.span,
-                            &self.type_from_ast(ty.clone()),
-                        )
-                    }
-                    (ExprKind::Int(value), Some(ty)) => {
-                        self.check_int_literal_expected(
-                            *value,
-                            expr.span,
-                            &self.type_from_ast(ty.clone()),
-                        )
-                    }
+                    (ExprKind::ArrayLit(elements), Some(ty)) => self.check_array_literal_expected(
+                        elements,
+                        expr.span,
+                        &self.type_from_ast(ty.clone()),
+                    ),
+                    (ExprKind::Int(value), Some(ty)) => self.check_int_literal_expected(
+                        *value,
+                        expr.span,
+                        &self.type_from_ast(ty.clone()),
+                    ),
                     _ => self.check_expr(expr),
                 };
                 let bound_ty = if let Some(ty) = ty {
@@ -208,12 +209,8 @@ impl<'a> Checker<'a> {
 
                 let index_ty = self.check_expr(index);
                 if index_ty != Ty::Unknown && index_ty != Ty::I64 {
-                    self.diagnostics.push(type_mismatch(
-                        self.file,
-                        index.span,
-                        Ty::I64,
-                        index_ty,
-                    ));
+                    self.diagnostics
+                        .push(type_mismatch(self.file, index.span, Ty::I64, index_ty));
                 }
 
                 let expr_ty = match (&expr.kind, &elem_ty) {
@@ -223,12 +220,8 @@ impl<'a> Checker<'a> {
                     _ => self.check_expr(expr),
                 };
                 if expr_ty != Ty::Unknown && expr_ty != elem_ty {
-                    self.diagnostics.push(type_mismatch(
-                        self.file,
-                        expr.span,
-                        elem_ty,
-                        expr_ty,
-                    ));
+                    self.diagnostics
+                        .push(type_mismatch(self.file, expr.span, elem_ty, expr_ty));
                 }
             }
             Stmt::PutField {

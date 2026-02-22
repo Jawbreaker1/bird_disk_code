@@ -1,15 +1,19 @@
-use super::FuncCompiler;
+use super::super::types::array_elem_kind;
 use super::super::types::array_elem_size;
 use super::super::{
-    wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY,
-    HEAP_KIND_ENUM, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
-    HEAP_HEADER_SIZE, OBJECT_FIELD_SIZE, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_KIND_OBJECT,
+    wasm_error, WasmError, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_HEADER_SIZE,
+    HEAP_KIND_ARRAY, HEAP_KIND_ENUM, HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET, OBJECT_FIELD_SIZE, OBJECT_HEADER_SIZE, STRING_HEADER_SIZE, TRAP_KIND_OBJECT,
 };
-use super::super::types::array_elem_kind;
+use super::FuncCompiler;
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Type, UnaryOp};
 
 impl<'a> FuncCompiler<'a> {
-    pub(super) fn emit_expr(&mut self, expr: &Expr, expected: Option<&Type>) -> Result<(), WasmError> {
+    pub(super) fn emit_expr(
+        &mut self,
+        expr: &Expr,
+        expected: Option<&Type>,
+    ) -> Result<(), WasmError> {
         match &expr.kind {
             ExprKind::Int(value) => {
                 if matches!(expected, Some(Type::U8)) {
@@ -117,11 +121,7 @@ impl<'a> FuncCompiler<'a> {
                         if let Some(info) = self.lookup(base) {
                             if let Type::Book(book_name) = &info.ty {
                                 if self.emit_channel_method_call(
-                                    book_name,
-                                    info.idx,
-                                    method,
-                                    args,
-                                    expected,
+                                    book_name, info.idx, method, args, expected,
                                 )? {
                                     return Ok(());
                                 }
@@ -169,9 +169,10 @@ impl<'a> FuncCompiler<'a> {
                 return Err(wasm_error("E0400", format!("Unknown function '{name}'")));
             }
             ExprKind::New { book, args } => {
-                let layout = self.books.get(book).ok_or_else(|| {
-                    wasm_error("E0400", format!("Unknown book '{book}'"))
-                })?;
+                let layout = self
+                    .books
+                    .get(book)
+                    .ok_or_else(|| wasm_error("E0400", format!("Unknown book '{book}'")))?;
                 let ptr_local = self.temp_local(Type::Book(book.clone()));
                 let size = OBJECT_HEADER_SIZE
                     + (layout.fields.len() as i32).saturating_mul(OBJECT_FIELD_SIZE);
@@ -240,9 +241,10 @@ impl<'a> FuncCompiler<'a> {
                 let Type::Book(book_name) = &info.ty else {
                     return Err(wasm_error("E0400", "Field access requires book type."));
                 };
-                let layout = self.books.get(book_name).ok_or_else(|| {
-                    wasm_error("E0400", format!("Unknown book '{book_name}'"))
-                })?;
+                let layout = self
+                    .books
+                    .get(book_name)
+                    .ok_or_else(|| wasm_error("E0400", format!("Unknown book '{book_name}'")))?;
                 let Some(index) = layout.field_index.get(field) else {
                     return Err(wasm_error(
                         "E0400",
@@ -480,9 +482,10 @@ impl<'a> FuncCompiler<'a> {
         let Some(enum_info) = self.enums.get(enum_name) else {
             return Ok(false);
         };
-        let variant = enum_info.variants.get(variant_name).ok_or_else(|| {
-            wasm_error("E0400", format!("Unknown enum variant '{name}'."))
-        })?;
+        let variant = enum_info
+            .variants
+            .get(variant_name)
+            .ok_or_else(|| wasm_error("E0400", format!("Unknown enum variant '{name}'.")))?;
         let expected_args = if variant.payload.is_some() { 1 } else { 0 };
         if args.len() != expected_args {
             return Err(wasm_error(
@@ -552,10 +555,7 @@ impl<'a> FuncCompiler<'a> {
                     self.push_line("i64.store");
                 }
                 Type::Void => {
-                    return Err(wasm_error(
-                        "E0400",
-                        "Enum payload cannot be void.",
-                    ));
+                    return Err(wasm_error("E0400", "Enum payload cannot be void."));
                 }
             }
         }
@@ -601,10 +601,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::string::len" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::string::len expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::string::len expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -628,10 +625,7 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::string::eq" => {
                 if args.len() != 2 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::string::eq expects 2 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::string::eq expects 2 arguments"));
                 }
                 let param_types = [Type::String, Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -642,10 +636,7 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::string::bytes" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::string::bytes expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::string::bytes expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -842,10 +833,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::bytes::len" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::bytes::len expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::bytes::len expects 1 argument"));
                 }
                 let param_types = [Type::Array(Box::new(Type::U8))];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -855,12 +843,12 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::bytes::eq" => {
                 if args.len() != 2 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::bytes::eq expects 2 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::bytes::eq expects 2 arguments"));
                 }
-                let param_types = [Type::Array(Box::new(Type::U8)), Type::Array(Box::new(Type::U8))];
+                let param_types = [
+                    Type::Array(Box::new(Type::U8)),
+                    Type::Array(Box::new(Type::U8)),
+                ];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
                 self.push_line(format!("local.get {}", arg_locals[0]));
                 self.push_line(format!("local.get {}", arg_locals[1]));
@@ -869,10 +857,7 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::bytes::slice" => {
                 if args.len() != 3 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::bytes::slice expects 3 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::bytes::slice expects 3 arguments"));
                 }
                 let param_types = [Type::Array(Box::new(Type::U8)), Type::I64, Type::I64];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -918,10 +903,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::io::print" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::io::print expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::io::print expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -947,10 +929,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::time::now_ms" => {
                 if !args.is_empty() {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::time::now_ms expects 0 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::time::now_ms expects 0 arguments"));
                 }
                 self.push_line("call $bd_time_now_ms");
                 Ok(true)
@@ -985,9 +964,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::profiler::uptime_ms" => self.push_line("call $bd_profiler_uptime_ms"),
             "std::profiler::alloc_count" => self.push_line("call $bd_profiler_alloc_count"),
-            "std::profiler::bytes_allocated" => {
-                self.push_line("call $bd_profiler_bytes_allocated")
-            }
+            "std::profiler::bytes_allocated" => self.push_line("call $bd_profiler_bytes_allocated"),
             "std::profiler::bytes_in_use" => self.push_line("call $bd_profiler_bytes_in_use"),
             "std::profiler::peak_bytes_in_use" => {
                 self.push_line("call $bd_profiler_peak_bytes_in_use")
@@ -998,9 +975,7 @@ impl<'a> FuncCompiler<'a> {
             "std::profiler::last_freed_bytes" => {
                 self.push_line("call $bd_profiler_last_freed_bytes")
             }
-            "std::profiler::last_live_bytes" => {
-                self.push_line("call $bd_profiler_last_live_bytes")
-            }
+            "std::profiler::last_live_bytes" => self.push_line("call $bd_profiler_last_live_bytes"),
             _ => return Ok(false),
         }
         Ok(true)
@@ -1010,10 +985,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::rand::seed" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::rand::seed expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::rand::seed expects 1 argument"));
                 }
                 let param_types = [Type::I64];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1023,10 +995,7 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::rand::range" => {
                 if args.len() != 2 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::rand::range expects 2 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::rand::range expects 2 arguments"));
                 }
                 let param_types = [Type::I64, Type::I64];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1043,10 +1012,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::test::assert" => {
                 if args.len() != 2 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::test::assert expects 2 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::test::assert expects 2 arguments"));
                 }
                 let param_types = [Type::Bool, Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1133,10 +1099,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::fs::read_text" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::fs::read_text expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::fs::read_text expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1193,10 +1156,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::path::join" => {
                 if args.len() != 2 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::path::join expects 2 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::path::join expects 2 arguments"));
                 }
                 let param_types = [Type::String, Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1233,10 +1193,7 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::path::dirname" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::path::dirname expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::path::dirname expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1252,10 +1209,7 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::channel::i64" => {
                 if !args.is_empty() {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::channel::i64 expects 0 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::channel::i64 expects 0 arguments"));
                 }
                 self.push_line("call $bd_channel_i64");
                 Ok(true)
@@ -1272,20 +1226,14 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::channel::f64" => {
                 if !args.is_empty() {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::channel::f64 expects 0 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::channel::f64 expects 0 arguments"));
                 }
                 self.push_line("call $bd_channel_f64");
                 Ok(true)
             }
             "std::channel::u8" => {
                 if !args.is_empty() {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::channel::u8 expects 0 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::channel::u8 expects 0 arguments"));
                 }
                 self.push_line("call $bd_channel_u8");
                 Ok(true)
@@ -1393,20 +1341,14 @@ impl<'a> FuncCompiler<'a> {
         match name {
             "std::env::args" => {
                 if !args.is_empty() {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::env::args expects 0 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::env::args expects 0 arguments"));
                 }
                 self.push_line("call $bd_env_args");
                 Ok(true)
             }
             "std::env::get" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::env::get expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::env::get expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1416,10 +1358,7 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::env::set_var" => {
                 if args.len() != 2 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::env::set_var expects 2 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::env::set_var expects 2 arguments"));
                 }
                 let param_types = [Type::String, Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1430,20 +1369,14 @@ impl<'a> FuncCompiler<'a> {
             }
             "std::env::cwd" => {
                 if !args.is_empty() {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::env::cwd expects 0 arguments",
-                    ));
+                    return Err(wasm_error("E0400", "std::env::cwd expects 0 arguments"));
                 }
                 self.push_line("call $bd_env_cwd");
                 Ok(true)
             }
             "std::env::set_cwd" => {
                 if args.len() != 1 {
-                    return Err(wasm_error(
-                        "E0400",
-                        "std::env::set_cwd expects 1 argument",
-                    ));
+                    return Err(wasm_error("E0400", "std::env::set_cwd expects 1 argument"));
                 }
                 let param_types = [Type::String];
                 let arg_locals = self.emit_call_args(args, &param_types)?;
@@ -1457,9 +1390,8 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_string_literal(&mut self, value: &str) -> Result<(), WasmError> {
         let bytes = value.as_bytes();
-        let len = i32::try_from(bytes.len()).map_err(|_| {
-            wasm_error("E0400", "String literal is too large to encode.")
-        })?;
+        let len = i32::try_from(bytes.len())
+            .map_err(|_| wasm_error("E0400", "String literal is too large to encode."))?;
         let byte_size = STRING_HEADER_SIZE + len;
         let ptr_local = self.temp_local(Type::String);
 
@@ -1575,9 +1507,10 @@ impl<'a> FuncCompiler<'a> {
                 let Type::Book(book_name) = base_ty else {
                     return Err(wasm_error("E0400", "Field access requires book type."));
                 };
-                let layout = self.books.get(&book_name).ok_or_else(|| {
-                    wasm_error("E0400", format!("Unknown book '{book_name}'"))
-                })?;
+                let layout = self
+                    .books
+                    .get(&book_name)
+                    .ok_or_else(|| wasm_error("E0400", format!("Unknown book '{book_name}'")))?;
                 let Some(index) = layout.field_index.get(field) else {
                     return Err(wasm_error(
                         "E0400",

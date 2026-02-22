@@ -1,7 +1,4 @@
-use crate::emit::{
-    WatEmitter,
-    TRAP_RAND_RANGE,
-};
+use crate::emit::{WatEmitter, TRAP_RAND_RANGE};
 
 pub(in crate::emit) fn emit_rand_runtime(emitter: &mut WatEmitter) {
     emitter.push_line("(global $rand_state (mut i64) (i64.const 0x9E3779B97F4A7C15))");

@@ -4,6 +4,7 @@ mod env;
 mod fs;
 mod io;
 mod json;
+mod net;
 mod path;
 mod profiler;
 mod rand;
@@ -56,6 +57,9 @@ impl<'a> Vm<'a> {
             return Ok(Some(value));
         }
         if let Some(value) = self.eval_env_builtin(name, args)? {
+            return Ok(Some(value));
+        }
+        if let Some(value) = self.eval_net_builtin(name, args)? {
             return Ok(Some(value));
         }
         if let Some(value) = self.eval_test_builtin(name, args)? {

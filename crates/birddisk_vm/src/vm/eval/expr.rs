@@ -1,7 +1,6 @@
 use super::*;
 use birddisk_core::ast::{BinaryOp, Expr, ExprKind, Type, UnaryOp};
 
-
 impl<'a> Vm<'a> {
     pub(crate) fn eval_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         match &expr.kind {
@@ -142,11 +141,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-
-    fn eval_args_with_roots(
-        &mut self,
-        args: &[Expr],
-    ) -> Result<(Vec<Value>, usize), RuntimeError> {
+    fn eval_args_with_roots(&mut self, args: &[Expr]) -> Result<(Vec<Value>, usize), RuntimeError> {
         if args.is_empty() {
             return Ok((Vec::new(), 0));
         }
@@ -165,5 +160,4 @@ impl<'a> Vm<'a> {
         }
         Ok((values, args.len()))
     }
-
 }

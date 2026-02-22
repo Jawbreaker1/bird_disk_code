@@ -79,16 +79,18 @@ pub(crate) fn enforce_require_tests(
 pub(crate) fn enforce_require_tests_from_cwd() -> Vec<birddisk_core::Diagnostic> {
     let cwd = match std::env::current_dir() {
         Ok(cwd) => cwd,
-        Err(_) => return vec![require_tests_config_diagnostic("Unable to read current directory.")],
+        Err(_) => {
+            return vec![require_tests_config_diagnostic(
+                "Unable to read current directory.",
+            )]
+        }
     };
     let manifest_path = cwd.join("birddisk.json");
     if manifest_path.exists() {
         return match super::manifest::resolve_project_context(None) {
-            Ok(context) => enforce_require_tests(
-                &context.entry,
-                &context.config,
-                &context.test_exclude,
-            ),
+            Ok(context) => {
+                enforce_require_tests(&context.entry, &context.config, &context.test_exclude)
+            }
             Err(err) => vec![require_tests_config_diagnostic(err)],
         };
     }
@@ -216,8 +218,8 @@ fn parse_test_rules(path: &Path) -> Result<HashSet<String>, Vec<birddisk_core::D
             help: Some("Ensure the path exists and is readable.".to_string()),
         }]
     })?;
-    let tokens = birddisk_core::lexer::lex(&source)
-        .map_err(|err| vec![lex_error_diagnostic(path, err)])?;
+    let tokens =
+        birddisk_core::lexer::lex(&source).map_err(|err| vec![lex_error_diagnostic(path, err)])?;
     let program = birddisk_core::parser::parse_with_recovery(&tokens).map_err(|errs| {
         errs.into_iter()
             .map(|err| parse_error_diagnostic(path, err))
@@ -322,7 +324,10 @@ mod tests {
 
     fn setup_project(name: &str, source: &str) -> (PathBuf, String, ModuleConfig) {
         let mut root = env::temp_dir();
-        root.push(format!("birddisk_require_tests_{name}_{}", std::process::id()));
+        root.push(format!(
+            "birddisk_require_tests_{name}_{}",
+            std::process::id()
+        ));
         let src_dir = root.join("src");
         let tests_dir = root.join("tests").join("src");
         fs::create_dir_all(&src_dir).expect("create src");
@@ -384,10 +389,8 @@ mod tests {
 
     #[test]
     fn require_tests_skips_main_only() {
-        let (root, entry, config) = setup_project(
-            "main_only",
-            "rule main() -> i64:\n  yield 0.\nend\n",
-        );
+        let (root, entry, config) =
+            setup_project("main_only", "rule main() -> i64:\n  yield 0.\nend\n");
         let diagnostics = enforce_require_tests(&entry, &config, &[]);
         assert!(diagnostics.is_empty());
         let _ = fs::remove_dir_all(&root);

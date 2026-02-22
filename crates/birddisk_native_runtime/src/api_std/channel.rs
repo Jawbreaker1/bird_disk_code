@@ -34,14 +34,14 @@ fn channel_state<'a>(
         let state = match rt.channels.get(&key) {
             Some(value) => value,
             None => {
-                runtime_error(rt, "Channel state missing at runtime.");
+                channel_error(rt, "Channel state missing at runtime.");
                 return None;
             }
         };
         state.kind != kind
     };
     if mismatch {
-        runtime_error(rt, "Channel kind mismatch at runtime.");
+        channel_error(rt, "Channel kind mismatch at runtime.");
         return None;
     }
     rt.channels.get_mut(&key)
@@ -145,9 +145,7 @@ fn channel_recv(
     ok_variant: u64,
     closed_variant: u64,
 ) -> u64 {
-    if enum_id > u32::MAX as u64
-        || ok_variant > u32::MAX as u64
-        || closed_variant > u32::MAX as u64
+    if enum_id > u32::MAX as u64 || ok_variant > u32::MAX as u64 || closed_variant > u32::MAX as u64
     {
         invalid_heap_error(rt);
         return 0;
@@ -169,10 +167,12 @@ fn channel_recv(
             ChannelKind::U8 => (ElemKind::U8, 1),
             ChannelKind::String | ChannelKind::Bytes => (ElemKind::Ref, 8),
         };
-        let handle = match rt
-            .heap_mut()
-            .alloc_enum(enum_id as u32, ok_variant as u32, payload_kind as u32, payload_len)
-        {
+        let handle = match rt.heap_mut().alloc_enum(
+            enum_id as u32,
+            ok_variant as u32,
+            payload_kind as u32,
+            payload_len,
+        ) {
             Some(value) => value,
             None => {
                 oom_error(rt);
@@ -237,7 +237,7 @@ fn channel_recv(
         };
         return handle.as_u32() as u64;
     }
-    runtime_error(rt, "Channel recv would block.");
+    channel_would_block_error(rt);
     0
 }
 
@@ -314,11 +314,7 @@ pub extern "C-unwind" fn bd_channel_send_u8(rt: *mut Runtime, handle: u64, value
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_channel_send_string(
-    rt: *mut Runtime,
-    handle: u64,
-    value: u64,
-) -> i64 {
+pub extern "C-unwind" fn bd_channel_send_string(rt: *mut Runtime, handle: u64, value: u64) -> i64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return 0;
@@ -327,11 +323,7 @@ pub extern "C-unwind" fn bd_channel_send_string(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_channel_send_bytes(
-    rt: *mut Runtime,
-    handle: u64,
-    value: u64,
-) -> i64 {
+pub extern "C-unwind" fn bd_channel_send_bytes(rt: *mut Runtime, handle: u64, value: u64) -> i64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return 0;
@@ -351,7 +343,14 @@ pub extern "C-unwind" fn bd_channel_recv_i64(
     if rt.has_error() {
         return 0;
     }
-    channel_recv(rt, handle, ChannelKind::I64, enum_id, ok_variant, closed_variant)
+    channel_recv(
+        rt,
+        handle,
+        ChannelKind::I64,
+        enum_id,
+        ok_variant,
+        closed_variant,
+    )
 }
 
 #[no_mangle]
@@ -366,7 +365,14 @@ pub extern "C-unwind" fn bd_channel_recv_bool(
     if rt.has_error() {
         return 0;
     }
-    channel_recv(rt, handle, ChannelKind::Bool, enum_id, ok_variant, closed_variant)
+    channel_recv(
+        rt,
+        handle,
+        ChannelKind::Bool,
+        enum_id,
+        ok_variant,
+        closed_variant,
+    )
 }
 
 #[no_mangle]
@@ -381,7 +387,14 @@ pub extern "C-unwind" fn bd_channel_recv_f64(
     if rt.has_error() {
         return 0;
     }
-    channel_recv(rt, handle, ChannelKind::F64, enum_id, ok_variant, closed_variant)
+    channel_recv(
+        rt,
+        handle,
+        ChannelKind::F64,
+        enum_id,
+        ok_variant,
+        closed_variant,
+    )
 }
 
 #[no_mangle]
@@ -396,7 +409,14 @@ pub extern "C-unwind" fn bd_channel_recv_u8(
     if rt.has_error() {
         return 0;
     }
-    channel_recv(rt, handle, ChannelKind::U8, enum_id, ok_variant, closed_variant)
+    channel_recv(
+        rt,
+        handle,
+        ChannelKind::U8,
+        enum_id,
+        ok_variant,
+        closed_variant,
+    )
 }
 
 #[no_mangle]
@@ -411,7 +431,14 @@ pub extern "C-unwind" fn bd_channel_recv_string(
     if rt.has_error() {
         return 0;
     }
-    channel_recv(rt, handle, ChannelKind::String, enum_id, ok_variant, closed_variant)
+    channel_recv(
+        rt,
+        handle,
+        ChannelKind::String,
+        enum_id,
+        ok_variant,
+        closed_variant,
+    )
 }
 
 #[no_mangle]
@@ -426,7 +453,14 @@ pub extern "C-unwind" fn bd_channel_recv_bytes(
     if rt.has_error() {
         return 0;
     }
-    channel_recv(rt, handle, ChannelKind::Bytes, enum_id, ok_variant, closed_variant)
+    channel_recv(
+        rt,
+        handle,
+        ChannelKind::Bytes,
+        enum_id,
+        ok_variant,
+        closed_variant,
+    )
 }
 
 #[no_mangle]

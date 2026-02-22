@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About This Demo</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body data-page="about">
+  <header class="shell">
+    <div class="brand">BirdDisk Native Site</div>
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/features">Features</a>
+      <a href="/about">About</a>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <section class="hero hero-small">
+      <h1>About this server</h1>
+      <p>Built in BirdDisk with std::net and std::fs.</p>
+    </section>
+
+    <article class="card prose">
+      <p>The server accepts a TCP stream, parses a request line, maps whitelisted routes to files, and returns full HTTP responses with content-length.</p>
+      <p>Use <code>/shutdown</code> to stop the process cleanly after testing.</p>
+    </article>
+
+    <p class="meta"><a href="/shutdown">Shutdown server</a></p>
+  </main>
+</body>
+</html>

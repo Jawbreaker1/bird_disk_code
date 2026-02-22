@@ -11,20 +11,14 @@ impl<'a> Vm<'a> {
         match name {
             "std::env::args" => {
                 if !args.is_empty() {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::env::args expects 0 arguments",
-                    ));
+                    return Err(runtime_error("E0400", "std::env::args expects 0 arguments"));
                 }
                 let values = self.alloc_env_args()?;
                 Ok(Some(values))
             }
             "std::env::get" => {
                 if args.len() != 1 {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::env::get expects 1 argument",
-                    ));
+                    return Err(runtime_error("E0400", "std::env::get expects 1 argument"));
                 }
                 match &args[0] {
                     Value::String(handle) => {
@@ -72,14 +66,10 @@ impl<'a> Vm<'a> {
             }
             "std::env::cwd" => {
                 if !args.is_empty() {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::env::cwd expects 0 arguments",
-                    ));
+                    return Err(runtime_error("E0400", "std::env::cwd expects 0 arguments"));
                 }
-                let cwd = std::env::current_dir().map_err(|_| {
-                    runtime_error("E0400", "std::env::cwd failed.")
-                })?;
+                let cwd = std::env::current_dir()
+                    .map_err(|_| runtime_error("E0400", "std::env::cwd failed."))?;
                 let cwd = cwd.to_str().ok_or_else(|| {
                     runtime_error("E0400", "std::env::cwd returned invalid UTF-8.")
                 })?;
@@ -102,10 +92,7 @@ impl<'a> Vm<'a> {
                             ));
                         }
                         if std::env::set_current_dir(path).is_err() {
-                            return Err(runtime_error(
-                                "E0400",
-                                "std::env::set_cwd failed.",
-                            ));
+                            return Err(runtime_error("E0400", "std::env::set_cwd failed."));
                         }
                         Ok(Some(Value::I64(1)))
                     }

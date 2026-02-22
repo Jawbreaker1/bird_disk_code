@@ -465,13 +465,17 @@ cargo run -p birddiskc -- run examples/net_thread_echo.bd --engine native --json
 ```
 
 ## 30) Minimal web server (native-friendly)
-Runnable file: `examples/web_server_simple.bd` (serves linked HTML pages plus `/style.css` and `/app.js`, handles multiple requests, and stops on `/shutdown`).
+Runnable file: `examples/web_server_simple/main.bd` (serves linked HTML pages plus `/style.css` and `/app.js`, handles multiple requests, and stops on `/shutdown`).
+Static files are loaded from `examples/web_server_simple/public/`.
 ```sh
 # optional: configure settings (key value entries)
-cat examples/web_server_simple.conf
+cat examples/web_server_simple/web_server_simple.conf
+# host 127.0.0.1
+# port 18080
+# max_requests 200
 
 # terminal 1
-cargo run -p birddiskc -- run examples/web_server_simple.bd --engine native
+cargo run -p birddiskc -- run examples/web_server_simple/main.bd --engine native
 
 # terminal 2
 curl -i http://127.0.0.1:18080/hello
@@ -480,8 +484,15 @@ curl -i http://127.0.0.1:18080/features
 curl -i http://127.0.0.1:18080/about
 curl -i http://127.0.0.1:18080/style.css
 curl -i http://127.0.0.1:18080/app.js
+curl -i http://127.0.0.1:18080/api/status
 curl -i http://127.0.0.1:18080/health
 curl -i http://127.0.0.1:18080/shutdown
+
+# automated native smoke checks
+./scripts/web_server_simple_smoke.sh
+
+# config validation/error-path checks
+./scripts/web_server_simple_config_errors.sh
 ```
 
 ---

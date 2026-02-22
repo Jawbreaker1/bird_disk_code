@@ -1,15 +1,7 @@
 use crate::emit::{
-    WatEmitter,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    STRING_HEADER_SIZE,
-    TRAP_ENV,
-    TRAP_KIND_STRING,
+    WatEmitter, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_SHIFT, HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET, STRING_HEADER_SIZE, TRAP_ENV, TRAP_KIND_STRING, TRAP_NULL_DEREF,
     TRAP_UTF8_INVALID,
-    TRAP_NULL_DEREF,
 };
 
 pub(super) fn emit_env_get_set(emitter: &mut WatEmitter) {
@@ -200,5 +192,4 @@ pub(super) fn emit_env_get_set(emitter: &mut WatEmitter) {
     emitter.push_line("local.get $result");
     emitter.dedent();
     emitter.push_line(")");
-
 }

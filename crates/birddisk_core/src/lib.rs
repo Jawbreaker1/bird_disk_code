@@ -3,9 +3,9 @@
 pub mod ast;
 mod diagnostics;
 mod fmt;
+pub mod lexer;
 mod lint;
 mod optimize;
-pub mod lexer;
 pub mod parser;
 pub mod runtime;
 mod typecheck;
@@ -159,14 +159,16 @@ fn diagnostic_from_lex_error(path: &str, err: LexError) -> Diagnostic {
 fn diagnostic_from_parse_error(path: &str, err: parser::ParseError) -> Diagnostic {
     let fixits = err
         .fixit
-        .map(|hint| vec![FixIt {
-            title: hint.title.to_string(),
-            edits: vec![Edit {
-                file: path.to_string(),
-                span: hint.span,
-                replacement: hint.replacement,
-            }],
-        }])
+        .map(|hint| {
+            vec![FixIt {
+                title: hint.title.to_string(),
+                edits: vec![Edit {
+                    file: path.to_string(),
+                    span: hint.span,
+                    replacement: hint.replacement,
+                }],
+            }]
+        })
         .unwrap_or_default();
     diagnostic(
         err.code,
@@ -206,7 +208,8 @@ fn is_builtin_std_module(path: &[String]) -> bool {
                     || module == "env"
                     || module == "json"
                     || module == "thread"
-                    || module == "channel")
+                    || module == "channel"
+                    || module == "net")
     )
 }
 
@@ -355,6 +358,8 @@ struct ModuleLoader<'a> {
     enums: Vec<ast::EnumDecl>,
     books: Vec<ast::Book>,
     functions: Vec<ast::Function>,
+    std_imports: Vec<ast::Import>,
+    std_import_keys: HashSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -377,13 +382,26 @@ impl<'a> ModuleLoader<'a> {
             enums: Vec::new(),
             books: Vec::new(),
             functions: Vec::new(),
+            std_imports: Vec::new(),
+            std_import_keys: HashSet::new(),
             diagnostics: Vec::new(),
+        }
+    }
+
+    fn note_std_import(&mut self, import: &ast::Import) {
+        if !is_std_import(&import.path) {
+            return;
+        }
+        let key = import.path.join("::");
+        if self.std_import_keys.insert(key) {
+            self.std_imports.push(import.clone());
         }
     }
 
     fn load_imports(&mut self, imports: &[ast::Import]) {
         for import in imports {
             if is_std_import(&import.path) {
+                self.note_std_import(import);
                 if is_builtin_std_module(&import.path) {
                     continue;
                 }
@@ -441,9 +459,11 @@ impl<'a> ModuleLoader<'a> {
             }
 
             let key = import.path.join("::");
-            let Some(module_path) =
-                resolve_user_module_path(self.entry_path, self.project_root.as_deref(), &import.path)
-            else {
+            let Some(module_path) = resolve_user_module_path(
+                self.entry_path,
+                self.project_root.as_deref(),
+                &import.path,
+            ) else {
                 let expected: Vec<String> = user_module_candidates(
                     self.entry_path,
                     self.project_root.as_deref(),
@@ -466,12 +486,7 @@ impl<'a> ModuleLoader<'a> {
         }
     }
 
-    fn load_module(
-        &mut self,
-        path: PathBuf,
-        module_path: &[String],
-        _kind: ModuleKind,
-    ) {
+    fn load_module(&mut self, path: PathBuf, module_path: &[String], _kind: ModuleKind) {
         let path = path.canonicalize().unwrap_or(path);
         if !self.loaded.insert(path.clone()) {
             return;
@@ -508,6 +523,10 @@ impl<'a> ModuleLoader<'a> {
         self.functions.extend(module_program.functions);
         self.books.extend(module_program.books);
         self.enums.extend(module_program.enums);
+    }
+
+    fn collected_std_imports(&self) -> &[ast::Import] {
+        &self.std_imports
     }
 }
 
@@ -654,6 +673,13 @@ pub fn load_program_with_config(
     if !loader.diagnostics.is_empty() {
         return Err(loader.diagnostics);
     }
+    let mut import_keys: HashSet<String> = program.imports.iter().map(|i| i.path.join("::")).collect();
+    for import in loader.collected_std_imports() {
+        let key = import.path.join("::");
+        if import_keys.insert(key) {
+            program.imports.push(import.clone());
+        }
+    }
     program.functions.extend(loader.functions);
     program.books.extend(loader.books);
     program.enums.extend(loader.enums);
@@ -726,18 +752,42 @@ mod tests {
         .expect("write module");
         let mut config = ModuleConfig::default();
         config.project_root = Some(root.clone());
-        config
-            .dep_roots
-            .insert("util".to_string(), dep_dir.clone());
+        config.dep_roots.insert("util".to_string(), dep_dir.clone());
 
         let entry = src_dir.join("main.bd");
-        let program =
-            parse_and_typecheck_with_config(entry.to_str().unwrap(), &config).unwrap();
+        let program = parse_and_typecheck_with_config(entry.to_str().unwrap(), &config).unwrap();
         assert!(program
             .functions
             .iter()
             .any(|func| func.name == "util::math::add"));
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parse_with_std_http_adds_transitive_builtin_imports() {
+        let path = write_temp(
+            "import std::http.\nrule main() -> i64:\n  yield std::http::status(\"HTTP/1.1 200 OK\\n\\nbody\").\nend\n",
+            "http_transitive",
+        );
+        let mut config = ModuleConfig::default();
+        let mut project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        project_root.pop();
+        project_root.pop();
+        config.project_root = Some(project_root);
+        let program = parse_and_typecheck_with_config(path.to_str().unwrap(), &config).unwrap();
+        assert!(program
+            .imports
+            .iter()
+            .any(|import| import.path == vec!["std".to_string(), "http".to_string()]));
+        assert!(program
+            .imports
+            .iter()
+            .any(|import| import.path == vec!["std".to_string(), "string".to_string()]));
+        assert!(program
+            .imports
+            .iter()
+            .any(|import| import.path == vec!["std".to_string(), "net".to_string()]));
+        fs::remove_file(path).ok();
     }
 }

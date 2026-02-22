@@ -58,7 +58,10 @@ pub extern "C-unwind" fn bd_json_encode_string(rt: *mut Runtime, handle: u64) ->
     let encoded = match super::json_encode_string(text) {
         Some(value) => value,
         None => {
-            runtime_error(rt, "std::json::encode_string does not support control characters.");
+            runtime_error(
+                rt,
+                "std::json::encode_string does not support control characters.",
+            );
             return 0;
         }
     };

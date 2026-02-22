@@ -18,11 +18,7 @@ pub extern "C-unwind" fn bd_string_len(rt: *mut Runtime, handle: u64) -> i64 {
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_string_concat(
-    rt: *mut Runtime,
-    left: u64,
-    right: u64,
-) -> u64 {
+pub extern "C-unwind" fn bd_string_concat(rt: *mut Runtime, left: u64, right: u64) -> u64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return 0;
@@ -92,7 +88,11 @@ pub extern "C-unwind" fn bd_string_eq(rt: *mut Runtime, left: u64, right: u64) -
         Some(value) => value,
         None => return 0,
     };
-    if left_bytes == right_bytes { 1 } else { 0 }
+    if left_bytes == right_bytes {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]
@@ -170,11 +170,7 @@ pub extern "C-unwind" fn bd_string_slice(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_string_index_of(
-    rt: *mut Runtime,
-    text: u64,
-    needle: u64,
-) -> i64 {
+pub extern "C-unwind" fn bd_string_index_of(rt: *mut Runtime, text: u64, needle: u64) -> i64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return 0;
@@ -210,13 +206,13 @@ pub extern "C-unwind" fn bd_string_index_of(
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_string_contains(
-    rt: *mut Runtime,
-    text: u64,
-    needle: u64,
-) -> i64 {
+pub extern "C-unwind" fn bd_string_contains(rt: *mut Runtime, text: u64, needle: u64) -> i64 {
     let index = bd_string_index_of(rt, text, needle);
-    if index >= 0 { 1 } else { 0 }
+    if index >= 0 {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]

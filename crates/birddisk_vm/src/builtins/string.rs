@@ -236,10 +236,7 @@ impl<'a> Vm<'a> {
                     _ => return Err(runtime_error("E0400", "std::bytes expects u8 array.")),
                 };
                 let text = String::from_utf8(bytes).map_err(|_| {
-                    runtime_error(
-                        "E0400",
-                        "Invalid UTF-8 in std::string::from_bytes.",
-                    )
+                    runtime_error("E0400", "Invalid UTF-8 in std::string::from_bytes.")
                 })?;
                 Ok(Some(self.alloc_string(&text)))
             }

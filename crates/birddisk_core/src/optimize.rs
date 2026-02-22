@@ -52,13 +52,22 @@ fn optimize_stmt(stmt: Stmt, inline_map: &HashMap<String, InlineFn>) -> Vec<Stmt
             span,
         } => {
             optimize_expr(&mut expr, inline_map);
-            vec![Stmt::Set { name, ty, expr, span }]
+            vec![Stmt::Set {
+                name,
+                ty,
+                expr,
+                span,
+            }]
         }
         Stmt::Expr { mut expr, span } => {
             optimize_expr(&mut expr, inline_map);
             vec![Stmt::Expr { expr, span }]
         }
-        Stmt::Put { name, mut expr, span } => {
+        Stmt::Put {
+            name,
+            mut expr,
+            span,
+        } => {
             optimize_expr(&mut expr, inline_map);
             vec![Stmt::Put { name, expr, span }]
         }
@@ -265,9 +274,7 @@ fn is_inline_expr(expr: &Expr) -> bool {
         ExprKind::Index { base, index } => is_inline_expr(base) && is_inline_expr(index),
         ExprKind::Unary { expr, .. } => is_inline_expr(expr),
         ExprKind::Cast { expr, .. } => is_inline_expr(expr),
-        ExprKind::Binary { left, right, .. } => {
-            is_inline_expr(left) && is_inline_expr(right)
-        }
+        ExprKind::Binary { left, right, .. } => is_inline_expr(left) && is_inline_expr(right),
         _ => true,
     }
 }

@@ -39,7 +39,11 @@ pub extern "C-unwind" fn bd_bytes_eq(rt: *mut Runtime, left: u64, right: u64) ->
         Some(value) => value,
         None => return 0,
     };
-    if left_bytes == right_bytes { 1 } else { 0 }
+    if left_bytes == right_bytes {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]
@@ -118,5 +122,9 @@ pub extern "C-unwind" fn bd_bytes_index_of(rt: *mut Runtime, handle: u64, needle
 #[no_mangle]
 pub extern "C-unwind" fn bd_bytes_contains(rt: *mut Runtime, handle: u64, needle: i64) -> i64 {
     let index = bd_bytes_index_of(rt, handle, needle);
-    if index >= 0 { 1 } else { 0 }
+    if index >= 0 {
+        1
+    } else {
+        0
+    }
 }

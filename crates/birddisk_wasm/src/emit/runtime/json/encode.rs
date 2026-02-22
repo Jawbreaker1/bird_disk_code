@@ -1,14 +1,6 @@
 use crate::emit::{
-    WatEmitter,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    STRING_HEADER_SIZE,
-    TRAP_ARRAY_OOM,
-    TRAP_JSON_PARSE,
-    TRAP_KIND_STRING,
+    WatEmitter, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_SHIFT, HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET, STRING_HEADER_SIZE, TRAP_ARRAY_OOM, TRAP_JSON_PARSE, TRAP_KIND_STRING,
     TRAP_NULL_DEREF,
 };
 
@@ -368,5 +360,4 @@ pub(super) fn emit_json_encode(emitter: &mut WatEmitter, max_input_len: i32) {
     emitter.push_line("local.get $out_ptr");
     emitter.dedent();
     emitter.push_line(")");
-
 }

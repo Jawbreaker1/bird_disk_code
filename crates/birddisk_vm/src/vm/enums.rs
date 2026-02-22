@@ -54,12 +54,9 @@ impl<'a> Vm<'a> {
             (0u32, 0usize, Vec::new())
         };
 
-        let handle = self.heap.alloc_enum(
-            enum_info.id,
-            variant.id,
-            payload_kind,
-            payload_len,
-        );
+        let handle = self
+            .heap
+            .alloc_enum(enum_info.id, variant.id, payload_kind, payload_len);
         if !payload_bytes.is_empty() {
             let payload = self.heap.payload_mut(handle);
             payload[..payload_bytes.len()].copy_from_slice(&payload_bytes);
@@ -103,19 +100,13 @@ impl<'a> Vm<'a> {
                 ))
             }
             (None, Some(_)) => {
-                return Err(runtime_error(
-                    "E0400",
-                    "Enum variant expects a payload.",
-                ))
+                return Err(runtime_error("E0400", "Enum variant expects a payload."))
             }
         };
 
-        let handle = self.heap.alloc_enum(
-            enum_info.id,
-            variant.id,
-            payload_kind,
-            payload_len,
-        );
+        let handle = self
+            .heap
+            .alloc_enum(enum_info.id, variant.id, payload_kind, payload_len);
         if !payload_bytes.is_empty() {
             let payload = self.heap.payload_mut(handle);
             payload[..payload_bytes.len()].copy_from_slice(&payload_bytes);
@@ -144,7 +135,13 @@ impl<'a> Vm<'a> {
                 }
                 Ok((handle.as_u32() as u64).to_le_bytes().to_vec())
             }
-            (Type::Book(name), Value::Enum { handle, name: enum_name }) => {
+            (
+                Type::Book(name),
+                Value::Enum {
+                    handle,
+                    name: enum_name,
+                },
+            ) => {
                 if name != enum_name {
                     return Err(runtime_error("E0400", "Enum payload type mismatch."));
                 }
@@ -165,17 +162,13 @@ impl<'a> Vm<'a> {
                 let bytes = payload
                     .get(0..8)
                     .ok_or_else(|| runtime_error("E0400", "Enum payload missing."))?;
-                Ok(Value::I64(i64::from_le_bytes(
-                    bytes.try_into().unwrap(),
-                )))
+                Ok(Value::I64(i64::from_le_bytes(bytes.try_into().unwrap())))
             }
             Type::F64 => {
                 let bytes = payload
                     .get(0..8)
                     .ok_or_else(|| runtime_error("E0400", "Enum payload missing."))?;
-                Ok(Value::F64(f64::from_le_bytes(
-                    bytes.try_into().unwrap(),
-                )))
+                Ok(Value::F64(f64::from_le_bytes(bytes.try_into().unwrap())))
             }
             Type::Bool => {
                 let byte = *payload.get(0).unwrap_or(&0);
@@ -192,10 +185,7 @@ impl<'a> Vm<'a> {
                 let raw = u64::from_le_bytes(bytes.try_into().unwrap());
                 self.value_from_handle(HeapHandle::from_u32(raw as u32), ty)
             }
-            Type::Void => Err(runtime_error(
-                "E0400",
-                "Enum payload cannot be void.",
-            )),
+            Type::Void => Err(runtime_error("E0400", "Enum payload cannot be void.")),
         }
     }
 }

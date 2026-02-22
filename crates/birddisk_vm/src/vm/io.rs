@@ -41,9 +41,7 @@ impl<'a> Vm<'a> {
             return Err(runtime_error("E0400", "Sleep duration must be >= 0."));
         }
         if self.deterministic {
-            let next = self
-                .virtual_time_ms
-                .saturating_add(millis.max(0));
+            let next = self.virtual_time_ms.saturating_add(millis.max(0));
             self.virtual_time_ms = next;
             return Ok(millis);
         }

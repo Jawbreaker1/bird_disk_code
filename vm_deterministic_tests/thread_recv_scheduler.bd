@@ -1,0 +1,19 @@
+import std::io.
+import std::string.
+import std::thread.
+import std::time.
+
+rule worker() -> i64:
+  set ignored: i64 = std::time::sleep_ms(5).
+  yield 1.
+end
+
+rule main() -> i64:
+  set t: Thread = std::thread::spawn("worker").
+  set before: i64 = std::time::now_ms().
+  set value: i64 = std::thread::join(t).
+  set after: i64 = std::time::now_ms().
+  set total: i64 = value + before + after.
+  std::io::print(std::string::concat(std::string::from_i64(total), "\n")).
+  yield total.
+end

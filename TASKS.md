@@ -491,6 +491,69 @@ Acceptance:
 
 ---
 
+## Sprint 22 — Native web server maturity (functionality-first)
+Implement:
+- [x] Add a native-compiled BirdDisk web server example with linked routes/pages
+- [x] Serve frontend assets (`/style.css`, `/app.js`) from BirdDisk HTTP routes
+- [x] Add keyed server config (`host`, `port`, `max_requests`) for runtime tuning
+- [x] Add request method parsing + `405 Method Not Allowed` for unsupported verbs
+- [x] Add a lightweight JSON status route (`/api/status`) for browser-side UI updates
+- [x] Add static-file serving from disk for selected routes (HTML/CSS/JS files)
+- [ ] Add optional threaded accept/worker mode for higher concurrent request throughput
+
+Add tests:
+- [x] Manual native AOT smoke validation (`/`, `/features`, `/about`, `/api/status`, `/shutdown`)
+- [x] Automated integration script for multi-route/multi-request runs against compiled executable
+- [x] Config validation/error-path tests (missing key, invalid port, invalid max_requests)
+
+Acceptance:
+- Native-compiled BirdDisk server can serve a small multi-page site with config-driven host/port and clean shutdown.
+
+---
+
+## Sprint 23 — Parallel server throughput
+Implement:
+- [ ] True per-connection parallel execution model for server workloads (native + VM parity plan)
+- [ ] Thread-safe shared state/message patterns for server handlers
+- [ ] Server template demonstrating concurrent request handling under load
+
+Add tests:
+- [ ] Multi-client parallel stress tests with deterministic pass criteria
+- [ ] Join/error-path diagnostics for long-running server threads
+
+Acceptance:
+- Concurrent clients are handled reliably with measured throughput gain over single-loop mode.
+
+---
+
+## Sprint 24 — UDP networking
+Implement:
+- [ ] Add UDP sockets to `std::net` (bind/send_to/recv_from/close + timeout behavior)
+- [ ] VM/native parity for UDP APIs and diagnostics
+
+Add tests:
+- [ ] UDP echo + heartbeat fixtures (VM/native)
+- [ ] Error-path tests (invalid addr, timeout, closed socket)
+
+Acceptance:
+- UDP workflows run end-to-end in VM + native with stable diagnostics.
+
+---
+
+## Sprint 25 — Generics + channel ergonomics
+Implement:
+- [ ] Add generics/type parameters (types, functions, enums)
+- [ ] Introduce `Channel<T>` + `Recv<T>` and migration path from typed channels
+
+Add tests:
+- [ ] Generic function/type coverage across VM/WASM/native
+- [ ] Concurrency examples rewritten with `Channel<T>`
+
+Acceptance:
+- Generic channels are usable in real concurrent examples with parity across supported backends.
+
+---
+
 ## Future — Language features
 - [ ] Add generics/type parameters (types + functions + enums)
 - [ ] Use generics to replace typed channels with `Channel<T>` + `Recv<T>`

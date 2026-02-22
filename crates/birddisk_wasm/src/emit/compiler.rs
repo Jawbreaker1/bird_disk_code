@@ -203,22 +203,14 @@ impl<'a> FuncCompiler<'a> {
                 self.emit_local_set(info.idx, &info.ty);
             }
             Stmt::PutIndex {
-                name,
-                index,
-                expr,
-                ..
+                name, index, expr, ..
             } => {
                 let info = self
                     .lookup(name)
                     .ok_or_else(|| wasm_error("E0400", format!("Unknown name '{name}'")))?;
                 let elem_ty = match &info.ty {
                     Type::Array(elem) => elem.as_ref().clone(),
-                    _ => {
-                        return Err(wasm_error(
-                            "E0400",
-                            "Index assignment requires array type.",
-                        ))
-                    }
+                    _ => return Err(wasm_error("E0400", "Index assignment requires array type.")),
                 };
                 let idx_local = self.temp_local(Type::I64);
                 self.emit_expr(index, None)?;
@@ -232,10 +224,7 @@ impl<'a> FuncCompiler<'a> {
                 self.emit_store(&elem_ty);
             }
             Stmt::PutField {
-                base,
-                field,
-                expr,
-                ..
+                base, field, expr, ..
             } => {
                 let info = self
                     .lookup(base)
@@ -243,9 +232,10 @@ impl<'a> FuncCompiler<'a> {
                 let Type::Book(book_name) = &info.ty else {
                     return Err(wasm_error("E0400", "Field assignment requires book type."));
                 };
-                let layout = self.books.get(book_name).ok_or_else(|| {
-                    wasm_error("E0400", format!("Unknown book '{book_name}'"))
-                })?;
+                let layout = self
+                    .books
+                    .get(book_name)
+                    .ok_or_else(|| wasm_error("E0400", format!("Unknown book '{book_name}'")))?;
                 let Some(index) = layout.field_index.get(field) else {
                     return Err(wasm_error(
                         "E0400",
@@ -264,10 +254,7 @@ impl<'a> FuncCompiler<'a> {
             }
             Stmt::Yield { expr, .. } => {
                 if matches!(self.func.return_type, Type::Void) {
-                    return Err(wasm_error(
-                        "E0400",
-                        "Void functions cannot yield a value.",
-                    ));
+                    return Err(wasm_error("E0400", "Void functions cannot yield a value."));
                 }
                 let ret_local = self.temp_local(self.func.return_type.clone());
                 self.emit_expr(expr, Some(&self.func.return_type))?;
@@ -379,22 +366,19 @@ impl<'a> FuncCompiler<'a> {
                     cases,
                     otherwise,
                     ..
-                } = stmt else {
+                } = stmt
+                else {
                     unreachable!("match arm requires match stmt");
                 };
                 let expr_ty = self.infer_expr_type(expr)?;
                 let enum_name = match &expr_ty {
                     Type::Book(name) if self.enums.contains_key(name) => name.clone(),
-                    _ => {
-                        return Err(wasm_error(
-                            "E0400",
-                            "match requires enum value.",
-                        ))
-                    }
+                    _ => return Err(wasm_error("E0400", "match requires enum value.")),
                 };
-                let enum_info = self.enums.get(&enum_name).ok_or_else(|| {
-                    wasm_error("E0400", format!("Unknown enum '{enum_name}'"))
-                })?;
+                let enum_info = self
+                    .enums
+                    .get(&enum_name)
+                    .ok_or_else(|| wasm_error("E0400", format!("Unknown enum '{enum_name}'")))?;
 
                 let match_local = self.temp_local(expr_ty.clone());
                 self.emit_expr(expr, Some(&expr_ty))?;
@@ -545,13 +529,8 @@ impl<'a> FuncCompiler<'a> {
     }
 
     fn bind_local(&mut self, name: &str, idx: u32, ty: Type) {
-        self.current_scope_mut().insert(
-            name.to_string(),
-            LocalInfo {
-                idx,
-                ty,
-            },
-        );
+        self.current_scope_mut()
+            .insert(name.to_string(), LocalInfo { idx, ty });
     }
 
     fn lookup(&self, name: &str) -> Option<LocalInfo> {

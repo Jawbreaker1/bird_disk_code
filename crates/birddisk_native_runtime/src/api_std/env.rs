@@ -103,11 +103,7 @@ pub extern "C-unwind" fn bd_env_get(rt: *mut Runtime, name_handle: u64) -> u64 {
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_env_set(
-    rt: *mut Runtime,
-    name_handle: u64,
-    value_handle: u64,
-) -> i64 {
+pub extern "C-unwind" fn bd_env_set(rt: *mut Runtime, name_handle: u64, value_handle: u64) -> i64 {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return 0;

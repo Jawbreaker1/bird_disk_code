@@ -164,14 +164,34 @@ pub enum ExprKind {
     Bool(bool),
     String(String),
     Ident(String),
-    Call { name: String, args: Vec<Expr> },
-    New { book: String, args: Vec<Expr> },
-    MemberAccess { base: String, field: String },
+    Call {
+        name: String,
+        args: Vec<Expr>,
+    },
+    New {
+        book: String,
+        args: Vec<Expr>,
+    },
+    MemberAccess {
+        base: String,
+        field: String,
+    },
     ArrayLit(Vec<Expr>),
-    ArrayNew { len: Box<Expr> },
-    Index { base: Box<Expr>, index: Box<Expr> },
-    Unary { op: UnaryOp, expr: Box<Expr> },
-    Cast { expr: Box<Expr>, ty: Type },
+    ArrayNew {
+        len: Box<Expr>,
+    },
+    Index {
+        base: Box<Expr>,
+        index: Box<Expr>,
+    },
+    Unary {
+        op: UnaryOp,
+        expr: Box<Expr>,
+    },
+    Cast {
+        expr: Box<Expr>,
+        ty: Type,
+    },
     Binary {
         left: Box<Expr>,
         op: BinaryOp,
@@ -186,8 +206,14 @@ pub enum Value {
     Bool(bool),
     String(String),
     U8(u8),
-    Array { elements: Vec<Value>, elem_type: Type },
-    Object { book: String, fields: Vec<Value> },
+    Array {
+        elements: Vec<Value>,
+        elem_type: Type,
+    },
+    Object {
+        book: String,
+        fields: Vec<Value>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

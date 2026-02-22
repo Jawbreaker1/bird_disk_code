@@ -1,13 +1,6 @@
 use crate::emit::{
-    WatEmitter,
-    ARRAY_HEADER_SIZE,
-    ARRAY_KIND_U8,
-    HEAP_AUX_OFFSET,
-    HEAP_KIND_ARRAY,
-    HEAP_KIND_SHIFT,
-    HEAP_LEN_OFFSET,
-    TRAP_KIND_BYTES,
-    TRAP_NULL_DEREF,
+    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_U8, HEAP_AUX_OFFSET, HEAP_KIND_ARRAY,
+    HEAP_KIND_SHIFT, HEAP_LEN_OFFSET, TRAP_KIND_BYTES, TRAP_NULL_DEREF,
 };
 
 pub(super) fn emit_bytes_search(emitter: &mut WatEmitter) {

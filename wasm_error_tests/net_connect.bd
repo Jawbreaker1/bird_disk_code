@@ -1,0 +1,5 @@
+import std::net.
+
+rule main() -> i64:
+  yield 0.
+end

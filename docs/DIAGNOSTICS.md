@@ -123,13 +123,17 @@ E0314: Unknown enum variant
 E0315: Enum variant payload mismatch
 E0316: Invalid cast
 E0325: WASM backend does not support std::thread
-E0326: Native backend does not support std::thread yet
+E0326: WASM backend does not support std::net
 
 E0400: Runtime error
 E0401: WASM backend error (reserved)
 E0402: Division or modulo by zero
 E0403: Array index out of bounds
 E0404: Uncaught throw
+E0405: Thread runtime error (invalid handle, join misuse)
+E0406: Channel runtime error (invalid handle/kind mismatch)
+E0407: Channel recv would block
+E0408: Network runtime error (connect/listen/read/write/timeout/handle misuse)
 
 Runtime error messages (E0400) include:
 - Null dereference
@@ -137,6 +141,7 @@ Runtime error messages (E0400) include:
 - Invalid heap header
 
 E0404 uses the thrown message string as its diagnostic message.
+E0405/E0406/E0407/E0408 use specific runtime messages for thread/channel/network failures.
 
 E0500: Backend mismatch (VM/WASM/native)
 E0501: Test harness error

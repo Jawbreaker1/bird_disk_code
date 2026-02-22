@@ -57,12 +57,7 @@ pub extern "C-unwind" fn bd_object_get_i64(rt: *mut Runtime, handle: u64, index:
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_object_set_i64(
-    rt: *mut Runtime,
-    handle: u64,
-    index: i64,
-    value: i64,
-) {
+pub extern "C-unwind" fn bd_object_set_i64(rt: *mut Runtime, handle: u64, index: i64, value: i64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -128,12 +123,7 @@ pub extern "C-unwind" fn bd_object_get_f64(rt: *mut Runtime, handle: u64, index:
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_object_set_f64(
-    rt: *mut Runtime,
-    handle: u64,
-    index: i64,
-    value: f64,
-) {
+pub extern "C-unwind" fn bd_object_set_f64(rt: *mut Runtime, handle: u64, index: i64, value: f64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -196,16 +186,15 @@ pub extern "C-unwind" fn bd_object_get_bool(rt: *mut Runtime, handle: u64, index
         }
     };
     let raw = u64::from_le_bytes(bytes.try_into().unwrap());
-    if raw == 0 { 0 } else { 1 }
+    if raw == 0 {
+        0
+    } else {
+        1
+    }
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_object_set_bool(
-    rt: *mut Runtime,
-    handle: u64,
-    index: i64,
-    value: i64,
-) {
+pub extern "C-unwind" fn bd_object_set_bool(rt: *mut Runtime, handle: u64, index: i64, value: i64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -273,12 +262,7 @@ pub extern "C-unwind" fn bd_object_get_u8(rt: *mut Runtime, handle: u64, index: 
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_object_set_u8(
-    rt: *mut Runtime,
-    handle: u64,
-    index: i64,
-    value: i64,
-) {
+pub extern "C-unwind" fn bd_object_set_u8(rt: *mut Runtime, handle: u64, index: i64, value: i64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;
@@ -348,12 +332,7 @@ pub extern "C-unwind" fn bd_object_get_ref(rt: *mut Runtime, handle: u64, index:
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn bd_object_set_ref(
-    rt: *mut Runtime,
-    handle: u64,
-    index: i64,
-    value: u64,
-) {
+pub extern "C-unwind" fn bd_object_set_ref(rt: *mut Runtime, handle: u64, index: i64, value: u64) {
     let rt = runtime_mut(rt);
     if rt.has_error() {
         return;

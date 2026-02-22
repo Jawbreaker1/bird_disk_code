@@ -1,20 +1,13 @@
 use crate::emit::{
-    WatEmitter,
-    ARRAY_HEADER_SIZE,
-    ARRAY_KIND_U8,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_ARRAY,
-    HEAP_KIND_SHIFT,
-    HEAP_LEN_OFFSET,
-    TRAP_ARRAY_OOB,
-    TRAP_ARRAY_OOM,
-    TRAP_KIND_BYTES,
-    TRAP_NULL_DEREF,
+    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_U8, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET,
+    HEAP_KIND_ARRAY, HEAP_KIND_SHIFT, HEAP_LEN_OFFSET, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM,
+    TRAP_KIND_BYTES, TRAP_NULL_DEREF,
 };
 
 pub(super) fn emit_bytes_slice(emitter: &mut WatEmitter, max_bytes_len: i32) {
-    emitter.push_line("(func $bd_bytes_slice (param $ptr i32) (param $start i64) (param $len i64) (result i32)");
+    emitter.push_line(
+        "(func $bd_bytes_slice (param $ptr i32) (param $start i64) (param $len i64) (result i32)",
+    );
     emitter.indent();
     emitter.push_line("(local $arr_len i32)");
     emitter.push_line("(local $arr_len64 i64)");
@@ -148,5 +141,4 @@ pub(super) fn emit_bytes_slice(emitter: &mut WatEmitter, max_bytes_len: i32) {
     emitter.push_line("local.get $out");
     emitter.dedent();
     emitter.push_line(")");
-
 }

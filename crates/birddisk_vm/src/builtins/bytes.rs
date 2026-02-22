@@ -12,10 +12,7 @@ impl<'a> Vm<'a> {
         match name {
             "std::bytes::len" => {
                 if args.len() != 1 {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::bytes::len expects 1 argument",
-                    ));
+                    return Err(runtime_error("E0400", "std::bytes::len expects 1 argument"));
                 }
                 match &args[0] {
                     Value::Array { handle, elem_type } if *elem_type == Type::U8 => {
@@ -27,10 +24,7 @@ impl<'a> Vm<'a> {
             }
             "std::bytes::eq" => {
                 if args.len() != 2 {
-                    return Err(runtime_error(
-                        "E0400",
-                        "std::bytes::eq expects 2 arguments",
-                    ));
+                    return Err(runtime_error("E0400", "std::bytes::eq expects 2 arguments"));
                 }
                 let left = match &args[0] {
                     Value::Array { handle, elem_type } => self.read_u8_array(*handle, elem_type)?,

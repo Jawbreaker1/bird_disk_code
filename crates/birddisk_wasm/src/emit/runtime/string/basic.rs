@@ -1,19 +1,7 @@
 use crate::emit::{
-    WatEmitter,
-    ARRAY_HEADER_SIZE,
-    ARRAY_KIND_U8,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_ARRAY,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    STRING_HEADER_SIZE,
-    TRAP_ARRAY_OOM,
-    TRAP_KIND_STRING,
-    TRAP_STRING_OOB,
-    TRAP_STRING_UTF8,
-    TRAP_NULL_DEREF,
+    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_U8, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET,
+    HEAP_KIND_ARRAY, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, STRING_HEADER_SIZE,
+    TRAP_ARRAY_OOM, TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_STRING_OOB, TRAP_STRING_UTF8,
 };
 
 pub(super) fn emit_string_basic(emitter: &mut WatEmitter, max_len: i64, max_bytes_len: i32) {
@@ -261,7 +249,9 @@ pub(super) fn emit_string_basic(emitter: &mut WatEmitter, max_len: i64, max_byte
     emitter.dedent();
     emitter.push_line(")");
 
-    emitter.push_line("(func $bd_string_slice (param $s i32) (param $start i64) (param $len i64) (result i32)");
+    emitter.push_line(
+        "(func $bd_string_slice (param $s i32) (param $start i64) (param $len i64) (result i32)",
+    );
     emitter.indent();
     emitter.push_line("(local $str_len i32)");
     emitter.push_line("(local $str_len64 i64)");
@@ -398,5 +388,4 @@ pub(super) fn emit_string_basic(emitter: &mut WatEmitter, max_len: i64, max_byte
     emitter.push_line("local.get $ptr");
     emitter.dedent();
     emitter.push_line(")");
-
 }

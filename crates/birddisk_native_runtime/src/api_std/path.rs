@@ -28,14 +28,12 @@ pub extern "C-unwind" fn bd_path_join(
         None => return 0,
     };
     let joined = Path::new(&left).join(&right);
-    let handle = match super::alloc_string_from_path(
-        rt,
-        "std::path::join produced invalid UTF-8.",
-        &joined,
-    ) {
-        Some(value) => value,
-        None => return 0,
-    };
+    let handle =
+        match super::alloc_string_from_path(rt, "std::path::join produced invalid UTF-8.", &joined)
+        {
+            Some(value) => value,
+            None => return 0,
+        };
     handle.as_u32() as u64
 }
 

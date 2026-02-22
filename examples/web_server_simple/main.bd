@@ -1,0 +1,286 @@
+import std::env.
+import std::fs.
+import std::io.
+import std::net.
+import std::string.
+
+rule build_response(
+  status_code: i64,
+  reason: string,
+  content_type: string,
+  body: string,
+  eol: string
+) -> string:
+  set status0: string = std::string::concat("HTTP/1.1 ", std::string::from_i64(status_code)).
+  set status1: string = std::string::concat(status0, " ").
+  set status_line: string = std::string::concat(status1, reason).
+  set head0: string = std::string::concat(status_line, eol).
+  set head1: string = std::string::concat("Content-Type: ", content_type).
+  set head2: string = std::string::concat(head1, eol).
+  set len0: string = std::string::concat("Content-Length: ", std::string::from_i64(std::string::len(body))).
+  set head3: string = std::string::concat(len0, eol).
+  set head: string = std::string::concat(std::string::concat(head0, head2), std::string::concat(head3, eol)).
+  yield std::string::concat(head, body).
+end
+
+rule route_path(request_line: string) -> string:
+  set s0: i64 = std::string::index_of(request_line, " ").
+  when s0 == -1:
+    yield "/".
+  otherwise:
+    set start: i64 = s0 + 1.
+    set tail: string = std::string::slice(request_line, start, std::string::len(request_line) - start).
+    set s1: i64 = std::string::index_of(tail, " ").
+    when s1 == -1:
+      yield "/".
+    otherwise:
+      yield std::string::slice(tail, 0, s1).
+    end
+  end
+end
+
+rule request_method(request_line: string) -> string:
+  set s0: i64 = std::string::index_of(request_line, " ").
+  when s0 == -1:
+    yield "GET".
+  otherwise:
+    yield std::string::slice(request_line, 0, s0).
+  end
+end
+
+rule trim_trailing_cr(line: string) -> string:
+  set n: i64 = std::string::len(line).
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  when n <= 0:
+    yield line.
+  otherwise:
+    set last: string = std::string::slice(line, n - 1, 1).
+    when std::string::eq(last, cr):
+      yield std::string::slice(line, 0, n - 1).
+    otherwise:
+      yield line.
+    end
+  end
+end
+
+rule example_root() -> string:
+  set cwd: string = std::env::cwd().
+  when std::string::contains(cwd, "/examples/web_server_simple"):
+    yield "".
+  otherwise:
+    when std::string::contains(cwd, "/examples"):
+      yield "web_server_simple/".
+    otherwise:
+      yield "examples/web_server_simple/".
+    end
+  end
+end
+
+rule public_root() -> string:
+  yield std::string::concat(example_root(), "public/").
+end
+
+rule config_text() -> string:
+  set path: string = std::string::concat(example_root(), "web_server_simple.conf").
+  yield std::fs::read_text(path).
+end
+
+rule config_value(text: string, key: string) -> string:
+  set needle: string = std::string::concat(key, " ").
+  set idx: i64 = std::string::index_of(text, needle).
+  when idx == -1:
+    throw std::string::concat("Missing config key: ", key).
+  otherwise:
+    set value_start: i64 = idx + std::string::len(needle).
+    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
+    set line_end: i64 = std::string::index_of(tail, "\n").
+    set line: string = "".
+    when line_end == -1:
+      put line = tail.
+    otherwise:
+      put line = std::string::slice(tail, 0, line_end).
+    end
+    yield trim_trailing_cr(line).
+  end
+end
+
+rule config_host(text: string) -> string:
+  yield config_value(text, "host").
+end
+
+rule config_port(text: string) -> i64:
+  set port_text: string = config_value(text, "port").
+  yield std::string::to_i64(port_text).
+end
+
+rule config_max_requests(text: string) -> i64:
+  set raw: string = config_value(text, "max_requests").
+  yield std::string::to_i64(raw).
+end
+
+rule route_file(path: string) -> string:
+  when std::string::eq(path, "/"):
+    yield "index.html".
+  otherwise:
+    when std::string::eq(path, "/hello"):
+      yield "index.html".
+    otherwise:
+      when std::string::eq(path, "/features"):
+        yield "features.html".
+      otherwise:
+        when std::string::eq(path, "/about"):
+          yield "about.html".
+        otherwise:
+          when std::string::eq(path, "/style.css"):
+            yield "style.css".
+          otherwise:
+            when std::string::eq(path, "/app.js"):
+              yield "app.js".
+            otherwise:
+              yield "".
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+rule content_type_for_file(file_name: string) -> string:
+  when std::string::eq(file_name, "style.css"):
+    yield "text/css; charset=utf-8".
+  otherwise:
+    when std::string::eq(file_name, "app.js"):
+      yield "text/javascript; charset=utf-8".
+    otherwise:
+      yield "text/html; charset=utf-8".
+    end
+  end
+end
+
+rule read_public_file(file_name: string) -> string:
+  set base: string = public_root().
+  set full: string = std::string::concat(base, file_name).
+  yield std::fs::read_text(full).
+end
+
+rule main() -> i64:
+  set cfg: string = config_text().
+  set host: string = config_host(cfg).
+  set port: i64 = config_port(cfg).
+  set max_requests: i64 = config_max_requests(cfg).
+  set addr: string = std::string::concat(std::string::concat(host, ":"), std::string::from_i64(port)).
+  set listener: TcpListener = std::net::listen(addr).
+  set listen_msg: string = std::string::concat("web server listening on http://", addr).
+  std::io::print(listen_msg).
+  std::io::print("\n").
+
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  set eol: string = std::string::concat(cr, "\n").
+
+  set served: i64 = 0.
+  set running: bool = true.
+  set failed: bool = false.
+
+  repeat while running:
+    set stream: TcpStream = std::net::accept(listener).
+    set request_line: string = std::net::read_line(stream).
+
+    set reading: bool = true.
+    repeat while reading:
+      set line: string = std::net::read_line(stream).
+      when std::string::len(line) == 0:
+        put reading = false.
+      otherwise:
+        put reading = true.
+      end
+    end
+
+    set method: string = request_method(request_line).
+    set path: string = route_path(request_line).
+
+    set status: i64 = 200.
+    set reason: string = "OK".
+    set content_type: string = "text/html; charset=utf-8".
+    set body: string = "".
+
+    when std::string::eq(method, "GET"):
+      when std::string::eq(path, "/api/status"):
+        set served_text: string = std::string::from_i64(served).
+        put content_type = "application/json; charset=utf-8".
+        put body = std::string::concat("{\"ok\":true,\"served\":", std::string::concat(served_text, "}")).
+      otherwise:
+        when std::string::eq(path, "/health"):
+          put content_type = "text/plain; charset=utf-8".
+          put body = "ok\n".
+        otherwise:
+          when std::string::eq(path, "/shutdown"):
+            put content_type = "text/plain; charset=utf-8".
+            put body = "shutting down\n".
+            put running = false.
+          otherwise:
+            set file_name: string = route_file(path).
+            when std::string::len(file_name) > 0:
+              try:
+                put content_type = content_type_for_file(file_name).
+                put body = read_public_file(file_name).
+              catch read_error:
+                put status = 500.
+                put reason = "Internal Server Error".
+                put content_type = "text/plain; charset=utf-8".
+                put body = "failed to read asset\n".
+              end
+            otherwise:
+              put status = 404.
+              put reason = "Not Found".
+              put content_type = "text/html; charset=utf-8".
+              try:
+                put body = read_public_file("404.html").
+              catch missing_error:
+                put content_type = "text/plain; charset=utf-8".
+                put body = "not found\n".
+              end
+            end
+          end
+        end
+      end
+    otherwise:
+      put status = 405.
+      put reason = "Method Not Allowed".
+      put content_type = "text/plain; charset=utf-8".
+      put body = "method not allowed\n".
+    end
+
+    set response: string = build_response(status, reason, content_type, body, eol).
+    set wrote: i64 = std::net::write_text(stream, response).
+    std::net::close_stream(stream).
+    put served = served + 1.
+
+    set write_failed: bool = wrote <= 0.
+    when write_failed:
+      put failed = true.
+      put running = false.
+    otherwise:
+      std::io::print(std::string::concat("served path: ", path)).
+      std::io::print("\n").
+    end
+
+    set reached_limit: bool = served >= max_requests.
+    set keep_running: bool = running && !reached_limit.
+    put running = keep_running.
+  end
+
+  std::net::close_listener(listener).
+  std::io::print(std::string::concat("served total: ", std::string::from_i64(served))).
+  std::io::print("\n").
+
+  when failed:
+    yield -1.
+  otherwise:
+    yield served.
+  end
+end

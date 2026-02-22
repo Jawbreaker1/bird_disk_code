@@ -74,12 +74,12 @@ fn format_program(program: &Program) -> String {
     if !program.books.is_empty() && !program.functions.is_empty() {
         fmt.push_line("");
     }
-        for (idx, func) in program.functions.iter().enumerate() {
-            if idx > 0 {
-                fmt.push_line("");
-            }
-            fmt.format_function(func);
+    for (idx, func) in program.functions.iter().enumerate() {
+        if idx > 0 {
+            fmt.push_line("");
         }
+        fmt.format_function(func);
+    }
     fmt.finish()
 }
 
@@ -211,10 +211,7 @@ impl Formatter {
                 self.push_line(&line);
             }
             Stmt::PutField {
-                base,
-                field,
-                expr,
-                ..
+                base, field, expr, ..
             } => {
                 let value_expr = format_expr(expr, 0);
                 self.push_line(&format!("put {base}::{field} = {value_expr}."));

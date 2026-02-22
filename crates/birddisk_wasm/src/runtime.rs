@@ -1,13 +1,13 @@
 use crate::analysis::{
-    program_uses_arrays, program_uses_env, program_uses_fs, program_uses_io,
-    program_uses_objects, program_uses_path, program_uses_string_from_bytes,
-    program_uses_profiler, program_uses_strings, program_uses_time,
+    program_uses_arrays, program_uses_env, program_uses_fs, program_uses_io, program_uses_objects,
+    program_uses_path, program_uses_profiler, program_uses_string_from_bytes, program_uses_strings,
+    program_uses_time,
 };
 use crate::emit::{
     emit_wat, wasm_error, WasmError, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET,
     STRING_HEADER_SIZE, TRACE_STACK_DATA_OFFSET, TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS,
-    TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_ENV, TRAP_FS_IO, TRAP_HEAP_HEADER,
-    TRAP_CHANNEL_BLOCK, TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_ENUM,
+    TRAP_ARRAY_LEN_NEG, TRAP_ARRAY_OOB, TRAP_ARRAY_OOM, TRAP_CHANNEL_BLOCK, TRAP_ENV, TRAP_FS_IO,
+    TRAP_HEAP_HEADER, TRAP_JSON_PARSE, TRAP_KIND_ARRAY, TRAP_KIND_BYTES, TRAP_KIND_ENUM,
     TRAP_KIND_OBJECT, TRAP_KIND_STRING, TRAP_NULL_DEREF, TRAP_PATH, TRAP_RAND_RANGE,
     TRAP_STRING_OOB, TRAP_STRING_PARSE, TRAP_STRING_UTF8, TRAP_TIME_NEG, TRAP_TRACE_OOM,
     TRAP_UTF8_INVALID,
@@ -247,9 +247,11 @@ fn link_imports(
             )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
         linker
-            .func_wrap("env", "bd_read_line_len", |mut caller: Caller<'_, IoState>| {
-                caller.data_mut().prepare_line()
-            })
+            .func_wrap(
+                "env",
+                "bd_read_line_len",
+                |mut caller: Caller<'_, IoState>| caller.data_mut().prepare_line(),
+            )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
         linker
             .func_wrap(
@@ -273,21 +275,22 @@ fn link_imports(
                     if end > memory.data_size(&caller) {
                         return;
                     }
-                    let _ = memory.write(
-                        &mut caller,
-                        start,
-                        &bytes[..bytes.len().min(len as usize)],
-                    );
+                    let _ =
+                        memory.write(&mut caller, start, &bytes[..bytes.len().min(len as usize)]);
                 },
             )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
     }
     if uses_time {
         linker
-            .func_wrap("env", "bd_time_now_ms", |caller: wasmtime::Caller<'_, IoState>| {
-                let elapsed = caller.data().start_time.elapsed().as_millis();
-                i64::try_from(elapsed).unwrap_or(i64::MAX)
-            })
+            .func_wrap(
+                "env",
+                "bd_time_now_ms",
+                |caller: wasmtime::Caller<'_, IoState>| {
+                    let elapsed = caller.data().start_time.elapsed().as_millis();
+                    i64::try_from(elapsed).unwrap_or(i64::MAX)
+                },
+            )
             .map_err(|err| wasm_error("E0400", format!("WASM link error: {err}")))?;
         linker
             .func_wrap(
@@ -786,11 +789,7 @@ fn validate_utf8<T>(
     }
 }
 
-fn memory_bytes<T>(
-    caller: &mut wasmtime::Caller<'_, T>,
-    ptr: i32,
-    len: i32,
-) -> Option<Vec<u8>> {
+fn memory_bytes<T>(caller: &mut wasmtime::Caller<'_, T>, ptr: i32, len: i32) -> Option<Vec<u8>> {
     if ptr < 0 || len < 0 {
         return None;
     }
@@ -905,8 +904,8 @@ fn read_error_state(
         .get_typed_func::<(), i32>(&mut *store, "__bd_error_trace")
         .ok();
     let handle = msg_func.call(&mut *store, ()).ok()?;
-    let message = read_string(store, instance, handle)
-        .unwrap_or_else(|| "Uncaught throw.".to_string());
+    let message =
+        read_string(store, instance, handle).unwrap_or_else(|| "Uncaught throw.".to_string());
     let depth = trace_func.and_then(|func| func.call(&mut *store, ()).ok());
     let depth = match depth {
         Some(value) if value > 0 => Some(value.min(frames.len() as i32)),

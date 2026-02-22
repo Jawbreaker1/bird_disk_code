@@ -1,9 +1,14 @@
-use crate::emit::{
-    WatEmitter,
-    TRAP_TRACE_OOM,
-};
+use crate::emit::{WatEmitter, TRAP_TRACE_OOM};
 
-pub(super) fn emit_gc_worklist(emitter: &mut WatEmitter, mark_ptr_offset: i32, mark_data_offset: i32, mark_slots: i32, seen_ptr_offset: i32, seen_data_offset: i32, seen_slots: i32) {
+pub(super) fn emit_gc_worklist(
+    emitter: &mut WatEmitter,
+    mark_ptr_offset: i32,
+    mark_data_offset: i32,
+    mark_slots: i32,
+    seen_ptr_offset: i32,
+    seen_data_offset: i32,
+    seen_slots: i32,
+) {
     emitter.push_line("(func $bd_mark_clear");
     emitter.indent();
     emitter.push_line(format!("i32.const {mark_ptr_offset}"));
@@ -157,5 +162,4 @@ pub(super) fn emit_gc_worklist(emitter: &mut WatEmitter, mark_ptr_offset: i32, m
     emitter.push_line("i32.store");
     emitter.dedent();
     emitter.push_line(")");
-
 }

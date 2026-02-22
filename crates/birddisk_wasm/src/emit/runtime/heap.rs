@@ -1,17 +1,7 @@
 use crate::emit::{
-    WatEmitter,
-    ARRAY_HEADER_SIZE,
-    HEAP_AUX_OFFSET,
-    HEAP_HEADER_SIZE,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_FREE,
-    HEAP_KIND_SHIFT,
-    HEAP_LEN_OFFSET,
-    TRACE_STACK_DATA_OFFSET,
-    TRACE_STACK_PTR_OFFSET,
-    TRACE_STACK_SLOTS,
-    TRAP_ARRAY_OOM,
-    TRAP_TRACE_OOM,
+    WatEmitter, ARRAY_HEADER_SIZE, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_HEADER_SIZE,
+    HEAP_KIND_FREE, HEAP_KIND_SHIFT, HEAP_LEN_OFFSET, TRACE_STACK_DATA_OFFSET,
+    TRACE_STACK_PTR_OFFSET, TRACE_STACK_SLOTS, TRAP_ARRAY_OOM, TRAP_TRACE_OOM,
 };
 
 pub(in crate::emit) fn emit_heap_runtime(
@@ -29,16 +19,18 @@ pub(in crate::emit) fn emit_heap_runtime(
     }
     if needs_io {
         emitter.push_line("(import \"env\" \"bd_print\" (func $bd_print (param i32 i32)))");
-        emitter.push_line("(import \"env\" \"bd_read_line_len\" (func $bd_read_line_len (result i32)))");
-        emitter.push_line("(import \"env\" \"bd_read_line_fill\" (func $bd_read_line_fill (param i32 i32)))");
+        emitter.push_line(
+            "(import \"env\" \"bd_read_line_len\" (func $bd_read_line_len (result i32)))",
+        );
+        emitter.push_line(
+            "(import \"env\" \"bd_read_line_fill\" (func $bd_read_line_fill (param i32 i32)))",
+        );
     }
     emitter.push_line("(memory $mem 1)");
     if export_memory {
         emitter.push_line("(export \"memory\" (memory $mem))");
     }
-    emitter.push_line(format!(
-        "(global $heap (mut i32) (i32.const {heap_start}))"
-    ));
+    emitter.push_line(format!("(global $heap (mut i32) (i32.const {heap_start}))"));
     emitter.push_line("(global $free_list (mut i32) (i32.const 0))");
     emitter.push_line("(global $gc_last_freed (mut i32) (i32.const 0))");
     emitter.push_line("(global $prof_alloc_count (mut i64) (i64.const 0))");

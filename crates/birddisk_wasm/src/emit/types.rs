@@ -1,6 +1,6 @@
 use super::{
-    wasm_error, ARRAY_KIND_BOOL, ARRAY_KIND_F64, ARRAY_KIND_I64, ARRAY_KIND_REF, ARRAY_KIND_U8,
-    WasmError,
+    wasm_error, WasmError, ARRAY_KIND_BOOL, ARRAY_KIND_F64, ARRAY_KIND_I64, ARRAY_KIND_REF,
+    ARRAY_KIND_U8,
 };
 use birddisk_core::ast::Type;
 
@@ -25,7 +25,10 @@ pub(super) fn array_elem_size(ty: &Type) -> Result<i32, WasmError> {
         Type::Bool => Ok(4),
         Type::String => Ok(4),
         Type::U8 => Ok(1),
-        Type::Void => Err(wasm_error("E0400", "Void is not a valid array element type.")),
+        Type::Void => Err(wasm_error(
+            "E0400",
+            "Void is not a valid array element type.",
+        )),
         Type::Array(_) => Ok(4),
         Type::Book(_) => Ok(4),
     }

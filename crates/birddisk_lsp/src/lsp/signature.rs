@@ -149,7 +149,11 @@ fn update_env_from_stmt(
                 }
             }
         }
-        Stmt::PutIndex { index: idx_expr, expr, .. } => {
+        Stmt::PutIndex {
+            index: idx_expr,
+            expr,
+            ..
+        } => {
             infer_expr_type(idx_expr, env, index, stdlib);
             infer_expr_type(expr, env, index, stdlib);
         }
@@ -240,11 +244,7 @@ fn infer_expr_type(
     collect_inlay_hints_in_expr(expr, env, index, stdlib, range, &mut hints)
 }
 
-pub(crate) fn inlay_hints(
-    program: &Program,
-    range: birddisk_core::Span,
-    uri: &str,
-) -> Vec<Value> {
+pub(crate) fn inlay_hints(program: &Program, range: birddisk_core::Span, uri: &str) -> Vec<Value> {
     let index = SymbolIndex::new(program, uri);
     let stdlib_root = uri_to_path(uri).and_then(|path| find_stdlib_root(&path));
     let stdlib = stdlib_signatures(program, stdlib_root.as_deref());
@@ -316,7 +316,11 @@ fn collect_inlay_hints_in_stmt(
                 }
             }
         }
-        Stmt::PutIndex { index: idx_expr, expr, .. } => {
+        Stmt::PutIndex {
+            index: idx_expr,
+            expr,
+            ..
+        } => {
             collect_inlay_hints_in_expr(idx_expr, env, index, stdlib, range, hints);
             collect_inlay_hints_in_expr(expr, env, index, stdlib, range, hints);
         }
@@ -341,14 +345,7 @@ fn collect_inlay_hints_in_stmt(
             let mut catch_env = env.clone();
             catch_env.push();
             catch_env.insert(catch_name.clone(), Type::String);
-            collect_inlay_hints_in_stmts(
-                catch_body,
-                &mut catch_env,
-                index,
-                stdlib,
-                range,
-                hints,
-            );
+            collect_inlay_hints_in_stmts(catch_body, &mut catch_env, index, stdlib, range, hints);
         }
         Stmt::When {
             cond,
@@ -737,7 +734,11 @@ fn active_param_index(args: &[Expr], pos: Position) -> usize {
             break;
         }
     }
-    if count >= args.len() { args.len() - 1 } else { count }
+    if count >= args.len() {
+        args.len() - 1
+    } else {
+        count
+    }
 }
 
 fn resolve_signature_info(
@@ -820,13 +821,20 @@ fn signature_from_function(info: &super::definitions::FunctionInfo) -> Signature
     SignatureInfo { label, params }
 }
 
-fn signature_from_method(book_name: &str, info: &super::definitions::FunctionInfo) -> SignatureInfo {
+fn signature_from_method(
+    book_name: &str,
+    info: &super::definitions::FunctionInfo,
+) -> SignatureInfo {
     let mut params: Vec<String> = info
         .params
         .iter()
         .map(|(name, ty)| format!("{}: {}", name, super::server::type_name(ty)))
         .collect();
-    if params.first().map(|param| param.starts_with("self:")).unwrap_or(false) {
+    if params
+        .first()
+        .map(|param| param.starts_with("self:"))
+        .unwrap_or(false)
+    {
         params.remove(0);
     }
     let label = format!(

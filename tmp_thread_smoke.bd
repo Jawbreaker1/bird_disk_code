@@ -1,0 +1,10 @@
+import std::thread.
+
+rule worker() -> i64:
+  yield 7.
+end
+
+rule main() -> i64:
+  set t: Thread = std::thread::spawn("worker").
+  yield std::thread::join(t).
+end

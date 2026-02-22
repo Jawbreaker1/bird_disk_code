@@ -27,7 +27,12 @@ pub fn lint_program(program: &Program) -> Vec<Diagnostic> {
         .functions
         .first()
         .map(|func| func.file.as_str())
-        .or_else(|| program.books.first().and_then(|book| book.methods.first().map(|m| m.file.as_str())))
+        .or_else(|| {
+            program
+                .books
+                .first()
+                .and_then(|book| book.methods.first().map(|m| m.file.as_str()))
+        })
         .unwrap_or("<module>");
     for import in &import_usage {
         if !import.used {
@@ -84,7 +89,12 @@ fn lint_stmt(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     match stmt {
-        Stmt::Set { name, ty, span, expr } => {
+        Stmt::Set {
+            name,
+            ty,
+            span,
+            expr,
+        } => {
             lint_name(name, &context.file, *span, diagnostics);
             if ty.is_none() {
                 diagnostics.push(warn(
@@ -513,7 +523,6 @@ fn remove_span_fix(file: &str, span: Span, title: &str) -> Vec<FixIt> {
     }]
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::lint_program;
@@ -530,7 +539,10 @@ mod tests {
 
     #[test]
     fn lint_warns_missing_set_type() {
-        let path = write_temp("rule main() -> i64:\n  set value = 1.\n  yield value.\nend\n", "set_type");
+        let path = write_temp(
+            "rule main() -> i64:\n  set value = 1.\n  yield value.\nend\n",
+            "set_type",
+        );
         let program = parse_and_typecheck(&path).expect("parse");
         let diagnostics = lint_program(&program);
         assert!(diagnostics.iter().any(|diag| diag.code == "L1001"));
@@ -548,7 +560,10 @@ mod tests {
 
     #[test]
     fn lint_warns_unused_binding() {
-        let path = write_temp("rule main() -> i64:\n  set value: i64 = 1.\n  yield 0.\nend\n", "unused_binding");
+        let path = write_temp(
+            "rule main() -> i64:\n  set value: i64 = 1.\n  yield 0.\nend\n",
+            "unused_binding",
+        );
         let program = parse_and_typecheck(&path).expect("parse");
         let diagnostics = lint_program(&program);
         assert!(diagnostics.iter().any(|diag| diag.code == "L1004"));
@@ -557,7 +572,10 @@ mod tests {
 
     #[test]
     fn lint_warns_unused_param() {
-        let path = write_temp("rule main(value: i64) -> i64:\n  yield 0.\nend\n", "unused_param");
+        let path = write_temp(
+            "rule main(value: i64) -> i64:\n  yield 0.\nend\n",
+            "unused_param",
+        );
         let program = parse_and_typecheck(&path).expect("parse");
         let diagnostics = lint_program(&program);
         assert!(diagnostics.iter().any(|diag| diag.code == "L1005"));
@@ -606,7 +624,8 @@ mod tests {
 
     #[test]
     fn lint_accepts_used_import() {
-        let source = "import std::io.\n\nrule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n";
+        let source =
+            "import std::io.\n\nrule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n";
         let path = write_temp(source, "used_import");
         let program = parse_and_typecheck(&path).expect("parse");
         let diagnostics = lint_program(&program);

@@ -1,7 +1,7 @@
 pub(crate) mod args;
 pub(crate) mod build;
-pub(crate) mod doc;
 pub(crate) mod diagnostics;
+pub(crate) mod doc;
 pub(crate) mod harness;
 pub(crate) mod manifest;
 pub(crate) mod perf;
@@ -39,7 +39,7 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
             json,
             require_tests,
         } => {
-    let report = lint_report(&path, require_tests)?;
+            let report = lint_report(&path, require_tests)?;
             if json {
                 let output =
                     serde_json::to_string_pretty(&report).unwrap_or_else(|_| "{}".to_string());
@@ -199,9 +199,7 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
         } => {
             if json {
                 if matches!(engine, Some(e) if e != birddisk_core::Engine::Vm) && deterministic {
-                    return Err(
-                        "--deterministic is only supported with --engine vm".to_string(),
-                    );
+                    return Err("--deterministic is only supported with --engine vm".to_string());
                 }
                 let manifest_requires = manifest::resolve_project_context(None)
                     .ok()
@@ -218,7 +216,15 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                 }
                 println!(
                     "{}",
-                    test::run_tests_json(engine, &dirs, &tags, &filters, jobs, snapshot, deterministic)
+                    test::run_tests_json(
+                        engine,
+                        &dirs,
+                        &tags,
+                        &filters,
+                        jobs,
+                        snapshot,
+                        deterministic
+                    )
                 );
                 Ok(())
             } else {
@@ -261,18 +267,11 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                 max_regression,
             );
             if update_baseline {
-                let baseline_path = baseline
-                    .as_deref()
-                    .unwrap_or(perf::DEFAULT_BASELINE_PATH);
+                let baseline_path = baseline.as_deref().unwrap_or(perf::DEFAULT_BASELINE_PATH);
                 if !report.ok {
                     return Err("perf run failed; baseline not written".to_string());
                 }
-                perf::write_baseline(
-                    baseline_path,
-                    &report,
-                    engine,
-                    report.iterations,
-                )?;
+                perf::write_baseline(baseline_path, &report, engine, report.iterations)?;
             }
             if json {
                 let output =
@@ -293,7 +292,10 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                 } else if report.diagnostics.is_empty() {
                     Err(summary)
                 } else {
-                    Err(format!("{summary}\n{}", format_diagnostics_human(&report.diagnostics)))
+                    Err(format!(
+                        "{summary}\n{}",
+                        format_diagnostics_human(&report.diagnostics)
+                    ))
                 }
             }
         }
@@ -324,7 +326,7 @@ fn lint_report(path: &str, require_tests: bool) -> Result<LintReport, String> {
 #[cfg(test)]
 mod tests {
     use super::args::{parse_command, Command, EmitFormat};
-    use super::{build, diagnostics, manifest, run};
+    use super::{build, diagnostics, manifest, run, test as test_harness};
     use serde_json::Value;
     use std::path::Path;
     use std::{env, fs, process};
@@ -447,13 +449,7 @@ mod tests {
     #[test]
     fn parse_run_rejects_emit_with_json() {
         let err = cmd(&[
-            "run",
-            "--engine",
-            "wasm",
-            "main.bd",
-            "--emit",
-            "wat",
-            "--json",
+            "run", "--engine", "wasm", "main.bd", "--emit", "wat", "--json",
         ])
         .unwrap_err();
         assert!(err.contains("cannot combine"));
@@ -589,7 +585,11 @@ mod tests {
         let dep_dir = root.join("deps").join("util");
         fs::create_dir_all(&src_dir).unwrap();
         fs::create_dir_all(&dep_dir).unwrap();
-        fs::write(src_dir.join("main.bd"), "rule main() -> i64:\n  yield 0.\nend\n").unwrap();
+        fs::write(
+            src_dir.join("main.bd"),
+            "rule main() -> i64:\n  yield 0.\nend\n",
+        )
+        .unwrap();
         fs::write(
             dep_dir.join("math.bd"),
             "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n",
@@ -609,12 +609,19 @@ mod tests {
     #[test]
     fn resolve_project_context_from_manifest_with_versioned_dep() {
         let mut root = env::temp_dir();
-        root.push(format!("birddisk_manifest_versioned_{}", std::process::id()));
+        root.push(format!(
+            "birddisk_manifest_versioned_{}",
+            std::process::id()
+        ));
         let src_dir = root.join("src");
         let dep_dir = root.join("deps").join("util");
         fs::create_dir_all(&src_dir).unwrap();
         fs::create_dir_all(&dep_dir).unwrap();
-        fs::write(src_dir.join("main.bd"), "rule main() -> i64:\n  yield 0.\nend\n").unwrap();
+        fs::write(
+            src_dir.join("main.bd"),
+            "rule main() -> i64:\n  yield 0.\nend\n",
+        )
+        .unwrap();
         fs::write(
             dep_dir.join("math.bd"),
             "rule add(a: i64, b: i64) -> i64:\n  yield a + b.\nend\n",
@@ -762,8 +769,7 @@ mod tests {
             .expect("workspace root");
         let lint_path = root.join("tests/lint/basic.bd");
         let expected_path = root.join("tests/lint/basic.json");
-        let report = super::lint_report(lint_path.to_str().unwrap(), false)
-            .expect("lint report");
+        let report = super::lint_report(lint_path.to_str().unwrap(), false).expect("lint report");
         let mut value = serde_json::to_value(report).expect("lint json value");
         normalize_paths(
             &mut value,
@@ -829,7 +835,10 @@ mod tests {
         }
         let source = "import std::io.\nimport std::string.\n\nrule safe_div(divisor: i64) -> i64:\n  when divisor == 0:\n    throw \"division by zero\".\n  otherwise:\n    yield 100 / divisor.\n  end\nend\n\nrule main() -> i64:\n  try:\n    set value: i64 = safe_div(0).\n    std::io::print(std::string::concat(\"value=\", std::string::from_i64(value))).\n    std::io::print(\"\\n\").\n    yield 0.\n  catch message:\n    std::io::print(std::string::concat(\"error: \", message)).\n    std::io::print(\"\\n\").\n    yield 1.\n  end\nend\n";
         let mut path = env::temp_dir();
-        path.push(format!("birddisk_native_try_catch_{}.bd", std::process::id()));
+        path.push(format!(
+            "birddisk_native_try_catch_{}.bd",
+            std::process::id()
+        ));
         fs::write(&path, source).expect("write temp source");
         let path_str = path.to_string_lossy().to_string();
 
@@ -839,7 +848,10 @@ mod tests {
         let trace = birddisk_native::trace_for_program(&program).expect("trace");
 
         let mut exe_path = env::temp_dir();
-        exe_path.push(format!("birddisk_native_try_catch_{}.exe", std::process::id()));
+        exe_path.push(format!(
+            "birddisk_native_try_catch_{}.exe",
+            std::process::id()
+        ));
         let exe_str = exe_path.to_string_lossy().to_string();
         build::build_native_executable(&obj, &path_str, &exe_str, &layout, &trace)
             .expect("build native exe");
@@ -856,6 +868,101 @@ mod tests {
 
         let _ = fs::remove_file(&path);
         let _ = fs::remove_file(&exe_path);
+    }
+
+    #[test]
+    fn concurrency_vm_native_parity_spawn_join() {
+        let source = "import std::thread.\n\nrule worker(base: i64) -> i64:\n  yield base + 8.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 5).\n  yield std::thread::join(t).\nend\n";
+        let mut path = env::temp_dir();
+        path.push(format!(
+            "birddisk_concurrency_parity_{}.bd",
+            std::process::id()
+        ));
+        fs::write(&path, source).expect("write temp source");
+        let path_str = path.to_string_lossy().to_string();
+
+        let vm = run::run_report(
+            &path_str,
+            &birddisk_core::ModuleConfig::default(),
+            birddisk_core::Engine::Vm,
+            "",
+            &[],
+            true,
+        );
+        let native = run::run_report(
+            &path_str,
+            &birddisk_core::ModuleConfig::default(),
+            birddisk_core::Engine::Native,
+            "",
+            &[],
+            false,
+        );
+
+        assert!(vm.ok, "vm diagnostics: {:?}", vm.diagnostics);
+        assert!(native.ok, "native diagnostics: {:?}", native.diagnostics);
+        assert_eq!(vm.result, native.result);
+        assert_eq!(vm.stdout, native.stdout);
+        assert_eq!(vm.result, Some(13));
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn concurrency_vm_native_join_error_code_parity() {
+        let source = "import std::thread.\nrule worker() -> i64:\n  yield 3.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\").\n  set first: i64 = std::thread::join(t).\n  set second: i64 = std::thread::join(t).\n  yield first + second.\nend\n";
+        let mut path = env::temp_dir();
+        path.push(format!(
+            "birddisk_concurrency_error_{}.bd",
+            std::process::id()
+        ));
+        fs::write(&path, source).expect("write temp source");
+        let path_str = path.to_string_lossy().to_string();
+
+        let vm = run::run_report(
+            &path_str,
+            &birddisk_core::ModuleConfig::default(),
+            birddisk_core::Engine::Vm,
+            "",
+            &[],
+            true,
+        );
+        let native = run::run_report(
+            &path_str,
+            &birddisk_core::ModuleConfig::default(),
+            birddisk_core::Engine::Native,
+            "",
+            &[],
+            false,
+        );
+
+        assert!(!vm.ok);
+        assert!(!native.ok);
+        assert_eq!(vm.diagnostics[0].code, "E0405");
+        assert_eq!(native.diagnostics[0].code, "E0405");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn vm_deterministic_scheduler_fixtures_pass() {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = manifest_dir
+            .parent()
+            .and_then(|path| path.parent())
+            .expect("workspace root");
+        let dir = root.join("vm_deterministic_tests");
+        let dirs = vec![dir.to_string_lossy().to_string()];
+        let json = test_harness::run_tests_json(
+            Some(birddisk_core::Engine::Vm),
+            &dirs,
+            &[],
+            &[],
+            None,
+            false,
+            true,
+        );
+        let report: Value = serde_json::from_str(&json).expect("parse deterministic report");
+        assert_eq!(report["ok"], true, "report: {json}");
     }
 
     #[test]

@@ -1,17 +1,7 @@
 use crate::emit::{
-    WatEmitter,
-    ARRAY_HEADER_SIZE,
-    ARRAY_KIND_REF,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_HEADER_SIZE,
-    HEAP_KIND_ARRAY,
-    HEAP_KIND_ENUM,
-    HEAP_KIND_FREE,
-    HEAP_KIND_OBJECT,
-    HEAP_KIND_SHIFT,
-    HEAP_LEN_OFFSET,
-    OBJECT_HEADER_SIZE,
+    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_REF, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET,
+    HEAP_HEADER_SIZE, HEAP_KIND_ARRAY, HEAP_KIND_ENUM, HEAP_KIND_FREE, HEAP_KIND_OBJECT,
+    HEAP_KIND_SHIFT, HEAP_LEN_OFFSET, OBJECT_HEADER_SIZE,
 };
 
 pub(super) fn emit_gc_collect(
@@ -412,5 +402,4 @@ pub(super) fn emit_gc_collect(
     emitter.push_line("i32.load");
     emitter.dedent();
     emitter.push_line(")");
-
 }

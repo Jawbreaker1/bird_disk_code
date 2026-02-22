@@ -1,19 +1,12 @@
 use crate::emit::{
-    WatEmitter,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    STRING_HEADER_SIZE,
-    TRAP_ARRAY_OOM,
-    TRAP_KIND_STRING,
+    WatEmitter, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_SHIFT, HEAP_KIND_STRING,
+    HEAP_LEN_OFFSET, STRING_HEADER_SIZE, TRAP_ARRAY_OOM, TRAP_KIND_STRING, TRAP_NULL_DEREF,
     TRAP_STRING_UTF8,
-    TRAP_NULL_DEREF,
 };
 
 pub(super) fn emit_string_search(emitter: &mut WatEmitter, max_len: i64) {
-    emitter.push_line("(func $bd_string_index_of (param $text i32) (param $needle i32) (result i64)");
+    emitter
+        .push_line("(func $bd_string_index_of (param $text i32) (param $needle i32) (result i64)");
     emitter.indent();
     emitter.push_line("(local $len_text i32)");
     emitter.push_line("(local $len_need i32)");
@@ -181,7 +174,8 @@ pub(super) fn emit_string_search(emitter: &mut WatEmitter, max_len: i64) {
     emitter.dedent();
     emitter.push_line(")");
 
-    emitter.push_line("(func $bd_string_contains (param $text i32) (param $needle i32) (result i32)");
+    emitter
+        .push_line("(func $bd_string_contains (param $text i32) (param $needle i32) (result i32)");
     emitter.indent();
     emitter.push_line("local.get $text");
     emitter.push_line("local.get $needle");

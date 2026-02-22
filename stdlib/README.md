@@ -28,6 +28,16 @@ Modules (BirdDisk)
   - contains_i64(xs, len, value) -> bool
   - index_of_i64(xs, len, value) -> i64
   - count_i64(xs, len, value) -> i64
+- std::http
+  - request(method, url, body_text) -> string (raw response)
+  - request_with_timeout(method, url, body_text, timeout_ms) -> string
+  - get(url) -> string
+  - post(url, body_text) -> string
+  - get_with_timeout(url, timeout_ms) -> string
+  - post_with_timeout(url, body_text, timeout_ms) -> string
+  - status(response) -> i64
+  - headers(response) -> string
+  - body(response) -> string
 
 Runtime modules (implemented in Rust)
 - std::string
@@ -92,7 +102,6 @@ Runtime modules (implemented in Rust)
 
 Notes
 - std::string, std::bytes, std::io, std::time, std::profiler, std::fs, std::path, std::env, and std::json are still implemented in Rust.
-- BirdDisk stdlib modules are currently self-contained and should not
-  import other modules yet.
+- BirdDisk stdlib modules can import Rust-hosted std modules.
 - Stdlib versioning is tied to the compiler version during v0.x.
 - For now, array utilities take the array length explicitly.

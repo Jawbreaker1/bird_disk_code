@@ -398,7 +398,11 @@ pub(crate) fn qualified_path_at_position(tokens: &[Token], pos: Position) -> Opt
         }
         break;
     }
-    if parts.len() >= 2 { Some(parts) } else { None }
+    if parts.len() >= 2 {
+        Some(parts)
+    } else {
+        None
+    }
 }
 
 pub(crate) fn member_context(tokens: &[Token], pos: Position) -> Option<(String, String)> {
@@ -428,7 +432,11 @@ fn type_name_at_position(tokens: &[Token], pos: Position) -> Option<String> {
     let TokenKind::Ident(name) = &token.kind else {
         return None;
     };
-    if is_type_context(tokens, idx) { Some(name.clone()) } else { None }
+    if is_type_context(tokens, idx) {
+        Some(name.clone())
+    } else {
+        None
+    }
 }
 
 fn is_type_context(tokens: &[Token], idx: usize) -> bool {
@@ -558,7 +566,12 @@ fn workspace_symbols_for_program(uri: &str, program: &Program, query: &str) -> V
     symbols
 }
 
-fn add_program_symbols(index: &mut SymbolIndex, program: &Program, uri: &str, prefix: Option<&str>) {
+fn add_program_symbols(
+    index: &mut SymbolIndex,
+    program: &Program,
+    uri: &str,
+    prefix: Option<&str>,
+) {
     for func in &program.functions {
         let name = match prefix {
             Some(prefix) => format!("{prefix}::{}", func.name),
@@ -662,7 +675,10 @@ fn add_imports_to_index(
     }
 }
 
-pub(crate) fn build_symbol_index_with_paths(uri: &str, program: &Program) -> (SymbolIndex, Vec<PathBuf>) {
+pub(crate) fn build_symbol_index_with_paths(
+    uri: &str,
+    program: &Program,
+) -> (SymbolIndex, Vec<PathBuf>) {
     let mut index = SymbolIndex::new(program, uri);
     let Some(path) = uri_to_path(uri) else {
         return (index, Vec::new());

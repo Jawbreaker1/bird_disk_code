@@ -1,0 +1,98 @@
+import std::channel.
+import std::io.
+import std::string.
+import std::thread.
+
+rule worker0() -> i64:
+  yield 3.
+end
+
+rule worker1() -> i64:
+  yield 5.
+end
+
+rule worker2() -> i64:
+  yield 7.
+end
+
+rule worker3() -> i64:
+  yield 11.
+end
+
+rule worker4() -> i64:
+  yield 13.
+end
+
+rule worker5() -> i64:
+  yield 17.
+end
+
+rule worker6() -> i64:
+  yield 19.
+end
+
+rule worker7() -> i64:
+  yield 23.
+end
+
+rule main() -> i64:
+  set t0: Thread = std::thread::spawn("worker0").
+  set t1: Thread = std::thread::spawn("worker1").
+  set t2: Thread = std::thread::spawn("worker2").
+  set t3: Thread = std::thread::spawn("worker3").
+  set t4: Thread = std::thread::spawn("worker4").
+  set t5: Thread = std::thread::spawn("worker5").
+  set t6: Thread = std::thread::spawn("worker6").
+  set t7: Thread = std::thread::spawn("worker7").
+  set thread_sum: i64 = 0.
+  put thread_sum = thread_sum + std::thread::join(t0).
+  put thread_sum = thread_sum + std::thread::join(t1).
+  put thread_sum = thread_sum + std::thread::join(t2).
+  put thread_sum = thread_sum + std::thread::join(t3).
+  put thread_sum = thread_sum + std::thread::join(t4).
+  put thread_sum = thread_sum + std::thread::join(t5).
+  put thread_sum = thread_sum + std::thread::join(t6).
+  put thread_sum = thread_sum + std::thread::join(t7).
+
+  set ch: ChannelI64 = std::channel::i64().
+  set i: i64 = 0.
+  repeat while i < 32:
+    set sent: bool = ch::send(i).
+    when sent:
+      put i = i + 1.
+    otherwise:
+      yield -1.
+    end
+  end
+  ch::close().
+
+  set channel_sum: i64 = 0.
+  set read: i64 = 0.
+  repeat while read < 32:
+    set msg: RecvI64 = ch::recv().
+    match msg:
+      case RecvI64::Ok(v):
+        put channel_sum = channel_sum + v.
+      case RecvI64::Closed:
+        yield -2.
+      otherwise:
+        yield -3.
+    end
+    put read = read + 1.
+  end
+
+  set tail: RecvI64 = ch::recv().
+  match tail:
+    case RecvI64::Ok(unused):
+      yield -4.
+    case RecvI64::Closed:
+      put channel_sum = channel_sum + 1.
+    otherwise:
+      yield -5.
+  end
+
+  set total: i64 = thread_sum + channel_sum.
+  set line: string = std::string::concat(std::string::from_i64(total), "\n").
+  std::io::print(line).
+  yield total.
+end

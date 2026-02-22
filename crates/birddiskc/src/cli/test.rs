@@ -6,7 +6,7 @@ use super::harness::{
     collect_test_paths, companion_path, read_expected_error, read_expected_output, read_test_args,
     read_test_input,
 };
-use super::threading::{native_threading_guard, wasm_threading_guard};
+use super::threading::wasm_threading_guard;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -199,27 +199,6 @@ fn run_test_case(
             return case;
         }
     }
-    if matches!(engine, Some(birddisk_core::Engine::Native)) {
-        if let Some(diag) = native_threading_guard(path, &birddisk_core::ModuleConfig::default()) {
-            case.ok = false;
-            case.diagnostics.push(diag);
-            if let Some(expected) = expected_error.as_ref() {
-                if diagnostics_match(expected, &case.diagnostics) {
-                    case.ok = true;
-                } else {
-                    case.diagnostics.push(expected_error_diagnostic(
-                        path,
-                        format!(
-                            "Expected error code(s) {}, but native reported different codes.",
-                            expected.join(", ")
-                        ),
-                    ));
-                }
-            }
-            return case;
-        }
-    }
-
     let program = match birddisk_core::parse_and_typecheck(path) {
         Ok(mut program) => {
             birddisk_core::optimize_program(&mut program);
@@ -461,9 +440,7 @@ fn run_test_case(
                 ));
             }
         }
-        if let (Some(wasm_result), Some(native_result)) =
-            (case.wasm_result, case.native_result)
-        {
+        if let (Some(wasm_result), Some(native_result)) = (case.wasm_result, case.native_result) {
             if wasm_result != native_result {
                 case.ok = false;
                 case.diagnostics
@@ -496,17 +473,14 @@ fn run_test_case(
                         if let Some(value) = snapshot_stdout.as_deref() {
                             if let Err(err) = write_snapshot_stdout(path, value) {
                                 case.ok = false;
-                                case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                                case.diagnostics
+                                    .push(harness_diagnostic(path, err, "E0501"));
                             }
                         }
                     } else {
                         case.ok = false;
-                        case.diagnostics.push(output_expected_diagnostic(
-                            path,
-                            "vm",
-                            expected,
-                            vm_stdout,
-                        ));
+                        case.diagnostics
+                            .push(output_expected_diagnostic(path, "vm", expected, vm_stdout));
                     }
                 }
             }
@@ -516,7 +490,8 @@ fn run_test_case(
                         if let Some(value) = snapshot_stdout.as_deref() {
                             if let Err(err) = write_snapshot_stdout(path, value) {
                                 case.ok = false;
-                                case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                                case.diagnostics
+                                    .push(harness_diagnostic(path, err, "E0501"));
                             }
                         }
                     } else {
@@ -536,7 +511,8 @@ fn run_test_case(
                         if let Some(value) = snapshot_stdout.as_deref() {
                             if let Err(err) = write_snapshot_stdout(path, value) {
                                 case.ok = false;
-                                case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                                case.diagnostics
+                                    .push(harness_diagnostic(path, err, "E0501"));
                             }
                         }
                     } else {
@@ -554,7 +530,8 @@ fn run_test_case(
             if let Some(value) = snapshot_stdout.as_deref() {
                 if let Err(err) = write_snapshot_stdout(path, value) {
                     case.ok = false;
-                    case.diagnostics.push(harness_diagnostic(path, err, "E0501"));
+                    case.diagnostics
+                        .push(harness_diagnostic(path, err, "E0501"));
                 }
             }
         }

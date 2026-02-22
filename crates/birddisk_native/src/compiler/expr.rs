@@ -17,10 +17,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     ) -> Result<Value, NativeError> {
         match &expr.kind {
             ExprKind::Int(value) => Ok(self.builder.ins().iconst(types::I64, *value)),
-            ExprKind::Float(value) => Ok(self
-                .builder
-                .ins()
-                .f64const(Ieee64::with_float(*value))),
+            ExprKind::Float(value) => Ok(self.builder.ins().f64const(Ieee64::with_float(*value))),
             ExprKind::Bool(value) => {
                 let bit = if *value { 1 } else { 0 };
                 Ok(self.builder.ins().iconst(types::I64, bit))
@@ -41,7 +38,9 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     (Type::I64, Type::F64) => {
                         Ok(self.builder.ins().fcvt_from_sint(types::F64, value))
                     }
-                    (Type::F64, Type::I64) => Ok(self.builder.ins().fcvt_to_sint(types::I64, value)),
+                    (Type::F64, Type::I64) => {
+                        Ok(self.builder.ins().fcvt_to_sint(types::I64, value))
+                    }
                     (from, to) if from == to => Ok(value),
                     _ => Err(native_error("invalid cast")),
                 }
@@ -249,10 +248,8 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
 
         let value = self.emit_expr(expr, Some(&expr_ty))?;
         let enum_id = self.builder.ins().iconst(types::I64, enum_info.id as i64);
-        let variant_val = self.call_runtime_value(
-            self.runtime.enum_variant,
-            &[self.rt_ptr, value, enum_id],
-        );
+        let variant_val =
+            self.call_runtime_value(self.runtime.enum_variant, &[self.rt_ptr, value, enum_id]);
 
         let merge_block = self.builder.create_block();
         let otherwise_block = self.builder.create_block();
@@ -277,10 +274,10 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 } else {
                     self.builder.create_block()
                 };
-                let cond = self
-                    .builder
-                    .ins()
-                    .icmp_imm(IntCC::Equal, variant_val, variant.id as i64);
+                let cond =
+                    self.builder
+                        .ins()
+                        .icmp_imm(IntCC::Equal, variant_val, variant.id as i64);
                 self.builder
                     .ins()
                     .brif(cond, case_block, &[], next_check, &[]);
@@ -323,34 +320,40 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     }
 
     fn emit_string_literal(&mut self, value: &str) -> Result<Value, NativeError> {
-        let data_id = self.string_data.get(value).cloned().map(Ok).unwrap_or_else(|| {
-            let mut data_ctx = DataDescription::new();
-            data_ctx.define(value.as_bytes().to_vec().into_boxed_slice());
-            let name = format!("bd_str_{}", *self.string_counter);
-            let data_id = self
-                .module
-                .declare_data(&name, Linkage::Local, false, false)
-                .map_err(|err| native_error(format!("native declare data failed: {err}")))?;
-            self.module
-                .define_data(data_id, &data_ctx)
-                .map_err(|err| native_error(format!("native define data failed: {err}")))?;
-            self.string_data.insert(value.to_string(), data_id);
-            *self.string_counter += 1;
-            Ok(data_id)
-        })?;
+        let data_id = self
+            .string_data
+            .get(value)
+            .cloned()
+            .map(Ok)
+            .unwrap_or_else(|| {
+                let mut data_ctx = DataDescription::new();
+                data_ctx.define(value.as_bytes().to_vec().into_boxed_slice());
+                let name = format!("bd_str_{}", *self.string_counter);
+                let data_id = self
+                    .module
+                    .declare_data(&name, Linkage::Local, false, false)
+                    .map_err(|err| native_error(format!("native declare data failed: {err}")))?;
+                self.module
+                    .define_data(data_id, &data_ctx)
+                    .map_err(|err| native_error(format!("native define data failed: {err}")))?;
+                self.string_data.insert(value.to_string(), data_id);
+                *self.string_counter += 1;
+                Ok(data_id)
+            })?;
         let global = self.module.declare_data_in_func(data_id, self.builder.func);
         let ptr = self.builder.ins().global_value(types::I64, global);
         let len = self
             .builder
             .ins()
             .iconst(types::I64, value.as_bytes().len() as i64);
-        Ok(self.call_runtime_value(
-            self.runtime.alloc_string,
-            &[self.rt_ptr, ptr, len],
-        ))
+        Ok(self.call_runtime_value(self.runtime.alloc_string, &[self.rt_ptr, ptr, len]))
     }
 
-    fn emit_array_new(&mut self, len: &Expr, expected: Option<&Type>) -> Result<Value, NativeError> {
+    fn emit_array_new(
+        &mut self,
+        len: &Expr,
+        expected: Option<&Type>,
+    ) -> Result<Value, NativeError> {
         let Some(Type::Array(elem_ty)) = expected else {
             return Err(native_error(
                 "array constructor requires explicit array type.",
@@ -408,9 +411,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         let elem_ty = if let Some(Type::Array(inner)) = expected {
             inner.as_ref().clone()
         } else if elements.is_empty() {
-            return Err(native_error(
-                "array literal requires explicit array type.",
-            ));
+            return Err(native_error("array literal requires explicit array type."));
         } else {
             let first = self
                 .infer_expr_type(&elements[0])
@@ -427,10 +428,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             }
             first
         };
-        let len_val = self
-            .builder
-            .ins()
-            .iconst(types::I64, elements.len() as i64);
+        let len_val = self.builder.ins().iconst(types::I64, elements.len() as i64);
         let elem_kind = elem_kind_for_type(&elem_ty)?;
         let elem_size = elem_size_for_kind(elem_kind)?;
         let kind_val = self.builder.ins().iconst(types::I64, elem_kind as i64);
@@ -450,10 +448,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
     fn emit_default_value(&mut self, ty: &Type) -> Result<Value, NativeError> {
         match ty {
             Type::I64 => Ok(self.builder.ins().iconst(types::I64, 0)),
-            Type::F64 => Ok(self
-                .builder
-                .ins()
-                .f64const(Ieee64::with_float(0.0))),
+            Type::F64 => Ok(self.builder.ins().f64const(Ieee64::with_float(0.0))),
             Type::Bool => Ok(self.builder.ins().iconst(types::I64, 0)),
             Type::U8 => Ok(self.builder.ins().iconst(types::I64, 0)),
             Type::String => self.emit_string_literal(""),
@@ -468,10 +463,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             .books
             .get(book)
             .ok_or_else(|| native_error(format!("unknown book '{book}'.")))?;
-        let book_id = self
-            .builder
-            .ins()
-            .iconst(types::I64, layout.id as i64);
+        let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
         let field_count = self
             .builder
             .ins()
@@ -519,26 +511,26 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         index: Value,
     ) -> Result<Value, NativeError> {
         match elem_ty {
-            Type::I64 => Ok(self.call_runtime_value(
-                self.runtime.array_get_i64,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::F64 => Ok(self.call_runtime_value(
-                self.runtime.array_get_f64,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::Bool => Ok(self.call_runtime_value(
-                self.runtime.array_get_bool,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::U8 => Ok(self.call_runtime_value(
-                self.runtime.array_get_u8,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::String | Type::Array(_) | Type::Book(_) => Ok(self.call_runtime_value(
-                self.runtime.array_get_ref,
-                &[self.rt_ptr, handle, index],
-            )),
+            Type::I64 => {
+                Ok(self
+                    .call_runtime_value(self.runtime.array_get_i64, &[self.rt_ptr, handle, index]))
+            }
+            Type::F64 => {
+                Ok(self
+                    .call_runtime_value(self.runtime.array_get_f64, &[self.rt_ptr, handle, index]))
+            }
+            Type::Bool => {
+                Ok(self
+                    .call_runtime_value(self.runtime.array_get_bool, &[self.rt_ptr, handle, index]))
+            }
+            Type::U8 => {
+                Ok(self
+                    .call_runtime_value(self.runtime.array_get_u8, &[self.rt_ptr, handle, index]))
+            }
+            Type::String | Type::Array(_) | Type::Book(_) => {
+                Ok(self
+                    .call_runtime_value(self.runtime.array_get_ref, &[self.rt_ptr, handle, index]))
+            }
             Type::Void => Err(native_error("void is not a valid array element type.")),
         }
     }
@@ -581,10 +573,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             .books
             .get(book)
             .ok_or_else(|| native_error(format!("unknown book '{book}'.")))?;
-        let book_id = self
-            .builder
-            .ins()
-            .iconst(types::I64, layout.id as i64);
+        let book_id = self.builder.ins().iconst(types::I64, layout.id as i64);
         let field_count = self
             .builder
             .ins()
@@ -613,14 +602,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     args.len()
                 )));
             }
-            let func_id = self
-                .func_ids
-                .get(&init_name)
-                .copied()
-                .ok_or_else(|| native_error(format!("missing function id for '{init_name}'.")))?;
-            let func_ref = self
-                .module
-                .declare_func_in_func(func_id, self.builder.func);
+            let func_id =
+                self.func_ids.get(&init_name).copied().ok_or_else(|| {
+                    native_error(format!("missing function id for '{init_name}'."))
+                })?;
+            let func_ref = self.module.declare_func_in_func(func_id, self.builder.func);
             let mut call_args = Vec::with_capacity(args.len() + 2);
             call_args.push(self.rt_ptr);
             call_args.push(handle);
@@ -630,9 +616,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             let call = self.builder.ins().call(func_ref, &call_args);
             handle = self.builder.inst_results(call)[0];
         } else if !args.is_empty() {
-            return Err(native_error(format!(
-                "missing constructor '{init_name}'."
-            )));
+            return Err(native_error(format!("missing constructor '{init_name}'.")));
         }
         Ok(handle)
     }
@@ -745,28 +729,27 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         self.emit_object_get(field_ty, handle, index_val)
     }
 
-    fn emit_enum_payload(&mut self, payload_ty: &Type, handle: Value) -> Result<Value, NativeError> {
+    fn emit_enum_payload(
+        &mut self,
+        payload_ty: &Type,
+        handle: Value,
+    ) -> Result<Value, NativeError> {
         let value = match payload_ty {
-            Type::I64 => self.call_runtime_value(
-                self.runtime.enum_payload_i64,
-                &[self.rt_ptr, handle],
-            ),
-            Type::F64 => self.call_runtime_value(
-                self.runtime.enum_payload_f64,
-                &[self.rt_ptr, handle],
-            ),
-            Type::Bool => self.call_runtime_value(
-                self.runtime.enum_payload_bool,
-                &[self.rt_ptr, handle],
-            ),
-            Type::U8 => self.call_runtime_value(
-                self.runtime.enum_payload_u8,
-                &[self.rt_ptr, handle],
-            ),
-            Type::String | Type::Array(_) | Type::Book(_) => self.call_runtime_value(
-                self.runtime.enum_payload_ref,
-                &[self.rt_ptr, handle],
-            ),
+            Type::I64 => {
+                self.call_runtime_value(self.runtime.enum_payload_i64, &[self.rt_ptr, handle])
+            }
+            Type::F64 => {
+                self.call_runtime_value(self.runtime.enum_payload_f64, &[self.rt_ptr, handle])
+            }
+            Type::Bool => {
+                self.call_runtime_value(self.runtime.enum_payload_bool, &[self.rt_ptr, handle])
+            }
+            Type::U8 => {
+                self.call_runtime_value(self.runtime.enum_payload_u8, &[self.rt_ptr, handle])
+            }
+            Type::String | Type::Array(_) | Type::Book(_) => {
+                self.call_runtime_value(self.runtime.enum_payload_ref, &[self.rt_ptr, handle])
+            }
             Type::Void => return Err(native_error("enum payload cannot be void.")),
         };
         Ok(value)
@@ -811,26 +794,24 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
         index: Value,
     ) -> Result<Value, NativeError> {
         match field_ty {
-            Type::I64 => Ok(self.call_runtime_value(
-                self.runtime.object_get_i64,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::F64 => Ok(self.call_runtime_value(
-                self.runtime.object_get_f64,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::Bool => Ok(self.call_runtime_value(
-                self.runtime.object_get_bool,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::U8 => Ok(self.call_runtime_value(
-                self.runtime.object_get_u8,
-                &[self.rt_ptr, handle, index],
-            )),
-            Type::String | Type::Array(_) | Type::Book(_) => Ok(self.call_runtime_value(
-                self.runtime.object_get_ref,
-                &[self.rt_ptr, handle, index],
-            )),
+            Type::I64 => {
+                Ok(self
+                    .call_runtime_value(self.runtime.object_get_i64, &[self.rt_ptr, handle, index]))
+            }
+            Type::F64 => {
+                Ok(self
+                    .call_runtime_value(self.runtime.object_get_f64, &[self.rt_ptr, handle, index]))
+            }
+            Type::Bool => Ok(self
+                .call_runtime_value(self.runtime.object_get_bool, &[self.rt_ptr, handle, index])),
+            Type::U8 => {
+                Ok(self
+                    .call_runtime_value(self.runtime.object_get_u8, &[self.rt_ptr, handle, index]))
+            }
+            Type::String | Type::Array(_) | Type::Book(_) => {
+                Ok(self
+                    .call_runtime_value(self.runtime.object_get_ref, &[self.rt_ptr, handle, index]))
+            }
             Type::Void => Err(native_error("void is not a valid field type.")),
         }
     }

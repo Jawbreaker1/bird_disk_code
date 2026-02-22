@@ -1,6 +1,12 @@
 import std::thread.
 
+rule worker() -> i64:
+  yield 1.
+end
+
 rule main() -> i64:
-  std::thread::spawn("main").
-  yield 0.
+  set t: Thread = std::thread::spawn("worker").
+  set first: i64 = std::thread::join(t).
+  set second: i64 = std::thread::join(t).
+  yield first + second.
 end

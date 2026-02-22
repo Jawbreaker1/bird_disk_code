@@ -1,5 +1,5 @@
 use super::diagnostics::{runtime_diagnostic, runtime_spec_refs};
-use super::threading::{native_threading_guard, wasm_threading_guard};
+use super::threading::wasm_threading_guard;
 
 pub(crate) fn run_report(
     path: &str,
@@ -66,18 +66,6 @@ pub(crate) fn run_report(
             };
         }
     }
-    if engine == birddisk_core::Engine::Native {
-        if let Some(diag) = native_threading_guard(path, config) {
-            return birddisk_core::RunReport {
-                tool: birddisk_core::TOOL_NAME,
-                version: birddisk_core::VERSION,
-                ok: false,
-                result: None,
-                stdout: None,
-                diagnostics: vec![diag],
-            };
-        }
-    }
     match birddisk_core::parse_and_typecheck_with_config(path, config) {
         Ok(mut program) => {
             birddisk_core::optimize_program(&mut program);
@@ -88,77 +76,81 @@ pub(crate) fn run_report(
                     args,
                     birddisk_vm::VmOptions { deterministic },
                 ) {
-                Ok((result, stdout)) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: true,
-                    result: Some(result),
-                    stdout: Some(stdout),
-                    diagnostics: Vec::new(),
+                    Ok((result, stdout)) => birddisk_core::RunReport {
+                        tool: birddisk_core::TOOL_NAME,
+                        version: birddisk_core::VERSION,
+                        ok: true,
+                        result: Some(result),
+                        stdout: Some(stdout),
+                        diagnostics: Vec::new(),
+                    },
+                    Err(err) => birddisk_core::RunReport {
+                        tool: birddisk_core::TOOL_NAME,
+                        version: birddisk_core::VERSION,
+                        ok: false,
+                        result: None,
+                        stdout: None,
+                        diagnostics: vec![runtime_diagnostic(
+                            path,
+                            err.message,
+                            err.code,
+                            runtime_spec_refs(err.code),
+                            err.trace,
+                        )],
+                    },
                 },
-                Err(err) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: false,
-                    result: None,
-                    stdout: None,
-                    diagnostics: vec![runtime_diagnostic(
-                        path,
-                        err.message,
-                        err.code,
-                        runtime_spec_refs(err.code),
-                        err.trace,
-                    )],
-                },
-            },
-                birddisk_core::Engine::Wasm => match birddisk_wasm::run_with_io(&program, input, args) {
-                Ok((result, stdout)) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: true,
-                    result: Some(result),
-                    stdout: Some(stdout),
-                    diagnostics: Vec::new(),
-                },
-                Err(err) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: false,
-                    result: None,
-                    stdout: None,
-                    diagnostics: vec![runtime_diagnostic(
-                        path,
-                        err.message,
-                        err.code,
-                        runtime_spec_refs(err.code),
-                        err.trace,
-                    )],
-                },
-            },
-                birddisk_core::Engine::Native => match birddisk_native::run_with_io(&program, input, args) {
-                Ok((result, stdout)) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: true,
-                    result: Some(result),
-                    stdout: Some(stdout),
-                    diagnostics: Vec::new(),
-                },
-                Err(err) => birddisk_core::RunReport {
-                    tool: birddisk_core::TOOL_NAME,
-                    version: birddisk_core::VERSION,
-                    ok: false,
-                    result: None,
-                    stdout: None,
-                    diagnostics: vec![runtime_diagnostic(
-                        path,
-                        err.message,
-                        err.code.unwrap_or("E0400"),
-                        runtime_spec_refs(err.code.unwrap_or("E0400")),
-                        err.trace,
-                    )],
-                },
-                },
+                birddisk_core::Engine::Wasm => {
+                    match birddisk_wasm::run_with_io(&program, input, args) {
+                        Ok((result, stdout)) => birddisk_core::RunReport {
+                            tool: birddisk_core::TOOL_NAME,
+                            version: birddisk_core::VERSION,
+                            ok: true,
+                            result: Some(result),
+                            stdout: Some(stdout),
+                            diagnostics: Vec::new(),
+                        },
+                        Err(err) => birddisk_core::RunReport {
+                            tool: birddisk_core::TOOL_NAME,
+                            version: birddisk_core::VERSION,
+                            ok: false,
+                            result: None,
+                            stdout: None,
+                            diagnostics: vec![runtime_diagnostic(
+                                path,
+                                err.message,
+                                err.code,
+                                runtime_spec_refs(err.code),
+                                err.trace,
+                            )],
+                        },
+                    }
+                }
+                birddisk_core::Engine::Native => {
+                    match birddisk_native::run_with_io(&program, input, args) {
+                        Ok((result, stdout)) => birddisk_core::RunReport {
+                            tool: birddisk_core::TOOL_NAME,
+                            version: birddisk_core::VERSION,
+                            ok: true,
+                            result: Some(result),
+                            stdout: Some(stdout),
+                            diagnostics: Vec::new(),
+                        },
+                        Err(err) => birddisk_core::RunReport {
+                            tool: birddisk_core::TOOL_NAME,
+                            version: birddisk_core::VERSION,
+                            ok: false,
+                            result: None,
+                            stdout: None,
+                            diagnostics: vec![runtime_diagnostic(
+                                path,
+                                err.message,
+                                err.code.unwrap_or("E0400"),
+                                runtime_spec_refs(err.code.unwrap_or("E0400")),
+                                err.trace,
+                            )],
+                        },
+                    }
+                }
             }
         }
         Err(diagnostics) => birddisk_core::RunReport {

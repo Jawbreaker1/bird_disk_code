@@ -125,10 +125,22 @@ Options:
 
 #[derive(Debug, PartialEq)]
 pub(crate) enum Command {
-    Fmt { path: String },
-    Check { path: String, json: bool },
-    Lint { path: String, json: bool, require_tests: bool },
-    Doc { path: Option<String>, out: Option<String> },
+    Fmt {
+        path: String,
+    },
+    Check {
+        path: String,
+        json: bool,
+    },
+    Lint {
+        path: String,
+        json: bool,
+        require_tests: bool,
+    },
+    Doc {
+        path: Option<String>,
+        out: Option<String>,
+    },
     Build {
         path: Option<String>,
         engine: birddisk_core::Engine,
@@ -182,7 +194,8 @@ pub(crate) enum EmitFormat {
 }
 
 pub(crate) fn contains_help_flag(args: &[String]) -> bool {
-    args.iter().any(|arg| matches!(arg.as_str(), "-h" | "--help"))
+    args.iter()
+        .any(|arg| matches!(arg.as_str(), "-h" | "--help"))
 }
 
 pub(crate) fn parse_command(args: &[String]) -> Result<Command, String> {
@@ -301,7 +314,9 @@ fn parse_run(args: &[String]) -> Result<Command, String> {
     {
         return Err("--stdin/--stdout/--report are not supported with --emit".to_string());
     }
-    if !parsed.json && parsed.report.is_none() && (parsed.stdin.is_some() || parsed.stdout.is_some())
+    if !parsed.json
+        && parsed.report.is_none()
+        && (parsed.stdin.is_some() || parsed.stdout.is_some())
     {
         return Err("--stdin/--stdout require --json or --report".to_string());
     }

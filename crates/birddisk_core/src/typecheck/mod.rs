@@ -673,6 +673,22 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_rejects_std_net_without_import() {
+        let diags = check(
+            "rule main() -> i64:\n  set s: TcpStream = std::net::connect(\"127.0.0.1:1\").\n  yield 0.\nend\n",
+        );
+        assert!(diags.iter().any(|d| d.code == "E0301" || d.code == "E0303"));
+    }
+
+    #[test]
+    fn typecheck_accepts_std_net_import() {
+        let diags = check(
+            "import std::net.\nrule main() -> i64:\n  set p: TcpPool = std::net::pool(\"127.0.0.1:1\", 1).\n  std::net::pool_close(p).\n  yield 0.\nend\n",
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
     fn typecheck_rejects_std_thread_non_literal_entry() {
         let diags = check(
             "import std::thread.\nrule worker() -> i64:\n  yield 1.\nend\n\nrule main() -> i64:\n  set name: string = \"worker\".\n  set t: Thread = std::thread::spawn(name).\n  yield std::thread::join(t).\nend\n",

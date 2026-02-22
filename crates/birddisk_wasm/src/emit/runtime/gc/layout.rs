@@ -1,10 +1,12 @@
-use crate::emit::{
-    WatEmitter,
-    HEAP_AUX_OFFSET,
-    HEAP_TYPE_ID_MASK,
-};
+use crate::emit::{WatEmitter, HEAP_AUX_OFFSET, HEAP_TYPE_ID_MASK};
 
-pub(super) fn emit_gc_layout(emitter: &mut WatEmitter, book_count: i32, offsets_base: i32, counts_base: i32, fields_base: i32) {
+pub(super) fn emit_gc_layout(
+    emitter: &mut WatEmitter,
+    book_count: i32,
+    offsets_base: i32,
+    counts_base: i32,
+    fields_base: i32,
+) {
     emitter.push_line("(func $bd_object_type (param $ptr i32) (result i32)");
     emitter.indent();
     emitter.push_line("local.get $ptr");
@@ -43,9 +45,7 @@ pub(super) fn emit_gc_layout(emitter: &mut WatEmitter, book_count: i32, offsets_
     emitter.dedent();
     emitter.push_line(")");
 
-    emitter.push_line(
-        "(func $bd_ref_field (param $type i32) (param $idx i32) (result i32)",
-    );
+    emitter.push_line("(func $bd_ref_field (param $type i32) (param $idx i32) (result i32)");
     emitter.indent();
     emitter.push_line("(local $count i32)");
     emitter.push_line("(local $offset i32)");
@@ -175,5 +175,4 @@ pub(super) fn emit_gc_layout(emitter: &mut WatEmitter, book_count: i32, offsets_
     emitter.push_line(")");
 
     emitter.push_line("(export \"__bd_gc_layout_sanity\" (func $bd_gc_layout_sanity))");
-
 }

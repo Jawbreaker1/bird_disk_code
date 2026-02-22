@@ -10,16 +10,16 @@ rule main() -> i64:
   set second: RecvI64 = ch::recv().
   set sum: i64 = 0.
   match first:
-    case RecvI64::Ok(value):
-      put sum = sum + value.
+    case RecvI64::Ok(value_first):
+      put sum = sum + value_first.
     case RecvI64::Closed:
       put sum = sum + 0.
     otherwise:
       put sum = sum + 0.
   end
   match second:
-    case RecvI64::Ok(value):
-      put sum = sum + value.
+    case RecvI64::Ok(value_second):
+      put sum = sum + value_second.
     case RecvI64::Closed:
       put sum = sum + 1.
     otherwise:

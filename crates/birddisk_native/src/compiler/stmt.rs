@@ -43,13 +43,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 let var = self.new_var(&var_ty);
                 let value = self.emit_expr(expr, Some(&var_ty))?;
                 self.builder.def_var(var, value);
-                self.vars.insert(
-                    name.clone(),
-                    VarInfo {
-                        var,
-                        ty: var_ty,
-                    },
-                );
+                self.vars.insert(name.clone(), VarInfo { var, ty: var_ty });
                 self.update_root(name, value);
                 Ok(false)
             }
@@ -75,10 +69,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 Ok(false)
             }
             Stmt::PutIndex {
-                name,
-                index,
-                expr,
-                ..
+                name, index, expr, ..
             } => {
                 let var = self
                     .vars
@@ -95,10 +86,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 Ok(false)
             }
             Stmt::PutField {
-                base,
-                field,
-                expr,
-                ..
+                base, field, expr, ..
             } => {
                 let base_info = self
                     .vars
@@ -159,7 +147,8 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 }
                 self.builder.switch_to_block(catch_block);
                 self.builder.seal_block(catch_block);
-                let message = self.call_runtime_value_no_check(self.runtime.error_message, &[self.rt_ptr]);
+                let message =
+                    self.call_runtime_value_no_check(self.runtime.error_message, &[self.rt_ptr]);
                 self.call_runtime_void_no_check(self.runtime.clear_error, &[self.rt_ptr]);
                 self.bind_or_assign_local(catch_name, Type::String, message)?;
                 let terminated = self.emit_block(catch_body)?;

@@ -35,7 +35,11 @@ pub(crate) struct ProjectContext {
 }
 
 fn find_manifest(start: &Path) -> Option<PathBuf> {
-    let mut current = if start.is_dir() { Some(start) } else { start.parent() };
+    let mut current = if start.is_dir() {
+        Some(start)
+    } else {
+        start.parent()
+    };
     while let Some(dir) = current {
         let candidate = dir.join(MANIFEST_FILE);
         if candidate.is_file() {
@@ -63,7 +67,10 @@ fn manifest_entry_path(root: &Path, manifest: &Manifest) -> Result<PathBuf, Stri
     if entry_path.exists() {
         Ok(entry_path)
     } else {
-        Err(format!("manifest entry not found: {}", entry_path.display()))
+        Err(format!(
+            "manifest entry not found: {}",
+            entry_path.display()
+        ))
     }
 }
 
@@ -148,8 +155,8 @@ pub(crate) fn resolve_project_context(path: Option<&str>) -> Result<ProjectConte
         });
     }
 
-    let manifest_path = find_manifest(&cwd)
-        .ok_or_else(|| "missing path and no birddisk.json found".to_string())?;
+    let manifest_path =
+        find_manifest(&cwd).ok_or_else(|| "missing path and no birddisk.json found".to_string())?;
     let manifest = load_manifest(&manifest_path)?;
     let root = manifest_path
         .parent()

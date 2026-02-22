@@ -2,7 +2,7 @@ mod basic;
 mod search;
 mod slice;
 
-use crate::emit::{ARRAY_HEADER_SIZE, WatEmitter};
+use crate::emit::{WatEmitter, ARRAY_HEADER_SIZE};
 
 pub(in crate::emit) fn emit_bytes_runtime(emitter: &mut WatEmitter) {
     let max_bytes_len = i32::MAX - ARRAY_HEADER_SIZE;

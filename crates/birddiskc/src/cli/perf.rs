@@ -96,9 +96,7 @@ pub(crate) fn run_perf_report(
             Ok(baseline) => Some((path.to_string(), baseline)),
             Err(err) => {
                 report.ok = false;
-                report
-                    .diagnostics
-                    .push(perf_harness_diagnostic(path, err));
+                report.diagnostics.push(perf_harness_diagnostic(path, err));
                 None
             }
         },
@@ -220,8 +218,7 @@ fn run_perf_case(
         Ok(input) => input,
         Err(err) => {
             case.ok = false;
-            case.diagnostics
-                .push(perf_harness_diagnostic(path, err));
+            case.diagnostics.push(perf_harness_diagnostic(path, err));
             return case;
         }
     };
@@ -229,8 +226,7 @@ fn run_perf_case(
         Ok(args) => args,
         Err(err) => {
             case.ok = false;
-            case.diagnostics
-                .push(perf_harness_diagnostic(path, err));
+            case.diagnostics.push(perf_harness_diagnostic(path, err));
             return case;
         }
     };
@@ -290,9 +286,7 @@ fn run_perf_case(
                     case.ok = false;
                     case.diagnostics.push(perf_harness_diagnostic(
                         path,
-                        format!(
-                            "Regression {regression:.2}% exceeds max {max_regression:.2}%"
-                        ),
+                        format!("Regression {regression:.2}% exceeds max {max_regression:.2}%"),
                     ));
                 }
             }

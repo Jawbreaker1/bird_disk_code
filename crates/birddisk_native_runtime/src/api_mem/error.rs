@@ -3,13 +3,21 @@ use crate::rt_core::*;
 #[no_mangle]
 pub extern "C-unwind" fn bd_has_error(rt: *mut Runtime) -> i64 {
     let rt = runtime_ref(rt);
-    if rt.has_error() { 1 } else { 0 }
+    if rt.has_error() {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]
 pub extern "C-unwind" fn bd_error_is_throw(rt: *mut Runtime) -> i64 {
     let rt = runtime_ref(rt);
-    if rt.error_is_throw() { 1 } else { 0 }
+    if rt.error_is_throw() {
+        1
+    } else {
+        0
+    }
 }
 
 #[no_mangle]

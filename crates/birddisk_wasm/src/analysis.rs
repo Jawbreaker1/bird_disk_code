@@ -218,9 +218,7 @@ fn stmt_has_array(stmt: &Stmt) -> bool {
                 || then_body.iter().any(stmt_has_array)
                 || else_body.iter().any(stmt_has_array)
         }
-        Stmt::Repeat { cond, body, .. } => {
-            expr_has_array(cond) || body.iter().any(stmt_has_array)
-        }
+        Stmt::Repeat { cond, body, .. } => expr_has_array(cond) || body.iter().any(stmt_has_array),
         Stmt::Match {
             expr,
             cases,
@@ -228,7 +226,9 @@ fn stmt_has_array(stmt: &Stmt) -> bool {
             ..
         } => {
             expr_has_array(expr)
-                || cases.iter().any(|case| case.body.iter().any(stmt_has_array))
+                || cases
+                    .iter()
+                    .any(|case| case.body.iter().any(stmt_has_array))
                 || otherwise.iter().any(stmt_has_array)
         }
     }
@@ -242,9 +242,7 @@ fn expr_has_array(expr: &Expr) -> bool {
         ExprKind::Call { args, .. } => args.iter().any(expr_has_array),
         ExprKind::New { args, .. } => args.iter().any(expr_has_array),
         ExprKind::Unary { expr, .. } => expr_has_array(expr),
-        ExprKind::Binary { left, right, .. } => {
-            expr_has_array(left) || expr_has_array(right)
-        }
+        ExprKind::Binary { left, right, .. } => expr_has_array(left) || expr_has_array(right),
         _ => false,
     }
 }
@@ -256,9 +254,7 @@ fn stmt_has_string(stmt: &Stmt) -> bool {
         }
         Stmt::Expr { expr, .. } => expr_has_string(expr),
         Stmt::Put { expr, .. } => expr_has_string(expr),
-        Stmt::PutIndex { index, expr, .. } => {
-            expr_has_string(index) || expr_has_string(expr)
-        }
+        Stmt::PutIndex { index, expr, .. } => expr_has_string(index) || expr_has_string(expr),
         Stmt::PutField { expr, .. } => expr_has_string(expr),
         Stmt::Yield { expr, .. } => expr_has_string(expr),
         Stmt::Throw { expr, .. } => expr_has_string(expr),
@@ -287,7 +283,9 @@ fn stmt_has_string(stmt: &Stmt) -> bool {
             ..
         } => {
             expr_has_string(expr)
-                || cases.iter().any(|case| case.body.iter().any(stmt_has_string))
+                || cases
+                    .iter()
+                    .any(|case| case.body.iter().any(stmt_has_string))
                 || otherwise.iter().any(stmt_has_string)
         }
     }
@@ -306,9 +304,7 @@ fn expr_has_string(expr: &Expr) -> bool {
         ExprKind::ArrayNew { len } => expr_has_string(len),
         ExprKind::Index { base, index } => expr_has_string(base) || expr_has_string(index),
         ExprKind::Unary { expr, .. } => expr_has_string(expr),
-        ExprKind::Binary { left, right, .. } => {
-            expr_has_string(left) || expr_has_string(right)
-        }
+        ExprKind::Binary { left, right, .. } => expr_has_string(left) || expr_has_string(right),
         _ => false,
     }
 }
@@ -337,9 +333,7 @@ fn stmt_has_json(stmt: &Stmt) -> bool {
                 || then_body.iter().any(stmt_has_json)
                 || else_body.iter().any(stmt_has_json)
         }
-        Stmt::Repeat { cond, body, .. } => {
-            expr_has_json(cond) || body.iter().any(stmt_has_json)
-        }
+        Stmt::Repeat { cond, body, .. } => expr_has_json(cond) || body.iter().any(stmt_has_json),
         Stmt::Match {
             expr,
             cases,
@@ -420,9 +414,7 @@ fn expr_has_string_from_bytes(expr: &Expr) -> bool {
         ExprKind::Call { name, args } => {
             matches!(
                 name.as_str(),
-                "std::string::from_bytes"
-                    | "std::string::slice"
-                    | "std::string::replace"
+                "std::string::from_bytes" | "std::string::slice" | "std::string::replace"
             ) || args.iter().any(expr_has_string_from_bytes)
         }
         ExprKind::New { args, .. } => args.iter().any(expr_has_string_from_bytes),
@@ -463,9 +455,7 @@ fn stmt_has_bytes(stmt: &Stmt) -> bool {
                 || then_body.iter().any(stmt_has_bytes)
                 || else_body.iter().any(stmt_has_bytes)
         }
-        Stmt::Repeat { cond, body, .. } => {
-            expr_has_bytes(cond) || body.iter().any(stmt_has_bytes)
-        }
+        Stmt::Repeat { cond, body, .. } => expr_has_bytes(cond) || body.iter().any(stmt_has_bytes),
         Stmt::Match {
             expr,
             cases,
@@ -473,7 +463,9 @@ fn stmt_has_bytes(stmt: &Stmt) -> bool {
             ..
         } => {
             expr_has_bytes(expr)
-                || cases.iter().any(|case| case.body.iter().any(stmt_has_bytes))
+                || cases
+                    .iter()
+                    .any(|case| case.body.iter().any(stmt_has_bytes))
                 || otherwise.iter().any(stmt_has_bytes)
         }
     }
@@ -489,9 +481,7 @@ fn expr_has_bytes(expr: &Expr) -> bool {
         ExprKind::ArrayNew { len } => expr_has_bytes(len),
         ExprKind::Index { base, index } => expr_has_bytes(base) || expr_has_bytes(index),
         ExprKind::Unary { expr, .. } => expr_has_bytes(expr),
-        ExprKind::Binary { left, right, .. } => {
-            expr_has_bytes(left) || expr_has_bytes(right)
-        }
+        ExprKind::Binary { left, right, .. } => expr_has_bytes(left) || expr_has_bytes(right),
         _ => false,
     }
 }
@@ -516,7 +506,9 @@ fn stmt_has_io(stmt: &Stmt) -> bool {
             else_body,
             ..
         } => {
-            expr_has_io(cond) || then_body.iter().any(stmt_has_io) || else_body.iter().any(stmt_has_io)
+            expr_has_io(cond)
+                || then_body.iter().any(stmt_has_io)
+                || else_body.iter().any(stmt_has_io)
         }
         Stmt::Repeat { cond, body, .. } => expr_has_io(cond) || body.iter().any(stmt_has_io),
         Stmt::Match {
@@ -595,9 +587,7 @@ fn expr_has_time(expr: &Expr) -> bool {
         ExprKind::ArrayNew { len } => expr_has_time(len),
         ExprKind::Index { base, index } => expr_has_time(base) || expr_has_time(index),
         ExprKind::Unary { expr, .. } => expr_has_time(expr),
-        ExprKind::Binary { left, right, .. } => {
-            expr_has_time(left) || expr_has_time(right)
-        }
+        ExprKind::Binary { left, right, .. } => expr_has_time(left) || expr_has_time(right),
         _ => false,
     }
 }
@@ -636,7 +626,9 @@ fn stmt_has_profiler(stmt: &Stmt) -> bool {
             ..
         } => {
             expr_has_profiler(expr)
-                || cases.iter().any(|case| case.body.iter().any(stmt_has_profiler))
+                || cases
+                    .iter()
+                    .any(|case| case.body.iter().any(stmt_has_profiler))
                 || otherwise.iter().any(stmt_has_profiler)
         }
     }
@@ -652,9 +644,7 @@ fn expr_has_profiler(expr: &Expr) -> bool {
         ExprKind::ArrayNew { len } => expr_has_profiler(len),
         ExprKind::Index { base, index } => expr_has_profiler(base) || expr_has_profiler(index),
         ExprKind::Unary { expr, .. } => expr_has_profiler(expr),
-        ExprKind::Binary { left, right, .. } => {
-            expr_has_profiler(left) || expr_has_profiler(right)
-        }
+        ExprKind::Binary { left, right, .. } => expr_has_profiler(left) || expr_has_profiler(right),
         _ => false,
     }
 }
@@ -910,7 +900,9 @@ fn stmt_has_object(stmt: &Stmt) -> bool {
             ..
         } => {
             expr_has_object(expr)
-                || cases.iter().any(|case| case.body.iter().any(stmt_has_object))
+                || cases
+                    .iter()
+                    .any(|case| case.body.iter().any(stmt_has_object))
                 || otherwise.iter().any(stmt_has_object)
         }
     }
@@ -921,8 +913,7 @@ fn expr_has_object(expr: &Expr) -> bool {
         ExprKind::New { .. } => true,
         ExprKind::MemberAccess { .. } => true,
         ExprKind::Call { name, args } => {
-            (name.contains("::") && !name.starts_with("std::"))
-                || args.iter().any(expr_has_object)
+            (name.contains("::") && !name.starts_with("std::")) || args.iter().any(expr_has_object)
         }
         ExprKind::ArrayLit(elements) => elements.iter().any(expr_has_object),
         ExprKind::ArrayNew { len } => expr_has_object(len),

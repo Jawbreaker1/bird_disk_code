@@ -1,22 +1,8 @@
 use crate::emit::{
-    WatEmitter,
-    ARRAY_HEADER_SIZE,
-    ARRAY_KIND_BOOL,
-    ARRAY_KIND_F64,
-    ARRAY_KIND_I64,
-    ARRAY_KIND_REF,
-    ARRAY_KIND_U8,
-    HEAP_AUX_OFFSET,
-    HEAP_FLAGS_OFFSET,
-    HEAP_KIND_ARRAY,
-    HEAP_KIND_FREE,
-    HEAP_KIND_OBJECT,
-    HEAP_KIND_SHIFT,
-    HEAP_KIND_STRING,
-    HEAP_LEN_OFFSET,
-    OBJECT_HEADER_SIZE,
-    STRING_HEADER_SIZE,
-    TRAP_HEAP_HEADER,
+    WatEmitter, ARRAY_HEADER_SIZE, ARRAY_KIND_BOOL, ARRAY_KIND_F64, ARRAY_KIND_I64, ARRAY_KIND_REF,
+    ARRAY_KIND_U8, HEAP_AUX_OFFSET, HEAP_FLAGS_OFFSET, HEAP_KIND_ARRAY, HEAP_KIND_FREE,
+    HEAP_KIND_OBJECT, HEAP_KIND_SHIFT, HEAP_KIND_STRING, HEAP_LEN_OFFSET, OBJECT_HEADER_SIZE,
+    STRING_HEADER_SIZE, TRAP_HEAP_HEADER,
 };
 
 pub(super) fn emit_gc_free_list(emitter: &mut WatEmitter) {
@@ -372,5 +358,4 @@ pub(super) fn emit_gc_free_list(emitter: &mut WatEmitter) {
     emitter.push_line("call $bd_trap");
     emitter.dedent();
     emitter.push_line(")");
-
 }
