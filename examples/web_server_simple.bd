@@ -1,4 +1,5 @@
 import std::fs.
+import std::env.
 import std::io.
 import std::net.
 import std::string.
@@ -56,7 +57,14 @@ rule trim_trailing_cr(line: string) -> string:
 end
 
 rule config_port() -> i64:
-  set text: string = std::fs::read_text("examples/web_server_simple.conf").
+  set cwd: string = std::env::cwd().
+  set path: string = "examples/web_server_simple.conf".
+  when std::string::contains(cwd, "/examples"):
+    put path = "web_server_simple.conf".
+  otherwise:
+    put path = "examples/web_server_simple.conf".
+  end
+  set text: string = std::fs::read_text(path).
   set line_end: i64 = std::string::index_of(text, "\n").
   set first_line: string = "".
   when line_end == -1:
