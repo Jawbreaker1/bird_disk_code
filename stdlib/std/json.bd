@@ -24,12 +24,24 @@ rule tab_char() -> string:
   yield std::string::from_bytes(data).
 end
 
-rule strip_ascii_whitespace(text: string) -> string:
-  set out: string = std::string::replace(text, " ", "").
-  put out = std::string::replace(out, "\n", "").
-  put out = std::string::replace(out, carriage_return_char(), "").
-  put out = std::string::replace(out, tab_char(), "").
-  yield out.
+rule is_ascii_whitespace_char(ch: string) -> bool:
+  when std::string::eq(ch, " ") || std::string::eq(ch, "\n") || std::string::eq(ch, carriage_return_char()) || std::string::eq(ch, tab_char()):
+    yield true.
+  otherwise:
+    yield false.
+  end
+end
+
+rule trim_ascii_whitespace(text: string) -> string:
+  set start: i64 = 0.
+  set stop: i64 = std::string::len(text).
+  repeat while start < stop && is_ascii_whitespace_char(std::string::slice(text, start, 1)):
+    put start = start + 1.
+  end
+  repeat while stop > start && is_ascii_whitespace_char(std::string::slice(text, stop - 1, 1)):
+    put stop = stop - 1.
+  end
+  yield std::string::slice(text, start, stop - start).
 end
 
 rule invalid_json_i64() -> i64:
@@ -79,16 +91,16 @@ rule encode_string(text: string) -> string:
 end
 
 rule decode_i64(text: string) -> i64:
-  set compact: string = strip_ascii_whitespace(text).
-  yield std::string::to_i64(compact).
+  set trimmed: string = trim_ascii_whitespace(text).
+  yield std::string::to_i64(trimmed).
 end
 
 rule decode_bool(text: string) -> bool:
-  set compact: string = strip_ascii_whitespace(text).
-  when std::string::eq(compact, "true"):
+  set trimmed: string = trim_ascii_whitespace(text).
+  when std::string::eq(trimmed, "true"):
     yield true.
   otherwise:
-    when std::string::eq(compact, "false"):
+    when std::string::eq(trimmed, "false"):
       yield false.
     otherwise:
       yield invalid_json_bool().
@@ -97,17 +109,17 @@ rule decode_bool(text: string) -> bool:
 end
 
 rule decode_string(text: string) -> string:
-  set compact: string = strip_ascii_whitespace(text).
-  set n: i64 = std::string::len(compact).
+  set trimmed: string = trim_ascii_whitespace(text).
+  set n: i64 = std::string::len(trimmed).
   when n < 2:
     yield invalid_json_string().
   otherwise:
-    set first: string = std::string::slice(compact, 0, 1).
-    set last: string = std::string::slice(compact, n - 1, 1).
+    set first: string = std::string::slice(trimmed, 0, 1).
+    set last: string = std::string::slice(trimmed, n - 1, 1).
     when !std::string::eq(first, "\"") || !std::string::eq(last, "\""):
       yield invalid_json_string().
     otherwise:
-      set inner: string = std::string::slice(compact, 1, n - 2).
+      set inner: string = std::string::slice(trimmed, 1, n - 2).
       set decoded: string = std::string::replace(inner, "\\n", "\n").
       put decoded = std::string::replace(decoded, "\\r", carriage_return_char()).
       put decoded = std::string::replace(decoded, "\\t", tab_char()).
