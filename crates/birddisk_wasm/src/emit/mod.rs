@@ -746,6 +746,44 @@ mod tests {
     }
 
     #[test]
+    fn wasm_runs_std_json_escape_decoding_module() {
+        let result = compile_and_run_module(
+            "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set q: string = \"\\\"\".\n  set bs: string = \"\\\\\".\n  set slash: string = std::string::concat(bs, \"/\").\n  set slash_raw: string = std::string::concat(std::string::concat(std::string::concat(q, \"a\"), slash), std::string::concat(\"b\", q)).\n  set slash_decoded: string = std::json::decode_string(slash_raw).\n  set dbs: string = std::string::concat(bs, bs).\n  set dbs_raw: string = std::string::concat(std::string::concat(q, dbs), std::string::concat(\"n\", q)).\n  set dbs_decoded: string = std::json::decode_string(dbs_raw).\n  when std::string::eq(slash_decoded, \"a/b\") && std::string::eq(dbs_decoded, \"\\\\n\"):\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n",
+            "wasm_json_escape_decode",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[cfg_attr(
+        target_os = "windows",
+        ignore = "wasmtime trap callback aborts on MSVC"
+    )]
+    #[test]
+    fn wasm_std_json_decode_invalid_escape_errors() {
+        let err = compile_and_run_module(
+            "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set q: string = \"\\\"\".\n  set bs: string = \"\\\\\".\n  set raw: string = std::string::concat(std::string::concat(std::string::concat(q, \"bad\"), bs), std::string::concat(\"q\", q)).\n  set value: string = std::json::decode_string(raw).\n  yield std::string::len(value).\nend\n",
+            "wasm_json_invalid_escape",
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "E0400");
+    }
+
+    #[cfg_attr(
+        target_os = "windows",
+        ignore = "wasmtime trap callback aborts on MSVC"
+    )]
+    #[test]
+    fn wasm_std_json_encode_rejects_unsupported_control_chars() {
+        let err = compile_and_run_module(
+            "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set data: u8[] = [1].\n  set value: string = std::string::from_bytes(data).\n  set encoded: string = std::json::encode_string(value).\n  yield std::string::len(encoded).\nend\n",
+            "wasm_json_control_char",
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "E0400");
+    }
+
+    #[test]
     fn wasm_runs_enum_match() {
         let result = compile_and_run(
             "enum Choice:\n  case One.\n  case Two(value: i64).\nend\n\nrule main() -> i64:\n  set value: Choice = Choice::Two(9).\n  match value:\n    case Choice::One:\n      yield 1.\n    case Choice::Two(v):\n      yield v + 1.\n    otherwise:\n      yield 0.\n  end\nend\n",

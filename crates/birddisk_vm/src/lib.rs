@@ -601,6 +601,29 @@ mod tests {
     }
 
     #[test]
+    fn eval_std_json_escape_decoding_module() {
+        let source = "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set q: string = \"\\\"\".\n  set bs: string = \"\\\\\".\n  set slash: string = std::string::concat(bs, \"/\").\n  set slash_raw: string = std::string::concat(std::string::concat(std::string::concat(q, \"a\"), slash), std::string::concat(\"b\", q)).\n  set slash_decoded: string = std::json::decode_string(slash_raw).\n  set dbs: string = std::string::concat(bs, bs).\n  set dbs_raw: string = std::string::concat(std::string::concat(q, dbs), std::string::concat(\"n\", q)).\n  set dbs_decoded: string = std::json::decode_string(dbs_raw).\n  when std::string::eq(slash_decoded, \"a/b\") && std::string::eq(dbs_decoded, \"\\\\n\"):\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n";
+        let result = eval_module_source(source, "json_escape_decode_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_json_decode_invalid_escape_errors() {
+        let source = "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set q: string = \"\\\"\".\n  set bs: string = \"\\\\\".\n  set raw: string = std::string::concat(std::string::concat(std::string::concat(q, \"bad\"), bs), std::string::concat(\"q\", q)).\n  set value: string = std::json::decode_string(raw).\n  yield std::string::len(value).\nend\n";
+        let program = parse_program_with_modules(source, "json_invalid_escape_vm");
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0400");
+    }
+
+    #[test]
+    fn eval_std_json_encode_rejects_unsupported_control_chars() {
+        let source = "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set data: u8[] = [1].\n  set value: string = std::string::from_bytes(data).\n  set encoded: string = std::json::encode_string(value).\n  yield std::string::len(encoded).\nend\n";
+        let program = parse_program_with_modules(source, "json_control_char_vm");
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0400");
+    }
+
+    #[test]
     fn eval_std_web_helpers() {
         let source = "import std::web.\nimport std::string.\n\nrule main() -> i64:\n  set req: string = \"GET /features HTTP/1.1\".\n  set method: string = std::web::request_method(req).\n  set path: string = std::web::route_path(req).\n  set path_no_version: string = std::web::route_path(\"GET /features\").\n  set path_query: string = std::web::route_path(\"GET /features/?x=1 HTTP/1.1\").\n  set path_fragment: string = std::web::canonical_path(\"/about#top\").\n  set cr_bytes: u8[] = array(1).\n  put cr_bytes[0] = 13.\n  set cr: string = std::string::from_bytes(cr_bytes).\n  set trimmed: string = std::web::trim_trailing_cr(std::string::concat(\"abc\", cr)).\n  set code: i64 = std::web::route_code(path).\n  set code_query: i64 = std::web::route_code(\"/features/?x=1\").\n  set file_direct: string = std::web::route_file(path).\n  set file_trailing_slash: string = std::web::route_file(\"/about/\").\n  set file_code: string = std::web::route_file_from_code(code).\n  set css_type: string = std::web::content_type_for_file(\"style.css\").\n  set threaded_ok: bool = std::web::is_threaded_candidate(method, path).\n  set shutdown_threaded: bool = std::web::is_threaded_candidate(\"GET\", \"/shutdown?now=1\").\n  set unknown_file: string = std::web::route_file(\"/missing\").\n  set response: string = std::web::build_response(200, \"OK\", \"text/plain; charset=utf-8\", \"hi\").\n  set has_status: bool = std::string::contains(response, \"HTTP/1.1 200 OK\").\n  set has_len: bool = std::string::contains(response, \"Content-Length: 2\").\n  set has_body: bool = std::string::contains(response, \"hi\").\n  when std::string::eq(method, \"GET\") && std::string::eq(path, \"/features\") && std::string::eq(path_no_version, \"/features\") && std::string::eq(path_query, \"/features\") && std::string::eq(path_fragment, \"/about\") && std::string::eq(trimmed, \"abc\") && code == 2 && code_query == 2 && std::string::eq(file_direct, \"features.html\") && std::string::eq(file_trailing_slash, \"about.html\") && std::string::eq(file_code, \"features.html\") && std::string::eq(css_type, \"text/css; charset=utf-8\") && threaded_ok && !shutdown_threaded && std::string::len(unknown_file) == 0 && has_status && has_len && has_body:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
         let result = eval_module_source(source, "web_helpers_vm");
