@@ -312,6 +312,7 @@ See `docs/DIAGNOSTICS.md` for full error list.
 ### std::web (BirdDisk module)
 - `build_response(status_code: i64, reason: string, content_type: string, body: string) -> string`
 - `request_method(request_line: string) -> string`
+- `canonical_path(path: string) -> string`
 - `route_path(request_line: string) -> string`
 - `route_file(path: string) -> string`
 - `route_code(path: string) -> i64`
@@ -320,6 +321,7 @@ See `docs/DIAGNOSTICS.md` for full error list.
 - `is_threaded_candidate(method: string, path: string) -> bool`
 - Current scope:
   - Shared HTTP string helpers used by the native/VM web server example.
+  - Normalizes paths by stripping query/fragment and removing trailing slash (`/about/` -> `/about`).
   - Route mapping covers `/`, `/hello`, `/features`, `/about`, `/style.css`, `/app.js`.
   - `is_threaded_candidate` currently allows threaded serving only for static GET routes (excludes `/api/status`, `/health`, `/shutdown`).
 

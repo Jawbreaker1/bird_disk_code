@@ -540,8 +540,13 @@ pub fn emit_wasm(program: &Program) -> Result<Vec<u8>, WasmError> {
 #[cfg(test)]
 mod tests {
     use crate::{emit_wasm, run, run_with_io, WasmError};
-    use birddisk_core::{attach_sources, lexer, parser};
+    use birddisk_core::{attach_sources, lexer, parse_and_typecheck, parser};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use wasmtime::{Caller, Engine, Linker, Module, Store};
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     #[derive(Default)]
     struct TrapState {
@@ -552,6 +557,28 @@ mod tests {
         let tokens = lexer::lex(source).unwrap();
         let mut program = parser::parse(&tokens).unwrap();
         attach_sources(&mut program, "<memory>", source);
+        run(&program)
+    }
+
+    fn repo_root() -> PathBuf {
+        let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        root.pop();
+        root.pop();
+        root
+    }
+
+    fn write_repo_temp(name: &str, source: &str) -> PathBuf {
+        let mut path = repo_root();
+        let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        path.push(format!("tmp_{name}_{}_{}.bd", std::process::id(), id));
+        fs::write(&path, source).unwrap();
+        path
+    }
+
+    fn compile_and_run_module(source: &str, name: &str) -> Result<i64, WasmError> {
+        let path = write_repo_temp(name, source);
+        let program = parse_and_typecheck(path.to_str().unwrap()).unwrap();
+        fs::remove_file(path).ok();
         run(&program)
     }
 
@@ -656,6 +683,26 @@ mod tests {
         )
         .unwrap();
         assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn wasm_runs_std_web_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::web.\nimport std::string.\n\nrule main() -> i64:\n  set req: string = \"GET /features/?x=1 HTTP/1.1\".\n  set path: string = std::web::route_path(req).\n  set code: i64 = std::web::route_code(path).\n  set file_name: string = std::web::route_file(\"/about/\").\n  set blocked: bool = std::web::is_threaded_candidate(\"GET\", \"/shutdown?now=1\").\n  set response: string = std::web::build_response(200, \"OK\", \"text/plain; charset=utf-8\", \"hi\").\n  when std::string::eq(path, \"/features\") && code == 2 && std::string::eq(file_name, \"about.html\") && !blocked && std::string::contains(response, \"HTTP/1.1 200 OK\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_web_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_webconfig_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::webconfig.\nimport std::string.\n\nrule main() -> i64:\n  set cfg: string = \"host 127.0.0.1\\nport 18080\\nmax_requests 5\\n\".\n  set host: string = std::webconfig::host(cfg).\n  set port: i64 = std::webconfig::port(cfg).\n  set mode: string = std::webconfig::mode(cfg).\n  set workers: i64 = std::webconfig::workers(cfg).\n  when std::string::eq(host, \"127.0.0.1\") && port == 18080 && std::string::eq(mode, \"single\") && workers == 4:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_webconfig_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
     }
 
     #[test]

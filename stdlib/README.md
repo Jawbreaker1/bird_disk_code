@@ -41,6 +41,7 @@ Modules (BirdDisk)
 - std::web
   - build_response(status_code, reason, content_type, body) -> string
   - request_method(request_line) -> string
+  - canonical_path(path) -> string
   - route_path(request_line) -> string
   - route_file(path) -> string
   - route_code(path) -> i64

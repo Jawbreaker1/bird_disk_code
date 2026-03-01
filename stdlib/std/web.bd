@@ -35,6 +35,39 @@ rule request_method(request_line: string) -> string:
   end
 end
 
+rule canonical_path(path: string) -> string:
+  set out: string = path.
+  set q: i64 = std::string::index_of(out, "?").
+  when q != -1:
+    put out = std::string::slice(out, 0, q).
+  otherwise:
+    put out = out.
+  end
+
+  set h: i64 = std::string::index_of(out, "#").
+  when h != -1:
+    put out = std::string::slice(out, 0, h).
+  otherwise:
+    put out = out.
+  end
+
+  when std::string::len(out) == 0:
+    yield "/".
+  otherwise:
+    set n: i64 = std::string::len(out).
+    when n > 1:
+      set last: string = std::string::slice(out, n - 1, 1).
+      when std::string::eq(last, "/"):
+        yield std::string::slice(out, 0, n - 1).
+      otherwise:
+        yield out.
+      end
+    otherwise:
+      yield out.
+    end
+  end
+end
+
 rule route_path(request_line: string) -> string:
   set s0: i64 = std::string::index_of(request_line, " ").
   when s0 == -1:
@@ -43,28 +76,31 @@ rule route_path(request_line: string) -> string:
     set start: i64 = s0 + 1.
     set tail: string = std::string::slice(request_line, start, std::string::len(request_line) - start).
     set s1: i64 = std::string::index_of(tail, " ").
+    set raw_path: string = "".
     when s1 == -1:
-      yield "/".
+      put raw_path = tail.
     otherwise:
-      yield std::string::slice(tail, 0, s1).
+      put raw_path = std::string::slice(tail, 0, s1).
     end
+    yield canonical_path(raw_path).
   end
 end
 
 rule route_file(path: string) -> string:
-  when std::string::eq(path, "/") || std::string::eq(path, "/hello"):
+  set normalized: string = canonical_path(path).
+  when std::string::eq(normalized, "/") || std::string::eq(normalized, "/hello"):
     yield "index.html".
   otherwise:
-    when std::string::eq(path, "/features"):
+    when std::string::eq(normalized, "/features"):
       yield "features.html".
     otherwise:
-      when std::string::eq(path, "/about"):
+      when std::string::eq(normalized, "/about"):
         yield "about.html".
       otherwise:
-        when std::string::eq(path, "/style.css"):
+        when std::string::eq(normalized, "/style.css"):
           yield "style.css".
         otherwise:
-          when std::string::eq(path, "/app.js"):
+          when std::string::eq(normalized, "/app.js"):
             yield "app.js".
           otherwise:
             yield "".
@@ -76,19 +112,20 @@ rule route_file(path: string) -> string:
 end
 
 rule route_code(path: string) -> i64:
-  when std::string::eq(path, "/") || std::string::eq(path, "/hello"):
+  set normalized: string = canonical_path(path).
+  when std::string::eq(normalized, "/") || std::string::eq(normalized, "/hello"):
     yield 1.
   otherwise:
-    when std::string::eq(path, "/features"):
+    when std::string::eq(normalized, "/features"):
       yield 2.
     otherwise:
-      when std::string::eq(path, "/about"):
+      when std::string::eq(normalized, "/about"):
         yield 3.
       otherwise:
-        when std::string::eq(path, "/style.css"):
+        when std::string::eq(normalized, "/style.css"):
           yield 4.
         otherwise:
-          when std::string::eq(path, "/app.js"):
+          when std::string::eq(normalized, "/app.js"):
             yield 5.
           otherwise:
             yield 0.
@@ -136,10 +173,11 @@ rule content_type_for_file(file_name: string) -> string:
 end
 
 rule is_threaded_candidate(method: string, path: string) -> bool:
+  set normalized: string = canonical_path(path).
   when !std::string::eq(method, "GET"):
     yield false.
   otherwise:
-    when std::string::eq(path, "/api/status") || std::string::eq(path, "/health") || std::string::eq(path, "/shutdown"):
+    when std::string::eq(normalized, "/api/status") || std::string::eq(normalized, "/health") || std::string::eq(normalized, "/shutdown"):
       yield false.
     otherwise:
       yield true.
