@@ -20,6 +20,11 @@ use cranelift_native::builder as native_builder;
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use std::collections::HashMap;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NativeRunOptions {
+    pub stdout_live: bool,
+}
+
 pub fn run(program: &Program) -> Result<i64, NativeError> {
     let (result, _) = run_with_io(program, "", &[])?;
     Ok(result)
@@ -29,6 +34,15 @@ pub fn run_with_io(
     program: &Program,
     input: &str,
     args: &[String],
+) -> Result<(i64, String), NativeError> {
+    run_with_io_options(program, input, args, NativeRunOptions::default())
+}
+
+pub fn run_with_io_options(
+    program: &Program,
+    input: &str,
+    args: &[String],
+    options: NativeRunOptions,
 ) -> Result<(i64, String), NativeError> {
     if program.functions.is_empty() {
         return Err(native_error("missing main function."));
@@ -465,6 +479,7 @@ pub fn run_with_io(
     runtime.set_trace(trace_table.frames.clone());
     runtime.set_input(input);
     runtime.set_args(args);
+    runtime.set_stdout_live(options.stdout_live);
     let func = unsafe { std::mem::transmute::<_, fn(*mut runtime::Runtime) -> i64>(code) };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| func(&mut runtime)));
     match result {

@@ -9,6 +9,18 @@ pub(crate) fn run_report(
     args: &[String],
     deterministic: bool,
 ) -> birddisk_core::RunReport {
+    run_report_with_native_stdout_live(path, config, engine, input, args, deterministic, false)
+}
+
+pub(crate) fn run_report_with_native_stdout_live(
+    path: &str,
+    config: &birddisk_core::ModuleConfig,
+    engine: birddisk_core::Engine,
+    input: &str,
+    args: &[String],
+    deterministic: bool,
+    native_stdout_live: bool,
+) -> birddisk_core::RunReport {
     if engine == birddisk_core::Engine::Wasm {
         let bytes = match std::fs::read(path) {
             Ok(bytes) => bytes,
@@ -126,7 +138,10 @@ pub(crate) fn run_report(
                     }
                 }
                 birddisk_core::Engine::Native => {
-                    match birddisk_native::run_with_io(&program, input, args) {
+                    let options = birddisk_native::NativeRunOptions {
+                        stdout_live: native_stdout_live,
+                    };
+                    match birddisk_native::run_with_io_options(&program, input, args, options) {
                         Ok((result, stdout)) => birddisk_core::RunReport {
                             tool: birddisk_core::TOOL_NAME,
                             version: birddisk_core::VERSION,

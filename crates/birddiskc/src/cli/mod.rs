@@ -172,10 +172,20 @@ pub(crate) fn execute(command: Command) -> Result<(), String> {
                         .map_err(|err| format!("unable to read stdin: {err}"))?;
                     buf
                 };
-                let run_report =
-                    run::run_report(&path, &config, engine, &input, &args, deterministic);
+                let native_stdout_live = engine == birddisk_core::Engine::Native;
+                let run_report = run::run_report_with_native_stdout_live(
+                    &path,
+                    &config,
+                    engine,
+                    &input,
+                    &args,
+                    deterministic,
+                    native_stdout_live,
+                );
                 if let Some(output) = run_report.stdout.as_deref() {
-                    print!("{output}");
+                    if !native_stdout_live {
+                        print!("{output}");
+                    }
                 }
                 if run_report.ok {
                     Ok(())
