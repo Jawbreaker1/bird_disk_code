@@ -202,10 +202,8 @@ fn is_builtin_std_module(path: &[String]) -> bool {
                     || module == "time"
                     || module == "profiler"
                     || module == "rand"
-                    || module == "test"
                     || module == "fs"
                     || module == "env"
-                    || module == "json"
                     || module == "thread"
                     || module == "channel"
                     || module == "net")

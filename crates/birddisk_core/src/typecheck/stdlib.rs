@@ -25,14 +25,8 @@ impl<'a> Checker<'a> {
         let has_std_env = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "env"
         });
-        let has_std_json = program.imports.iter().any(|import| {
-            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "json"
-        });
         let has_std_rand = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "rand"
-        });
-        let has_std_test = program.imports.iter().any(|import| {
-            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "test"
         });
         let has_std_channel = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "channel"
@@ -142,35 +136,9 @@ impl<'a> Checker<'a> {
             self.insert_function("std::env::cwd", Vec::new(), Ty::String);
             self.insert_function("std::env::set_cwd", vec![Ty::String], Ty::I64);
         }
-        if has_std_json {
-            self.insert_function("std::json::encode_i64", vec![Ty::I64], Ty::String);
-            self.insert_function("std::json::encode_bool", vec![Ty::Bool], Ty::String);
-            self.insert_function("std::json::encode_string", vec![Ty::String], Ty::String);
-            self.insert_function("std::json::decode_i64", vec![Ty::String], Ty::I64);
-            self.insert_function("std::json::decode_bool", vec![Ty::String], Ty::Bool);
-            self.insert_function("std::json::decode_string", vec![Ty::String], Ty::String);
-        }
         if has_std_rand {
             self.insert_function("std::rand::seed", vec![Ty::I64], Ty::Void);
             self.insert_function("std::rand::range", vec![Ty::I64, Ty::I64], Ty::I64);
-        }
-        if has_std_test {
-            self.insert_function("std::test::assert", vec![Ty::Bool, Ty::String], Ty::Void);
-            self.insert_function(
-                "std::test::assert_eq_i64",
-                vec![Ty::I64, Ty::I64, Ty::String],
-                Ty::Void,
-            );
-            self.insert_function(
-                "std::test::assert_eq_bool",
-                vec![Ty::Bool, Ty::Bool, Ty::String],
-                Ty::Void,
-            );
-            self.insert_function(
-                "std::test::assert_eq_string",
-                vec![Ty::String, Ty::String, Ty::String],
-                Ty::Void,
-            );
         }
         if has_std_channel {
             self.register_channel_stdlib();

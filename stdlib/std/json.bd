@@ -1,0 +1,121 @@
+import std::string.
+
+rule backspace_char() -> string:
+  set data: u8[] = array(1).
+  put data[0] = 8.
+  yield std::string::from_bytes(data).
+end
+
+rule formfeed_char() -> string:
+  set data: u8[] = array(1).
+  put data[0] = 12.
+  yield std::string::from_bytes(data).
+end
+
+rule carriage_return_char() -> string:
+  set data: u8[] = array(1).
+  put data[0] = 13.
+  yield std::string::from_bytes(data).
+end
+
+rule tab_char() -> string:
+  set data: u8[] = array(1).
+  put data[0] = 9.
+  yield std::string::from_bytes(data).
+end
+
+rule strip_ascii_whitespace(text: string) -> string:
+  set out: string = std::string::replace(text, " ", "").
+  put out = std::string::replace(out, "\n", "").
+  put out = std::string::replace(out, carriage_return_char(), "").
+  put out = std::string::replace(out, tab_char(), "").
+  yield out.
+end
+
+rule invalid_json_i64() -> i64:
+  yield std::string::to_i64("invalid_json").
+end
+
+rule invalid_json_bool() -> bool:
+  set failed: i64 = invalid_json_i64().
+  when failed == 0:
+    yield false.
+  otherwise:
+    yield true.
+  end
+end
+
+rule invalid_json_string() -> string:
+  set failed: i64 = invalid_json_i64().
+  when failed == 0:
+    yield "".
+  otherwise:
+    yield "".
+  end
+end
+
+rule encode_i64(value: i64) -> string:
+  yield std::string::from_i64(value).
+end
+
+rule encode_bool(value: bool) -> string:
+  when value:
+    yield "true".
+  otherwise:
+    yield "false".
+  end
+end
+
+rule encode_string(text: string) -> string:
+  set escaped: string = std::string::replace(text, "\\", "\\\\").
+  put escaped = std::string::replace(escaped, "\"", "\\\"").
+  put escaped = std::string::replace(escaped, backspace_char(), "\\b").
+  put escaped = std::string::replace(escaped, formfeed_char(), "\\f").
+  put escaped = std::string::replace(escaped, "\n", "\\n").
+  put escaped = std::string::replace(escaped, carriage_return_char(), "\\r").
+  put escaped = std::string::replace(escaped, tab_char(), "\\t").
+  set out0: string = std::string::concat("\"", escaped).
+  yield std::string::concat(out0, "\"").
+end
+
+rule decode_i64(text: string) -> i64:
+  set compact: string = strip_ascii_whitespace(text).
+  yield std::string::to_i64(compact).
+end
+
+rule decode_bool(text: string) -> bool:
+  set compact: string = strip_ascii_whitespace(text).
+  when std::string::eq(compact, "true"):
+    yield true.
+  otherwise:
+    when std::string::eq(compact, "false"):
+      yield false.
+    otherwise:
+      yield invalid_json_bool().
+    end
+  end
+end
+
+rule decode_string(text: string) -> string:
+  set compact: string = strip_ascii_whitespace(text).
+  set n: i64 = std::string::len(compact).
+  when n < 2:
+    yield invalid_json_string().
+  otherwise:
+    set first: string = std::string::slice(compact, 0, 1).
+    set last: string = std::string::slice(compact, n - 1, 1).
+    when !std::string::eq(first, "\"") || !std::string::eq(last, "\""):
+      yield invalid_json_string().
+    otherwise:
+      set inner: string = std::string::slice(compact, 1, n - 2).
+      set decoded: string = std::string::replace(inner, "\\n", "\n").
+      put decoded = std::string::replace(decoded, "\\r", carriage_return_char()).
+      put decoded = std::string::replace(decoded, "\\t", tab_char()).
+      put decoded = std::string::replace(decoded, "\\b", backspace_char()).
+      put decoded = std::string::replace(decoded, "\\f", formfeed_char()).
+      put decoded = std::string::replace(decoded, "\\\"", "\"").
+      put decoded = std::string::replace(decoded, "\\\\", "\\").
+      yield decoded.
+    end
+  end
+end

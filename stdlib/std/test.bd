@@ -1,0 +1,33 @@
+import std::string.
+
+rule assert(cond: bool, msg: string) -> void:
+  when cond:
+    set noop: i64 = 0.
+  otherwise:
+    throw msg.
+  end
+end
+
+rule assert_eq_i64(a: i64, b: i64, msg: string) -> void:
+  when a == b:
+    set noop: i64 = 0.
+  otherwise:
+    throw msg.
+  end
+end
+
+rule assert_eq_bool(a: bool, b: bool, msg: string) -> void:
+  when a == b:
+    set noop: i64 = 0.
+  otherwise:
+    throw msg.
+  end
+end
+
+rule assert_eq_string(a: string, b: string, msg: string) -> void:
+  when std::string::eq(a, b):
+    set noop: i64 = 0.
+  otherwise:
+    throw msg.
+  end
+end

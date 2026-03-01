@@ -539,6 +539,20 @@ fn native_std_path_helpers_module() {
 }
 
 #[test]
+fn native_std_test_helpers_module() {
+    let source = "import std::test.\nimport std::string.\n\nrule main() -> i64:\n  std::test::assert(true, \"expected true\").\n  std::test::assert_eq_i64(2 + 3, 5, \"i64 match\").\n  std::test::assert_eq_bool(true, true, \"bool match\").\n  set left: string = \"hi\".\n  set right: string = std::string::concat(\"h\", \"i\").\n  std::test::assert_eq_string(left, right, \"string match\").\n  yield 1.\nend\n";
+    let result = run_module_source(source, "test_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_json_helpers_module() {
+    let source = "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set encoded_num: string = std::json::encode_i64(-12).\n  set encoded_bool: string = std::json::encode_bool(true).\n  set encoded_str: string = std::json::encode_string(\"hi\\n\").\n  set ok_num: bool = std::string::eq(encoded_num, \"-12\").\n  set ok_bool: bool = std::string::eq(encoded_bool, \"true\").\n  set ok_str: bool = std::string::eq(encoded_str, \"\\\"hi\\\\n\\\"\").\n  when ok_num && ok_bool && ok_str:\n    set parsed_num: i64 = std::json::decode_i64(\" 42 \").\n    set parsed_bool: bool = std::json::decode_bool(\" false \").\n    set parsed_str: string = std::json::decode_string(\" \\\"hi\\\\n\\\" \").\n    when parsed_num == 42 && !parsed_bool && std::string::eq(parsed_str, \"hi\\n\"):\n      yield 1.\n    otherwise:\n      yield 0.\n    end\n  otherwise:\n    yield 0.\n  end\nend\n";
+    let result = run_module_source(source, "json_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
 fn native_std_web_helpers() {
     let source = "import std::web.\nimport std::string.\n\nrule main() -> i64:\n  set req: string = \"GET /features HTTP/1.1\".\n  set method: string = std::web::request_method(req).\n  set path: string = std::web::route_path(req).\n  set path_no_version: string = std::web::route_path(\"GET /features\").\n  set path_query: string = std::web::route_path(\"GET /features/?x=1 HTTP/1.1\").\n  set path_fragment: string = std::web::canonical_path(\"/about#top\").\n  set cr_bytes: u8[] = array(1).\n  put cr_bytes[0] = 13.\n  set cr: string = std::string::from_bytes(cr_bytes).\n  set trimmed: string = std::web::trim_trailing_cr(std::string::concat(\"abc\", cr)).\n  set code: i64 = std::web::route_code(path).\n  set code_query: i64 = std::web::route_code(\"/features/?x=1\").\n  set file_direct: string = std::web::route_file(path).\n  set file_trailing_slash: string = std::web::route_file(\"/about/\").\n  set file_code: string = std::web::route_file_from_code(code).\n  set css_type: string = std::web::content_type_for_file(\"style.css\").\n  set threaded_ok: bool = std::web::is_threaded_candidate(method, path).\n  set shutdown_threaded: bool = std::web::is_threaded_candidate(\"GET\", \"/shutdown?now=1\").\n  set unknown_file: string = std::web::route_file(\"/missing\").\n  set response: string = std::web::build_response(200, \"OK\", \"text/plain; charset=utf-8\", \"hi\").\n  set has_status: bool = std::string::contains(response, \"HTTP/1.1 200 OK\").\n  set has_len: bool = std::string::contains(response, \"Content-Length: 2\").\n  set has_body: bool = std::string::contains(response, \"hi\").\n  when std::string::eq(method, \"GET\") && std::string::eq(path, \"/features\") && std::string::eq(path_no_version, \"/features\") && std::string::eq(path_query, \"/features\") && std::string::eq(path_fragment, \"/about\") && std::string::eq(trimmed, \"abc\") && code == 2 && code_query == 2 && std::string::eq(file_direct, \"features.html\") && std::string::eq(file_trailing_slash, \"about.html\") && std::string::eq(file_code, \"features.html\") && std::string::eq(css_type, \"text/css; charset=utf-8\") && threaded_ok && !shutdown_threaded && std::string::len(unknown_file) == 0 && has_status && has_len && has_body:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
     let result = run_module_source(source, "web_helpers_native");

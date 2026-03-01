@@ -713,6 +713,24 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_std_test_import_via_module_resolution() {
+        let source = "import std::test.\n\nrule main() -> i64:\n  std::test::assert(true, \"ok\").\n  std::test::assert_eq_i64(2 + 3, 5, \"math\").\n  std::test::assert_eq_bool(true, true, \"bool\").\n  std::test::assert_eq_string(\"a\", \"a\", \"string\").\n  yield 1.\nend\n";
+        let path = write_repo_temp("typecheck_std_test", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_json_import_via_module_resolution() {
+        let source = "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set enc: string = std::json::encode_string(\"hi\\n\").\n  set dec: string = std::json::decode_string(enc).\n  set num: i64 = std::json::decode_i64(\" 42 \").\n  set flag: bool = std::json::decode_bool(\" true \").\n  when std::string::eq(dec, \"hi\\n\") && num == 42 && flag:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_json", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn typecheck_accepts_std_thread_spawn_join() {
         let diags = check(
             "import std::thread.\nrule worker(value: i64) -> i64:\n  yield value + 1.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 2).\n  yield std::thread::join(t).\nend\n",

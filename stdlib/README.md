@@ -73,6 +73,18 @@ Modules (BirdDisk)
   - normalize(path: string) -> string
   - basename(path: string) -> string
   - dirname(path: string) -> string
+- std::test
+  - assert(cond: bool, msg: string) -> void
+  - assert_eq_i64(a: i64, b: i64, msg: string) -> void
+  - assert_eq_bool(a: bool, b: bool, msg: string) -> void
+  - assert_eq_string(a: string, b: string, msg: string) -> void
+- std::json
+  - encode_i64(value: i64) -> string
+  - encode_bool(value: bool) -> string
+  - encode_string(text: string) -> string
+  - decode_i64(text: string) -> i64
+  - decode_bool(text: string) -> bool
+  - decode_string(text: string) -> string
 
 Runtime modules (implemented in Rust)
 - std::string
@@ -122,16 +134,8 @@ Runtime modules (implemented in Rust)
   - set_var(name: string, value: string) -> i64
   - cwd() -> string
   - set_cwd(path: string) -> i64
-- std::json
-  - encode_i64(value: i64) -> string
-  - encode_bool(value: bool) -> string
-  - encode_string(text: string) -> string
-  - decode_i64(text: string) -> i64
-  - decode_bool(text: string) -> bool
-  - decode_string(text: string) -> string
-
 Notes
-- std::string, std::bytes, std::io, std::time, std::profiler, std::fs, std::env, and std::json are still implemented in Rust.
+- std::string, std::bytes, std::io, std::time, std::profiler, std::fs, and std::env are still implemented in Rust.
 - BirdDisk stdlib modules can import Rust-hosted std modules.
 - Stdlib versioning is tied to the compiler version during v0.x.
 - For now, array utilities take the array length explicitly.

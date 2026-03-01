@@ -726,6 +726,26 @@ mod tests {
     }
 
     #[test]
+    fn wasm_runs_std_test_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::test.\nimport std::string.\n\nrule main() -> i64:\n  std::test::assert(true, \"expected true\").\n  std::test::assert_eq_i64(2 + 3, 5, \"i64 match\").\n  std::test::assert_eq_bool(true, true, \"bool match\").\n  set left: string = \"hi\".\n  set right: string = std::string::concat(\"h\", \"i\").\n  std::test::assert_eq_string(left, right, \"string match\").\n  yield 1.\nend\n",
+            "wasm_test_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_json_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::json.\nimport std::string.\n\nrule main() -> i64:\n  set encoded_num: string = std::json::encode_i64(-12).\n  set encoded_bool: string = std::json::encode_bool(true).\n  set encoded_str: string = std::json::encode_string(\"hi\\n\").\n  set ok_num: bool = std::string::eq(encoded_num, \"-12\").\n  set ok_bool: bool = std::string::eq(encoded_bool, \"true\").\n  set ok_str: bool = std::string::eq(encoded_str, \"\\\"hi\\\\n\\\"\").\n  when ok_num && ok_bool && ok_str:\n    set parsed_num: i64 = std::json::decode_i64(\" 42 \").\n    set parsed_bool: bool = std::json::decode_bool(\" false \").\n    set parsed_str: string = std::json::decode_string(\" \\\"hi\\\\n\\\" \").\n    when parsed_num == 42 && !parsed_bool && std::string::eq(parsed_str, \"hi\\n\"):\n      yield 1.\n    otherwise:\n      yield 0.\n    end\n  otherwise:\n    yield 0.\n  end\nend\n",
+            "wasm_json_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn wasm_runs_enum_match() {
         let result = compile_and_run(
             "enum Choice:\n  case One.\n  case Two(value: i64).\nend\n\nrule main() -> i64:\n  set value: Choice = Choice::Two(9).\n  match value:\n    case Choice::One:\n      yield 1.\n    case Choice::Two(v):\n      yield v + 1.\n    otherwise:\n      yield 0.\n  end\nend\n",
