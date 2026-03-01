@@ -1,0 +1,148 @@
+import std::string.
+
+rule crlf() -> string:
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  yield std::string::concat(cr, "\n").
+end
+
+rule build_response(
+  status_code: i64,
+  reason: string,
+  content_type: string,
+  body: string
+) -> string:
+  set eol: string = crlf().
+  set status0: string = std::string::concat("HTTP/1.1 ", std::string::from_i64(status_code)).
+  set status1: string = std::string::concat(status0, " ").
+  set status_line: string = std::string::concat(status1, reason).
+  set head0: string = std::string::concat(status_line, eol).
+  set head1: string = std::string::concat("Content-Type: ", content_type).
+  set head2: string = std::string::concat(head1, eol).
+  set len0: string = std::string::concat("Content-Length: ", std::string::from_i64(std::string::len(body))).
+  set head3: string = std::string::concat(len0, eol).
+  set head: string = std::string::concat(std::string::concat(head0, head2), std::string::concat(head3, eol)).
+  yield std::string::concat(head, body).
+end
+
+rule request_method(request_line: string) -> string:
+  set s0: i64 = std::string::index_of(request_line, " ").
+  when s0 == -1:
+    yield "GET".
+  otherwise:
+    yield std::string::slice(request_line, 0, s0).
+  end
+end
+
+rule route_path(request_line: string) -> string:
+  set s0: i64 = std::string::index_of(request_line, " ").
+  when s0 == -1:
+    yield "/".
+  otherwise:
+    set start: i64 = s0 + 1.
+    set tail: string = std::string::slice(request_line, start, std::string::len(request_line) - start).
+    set s1: i64 = std::string::index_of(tail, " ").
+    when s1 == -1:
+      yield "/".
+    otherwise:
+      yield std::string::slice(tail, 0, s1).
+    end
+  end
+end
+
+rule route_file(path: string) -> string:
+  when std::string::eq(path, "/") || std::string::eq(path, "/hello"):
+    yield "index.html".
+  otherwise:
+    when std::string::eq(path, "/features"):
+      yield "features.html".
+    otherwise:
+      when std::string::eq(path, "/about"):
+        yield "about.html".
+      otherwise:
+        when std::string::eq(path, "/style.css"):
+          yield "style.css".
+        otherwise:
+          when std::string::eq(path, "/app.js"):
+            yield "app.js".
+          otherwise:
+            yield "".
+          end
+        end
+      end
+    end
+  end
+end
+
+rule route_code(path: string) -> i64:
+  when std::string::eq(path, "/") || std::string::eq(path, "/hello"):
+    yield 1.
+  otherwise:
+    when std::string::eq(path, "/features"):
+      yield 2.
+    otherwise:
+      when std::string::eq(path, "/about"):
+        yield 3.
+      otherwise:
+        when std::string::eq(path, "/style.css"):
+          yield 4.
+        otherwise:
+          when std::string::eq(path, "/app.js"):
+            yield 5.
+          otherwise:
+            yield 0.
+          end
+        end
+      end
+    end
+  end
+end
+
+rule route_file_from_code(code: i64) -> string:
+  when code == 1:
+    yield "index.html".
+  otherwise:
+    when code == 2:
+      yield "features.html".
+    otherwise:
+      when code == 3:
+        yield "about.html".
+      otherwise:
+        when code == 4:
+          yield "style.css".
+        otherwise:
+          when code == 5:
+            yield "app.js".
+          otherwise:
+            yield "".
+          end
+        end
+      end
+    end
+  end
+end
+
+rule content_type_for_file(file_name: string) -> string:
+  when std::string::eq(file_name, "style.css"):
+    yield "text/css; charset=utf-8".
+  otherwise:
+    when std::string::eq(file_name, "app.js"):
+      yield "text/javascript; charset=utf-8".
+    otherwise:
+      yield "text/html; charset=utf-8".
+    end
+  end
+end
+
+rule is_threaded_candidate(method: string, path: string) -> bool:
+  when !std::string::eq(method, "GET"):
+    yield false.
+  otherwise:
+    when std::string::eq(path, "/api/status") || std::string::eq(path, "/health") || std::string::eq(path, "/shutdown"):
+      yield false.
+    otherwise:
+      yield true.
+    end
+  end
+end

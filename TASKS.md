@@ -512,7 +512,27 @@ Acceptance:
 
 ---
 
-## Sprint 23 — Parallel server throughput
+## Sprint 23 — Stdlib Bootstrap (Phase 1, BirdDisk-first)
+Goal:
+- [ ] Make the public demo feel like BirdDisk-native software rather than Rust-host-wrapper code.
+
+Implement:
+- [ ] Define and document a strict host-kernel boundary (what stays Rust: GC/memory ABI + IO/net/thread/fs/time host syscalls only)
+- [ ] Move selected high-level stdlib APIs from Rust to BirdDisk modules (phase 1 target set)
+- [ ] Extract reusable BirdDisk-native web helpers from the webserver example into stdlib modules (response helpers, route helpers, config parsing)
+- [ ] Update examples to prefer BirdDisk-native stdlib modules over inline app-local helpers
+
+Add tests:
+- [ ] VM/native parity tests for each migrated API
+- [ ] WASM compatibility checks for migrated non-host-dependent APIs
+- [ ] End-to-end demo test proving the web app still works while using migrated BirdDisk-native libs
+
+Acceptance:
+- Demo apps clearly rely on BirdDisk stdlib modules for app logic, while Rust remains the minimal host runtime layer.
+
+---
+
+## Sprint 24 — Parallel server throughput
 Implement:
 - [ ] True per-connection parallel execution model for server workloads (native + VM parity plan)
 - [ ] Thread-safe shared state/message patterns for server handlers
@@ -527,7 +547,7 @@ Acceptance:
 
 ---
 
-## Sprint 24 — UDP networking
+## Sprint 25 — UDP networking
 Implement:
 - [ ] Add UDP sockets to `std::net` (bind/send_to/recv_from/close + timeout behavior)
 - [ ] VM/native parity for UDP APIs and diagnostics
@@ -541,7 +561,7 @@ Acceptance:
 
 ---
 
-## Sprint 25 — Generics + channel ergonomics
+## Sprint 26 — Generics + channel ergonomics
 Implement:
 - [ ] Add generics/type parameters (types, functions, enums)
 - [ ] Introduce `Channel<T>` + `Recv<T>` and migration path from typed channels
@@ -572,7 +592,7 @@ Acceptance:
 - [ ] HTTP client layer (after std::net)
 - [ ] UDP sockets follow-up (after TCP stabilizes)
 - [ ] Graphics/windowing library (cross-platform surface)
-- [ ] Plan stdlib bootstrap: move most stdlib to BirdDisk while keeping a minimal Rust host layer (ABI/layout, build + link order, tests)
+- [ ] Continue stdlib bootstrap phases: move most stdlib to BirdDisk while keeping a minimal Rust host layer (ABI/layout, build + link order, tests)
 
 ## Future — Maintainability
 - [ ] Add concise module/class-level comments for core components (VM/WASM/native/runtime/stdlib)

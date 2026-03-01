@@ -474,7 +474,11 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
 mod tests {
     use super::*;
     use crate::{lexer, parse_and_typecheck, parser};
+    use std::fs;
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     fn check(source: &str) -> Vec<Diagnostic> {
         let tokens = lexer::lex(source).unwrap();
@@ -488,6 +492,14 @@ mod tests {
         root.pop();
         root.push(rel);
         root
+    }
+
+    fn write_repo_temp(name: &str, source: &str) -> PathBuf {
+        let mut path = fixture_path("");
+        let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        path.push(format!("tmp_{name}_{}_{}.bd", std::process::id(), id));
+        fs::write(&path, source).unwrap();
+        path
     }
 
     #[test]
@@ -662,6 +674,15 @@ mod tests {
             "import std::io.\nrule main() -> i64:\n  std::io::print(\"hi\").\n  yield 0.\nend\n",
         );
         assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_web_import_via_module_resolution() {
+        let source = "import std::web.\nimport std::string.\n\nrule main() -> i64:\n  set req: string = \"GET /features HTTP/1.1\".\n  set path: string = std::web::route_path(req).\n  set file: string = std::web::route_file(path).\n  set response: string = std::web::build_response(200, \"OK\", \"text/plain; charset=utf-8\", \"hi\").\n  when std::string::eq(file, \"features.html\") && std::string::contains(response, \"HTTP/1.1 200 OK\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_web", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
     }
 
     #[test]

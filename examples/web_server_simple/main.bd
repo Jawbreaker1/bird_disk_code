@@ -4,57 +4,7 @@ import std::io.
 import std::net.
 import std::string.
 import std::thread.
-
-rule build_response(
-  status_code: i64,
-  reason: string,
-  content_type: string,
-  body: string,
-  eol: string
-) -> string:
-  set status0: string = std::string::concat("HTTP/1.1 ", std::string::from_i64(status_code)).
-  set status1: string = std::string::concat(status0, " ").
-  set status_line: string = std::string::concat(status1, reason).
-  set head0: string = std::string::concat(status_line, eol).
-  set head1: string = std::string::concat("Content-Type: ", content_type).
-  set head2: string = std::string::concat(head1, eol).
-  set len0: string = std::string::concat("Content-Length: ", std::string::from_i64(std::string::len(body))).
-  set head3: string = std::string::concat(len0, eol).
-  set head: string = std::string::concat(std::string::concat(head0, head2), std::string::concat(head3, eol)).
-  yield std::string::concat(head, body).
-end
-
-rule http_eol() -> string:
-  set cr_bytes: u8[] = array(1).
-  put cr_bytes[0] = 13.
-  set cr: string = std::string::from_bytes(cr_bytes).
-  yield std::string::concat(cr, "\n").
-end
-
-rule route_path(request_line: string) -> string:
-  set s0: i64 = std::string::index_of(request_line, " ").
-  when s0 == -1:
-    yield "/".
-  otherwise:
-    set start: i64 = s0 + 1.
-    set tail: string = std::string::slice(request_line, start, std::string::len(request_line) - start).
-    set s1: i64 = std::string::index_of(tail, " ").
-    when s1 == -1:
-      yield "/".
-    otherwise:
-      yield std::string::slice(tail, 0, s1).
-    end
-  end
-end
-
-rule request_method(request_line: string) -> string:
-  set s0: i64 = std::string::index_of(request_line, " ").
-  when s0 == -1:
-    yield "GET".
-  otherwise:
-    yield std::string::slice(request_line, 0, s0).
-  end
-end
+import std::web.
 
 rule trim_trailing_cr(line: string) -> string:
   set n: i64 = std::string::len(line).
@@ -166,121 +116,28 @@ rule config_workers(text: string) -> i64:
   end
 end
 
-rule route_file(path: string) -> string:
-  when std::string::eq(path, "/"):
-    yield "index.html".
-  otherwise:
-    when std::string::eq(path, "/hello"):
-      yield "index.html".
-    otherwise:
-      when std::string::eq(path, "/features"):
-        yield "features.html".
-      otherwise:
-        when std::string::eq(path, "/about"):
-          yield "about.html".
-        otherwise:
-          when std::string::eq(path, "/style.css"):
-            yield "style.css".
-          otherwise:
-            when std::string::eq(path, "/app.js"):
-              yield "app.js".
-            otherwise:
-              yield "".
-            end
-          end
-        end
-      end
-    end
-  end
-end
-
-rule route_code(path: string) -> i64:
-  when std::string::eq(path, "/") || std::string::eq(path, "/hello"):
-    yield 1.
-  otherwise:
-    when std::string::eq(path, "/features"):
-      yield 2.
-    otherwise:
-      when std::string::eq(path, "/about"):
-        yield 3.
-      otherwise:
-        when std::string::eq(path, "/style.css"):
-          yield 4.
-        otherwise:
-          when std::string::eq(path, "/app.js"):
-            yield 5.
-          otherwise:
-            yield 0.
-          end
-        end
-      end
-    end
-  end
-end
-
-rule content_type_for_file(file_name: string) -> string:
-  when std::string::eq(file_name, "style.css"):
-    yield "text/css; charset=utf-8".
-  otherwise:
-    when std::string::eq(file_name, "app.js"):
-      yield "text/javascript; charset=utf-8".
-    otherwise:
-      yield "text/html; charset=utf-8".
-    end
-  end
-end
-
 rule read_public_file(file_name: string) -> string:
   set base: string = public_root().
   set full: string = std::string::concat(base, file_name).
   yield std::fs::read_text(full).
 end
 
-rule is_threaded_candidate(method: string, path: string) -> bool:
-  when !std::string::eq(method, "GET"):
-    yield false.
-  otherwise:
-    when std::string::eq(path, "/api/status") || std::string::eq(path, "/health") || std::string::eq(path, "/shutdown"):
-      yield false.
-    otherwise:
-      yield true.
-    end
-  end
-end
-
 rule serve_static_route_stream(stream: TcpStream, route: i64) -> i64:
   set status: i64 = 200.
   set reason: string = "OK".
   set content_type: string = "text/html; charset=utf-8".
-  set file_name: string = "index.html".
+  set file_name: string = std::web::route_file_from_code(route).
 
-  when route == 1:
-    put file_name = "index.html".
+  when std::string::len(file_name) == 0:
+    put status = 404.
+    put reason = "Not Found".
+    put file_name = "404.html".
   otherwise:
-    when route == 2:
-      put file_name = "features.html".
-    otherwise:
-      when route == 3:
-        put file_name = "about.html".
-      otherwise:
-        when route == 4:
-          put file_name = "style.css".
-        otherwise:
-          when route == 5:
-            put file_name = "app.js".
-          otherwise:
-            put status = 404.
-            put reason = "Not Found".
-            put file_name = "404.html".
-          end
-        end
-      end
-    end
+    put content_type = std::web::content_type_for_file(file_name).
   end
 
   set body: string = "".
   try:
-    put content_type = content_type_for_file(file_name).
     put body = read_public_file(file_name).
   catch read_error:
     put status = 500.
@@ -289,7 +146,7 @@ rule serve_static_route_stream(stream: TcpStream, route: i64) -> i64:
     put body = "failed to read asset\n".
   end
 
-  set response: string = build_response(status, reason, content_type, body, http_eol()).
+  set response: string = std::web::build_response(status, reason, content_type, body).
   set wrote: i64 = std::net::write_text(stream, response).
   std::net::close_stream(stream).
 
@@ -322,10 +179,10 @@ rule serve_request_inline(stream: TcpStream, method: string, path: string, serve
           put body = "shutting down\n".
           put shutdown_requested = true.
         otherwise:
-          set file_name: string = route_file(path).
+          set file_name: string = std::web::route_file(path).
           when std::string::len(file_name) > 0:
             try:
-              put content_type = content_type_for_file(file_name).
+              put content_type = std::web::content_type_for_file(file_name).
               put body = read_public_file(file_name).
             catch read_error:
               put status = 500.
@@ -354,7 +211,7 @@ rule serve_request_inline(stream: TcpStream, method: string, path: string, serve
     put body = "method not allowed\n".
   end
 
-  set response: string = build_response(status, reason, content_type, body, http_eol()).
+  set response: string = std::web::build_response(status, reason, content_type, body).
   set wrote: i64 = std::net::write_text(stream, response).
   std::net::close_stream(stream).
 
@@ -418,11 +275,13 @@ rule main() -> i64:
         end
       otherwise:
         set stream: TcpStream = std::net::accept(listener).
-        set request_line: string = std::net::read_line(stream).
+        set request_line_raw: string = std::net::read_line(stream).
+        set request_line: string = trim_trailing_cr(request_line_raw).
 
         set reading: bool = true.
         repeat while reading:
-          set line: string = std::net::read_line(stream).
+          set line_raw: string = std::net::read_line(stream).
+          set line: string = trim_trailing_cr(line_raw).
           when std::string::len(line) == 0:
             put reading = false.
           otherwise:
@@ -430,12 +289,12 @@ rule main() -> i64:
           end
         end
 
-        set method: string = request_method(request_line).
-        set path: string = route_path(request_line).
-        set thread_candidate: bool = is_threaded_candidate(method, path).
+        set method: string = std::web::request_method(request_line).
+        set path: string = std::web::route_path(request_line).
+        set thread_candidate: bool = std::web::is_threaded_candidate(method, path).
 
         when thread_candidate:
-          set route: i64 = route_code(path).
+          set route: i64 = std::web::route_code(path).
           set t: Thread = std::thread::spawn("serve_static_route_stream", stream, route).
           put pending_threads[queue_tail] = t.
           put pending_paths[queue_tail] = path.
@@ -476,11 +335,13 @@ rule main() -> i64:
   otherwise:
     repeat while running:
       set stream_single: TcpStream = std::net::accept(listener).
-      set request_line_single: string = std::net::read_line(stream_single).
+      set request_line_single_raw: string = std::net::read_line(stream_single).
+      set request_line_single: string = trim_trailing_cr(request_line_single_raw).
 
       set reading_single: bool = true.
       repeat while reading_single:
-        set line_single: string = std::net::read_line(stream_single).
+        set line_single_raw: string = std::net::read_line(stream_single).
+        set line_single: string = trim_trailing_cr(line_single_raw).
         when std::string::len(line_single) == 0:
           put reading_single = false.
         otherwise:
@@ -488,8 +349,8 @@ rule main() -> i64:
         end
       end
 
-      set method_single: string = request_method(request_line_single).
-      set path_single: string = route_path(request_line_single).
+      set method_single: string = std::web::request_method(request_line_single).
+      set path_single: string = std::web::route_path(request_line_single).
       set outcome_single: i64 = serve_request_inline(stream_single, method_single, path_single, served).
       when outcome_single <= 0:
         put failed = true.

@@ -580,6 +580,13 @@ mod tests {
     }
 
     #[test]
+    fn eval_std_web_helpers() {
+        let source = "import std::web.\nimport std::string.\n\nrule main() -> i64:\n  set req: string = \"GET /features HTTP/1.1\".\n  set method: string = std::web::request_method(req).\n  set path: string = std::web::route_path(req).\n  set code: i64 = std::web::route_code(path).\n  set file_direct: string = std::web::route_file(path).\n  set file_code: string = std::web::route_file_from_code(code).\n  set css_type: string = std::web::content_type_for_file(\"style.css\").\n  set threaded_ok: bool = std::web::is_threaded_candidate(method, path).\n  set shutdown_threaded: bool = std::web::is_threaded_candidate(\"GET\", \"/shutdown\").\n  set unknown_file: string = std::web::route_file(\"/missing\").\n  set response: string = std::web::build_response(200, \"OK\", \"text/plain; charset=utf-8\", \"hi\").\n  set has_status: bool = std::string::contains(response, \"HTTP/1.1 200 OK\").\n  set has_len: bool = std::string::contains(response, \"Content-Length: 2\").\n  set has_body: bool = std::string::contains(response, \"hi\").\n  when std::string::eq(method, \"GET\") && std::string::eq(path, \"/features\") && code == 2 && std::string::eq(file_direct, \"features.html\") && std::string::eq(file_code, \"features.html\") && std::string::eq(css_type, \"text/css; charset=utf-8\") && threaded_ok && !shutdown_threaded && std::string::len(unknown_file) == 0 && has_status && has_len && has_body:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_module_source(source, "web_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn eval_std_http_timeout_errors() {
         let Some((port, server)) = spawn_tcp_server_once(|stream| {
             std::thread::sleep(Duration::from_millis(120));

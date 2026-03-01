@@ -309,6 +309,20 @@ See `docs/DIAGNOSTICS.md` for full error list.
   - `status`/`headers`/`body` helpers normalize CRLF/CR response text to LF.
   - If neither `Content-Length` nor chunked transfer encoding is present, falls back to exact EOF body reads.
 
+### std::web (BirdDisk module)
+- `build_response(status_code: i64, reason: string, content_type: string, body: string) -> string`
+- `request_method(request_line: string) -> string`
+- `route_path(request_line: string) -> string`
+- `route_file(path: string) -> string`
+- `route_code(path: string) -> i64`
+- `route_file_from_code(code: i64) -> string`
+- `content_type_for_file(file_name: string) -> string`
+- `is_threaded_candidate(method: string, path: string) -> bool`
+- Current scope:
+  - Shared HTTP string helpers used by the native/VM web server example.
+  - Route mapping covers `/`, `/hello`, `/features`, `/about`, `/style.css`, `/app.js`.
+  - `is_threaded_candidate` currently allows threaded serving only for static GET routes (excludes `/api/status`, `/health`, `/shutdown`).
+
 ### std::math (BirdDisk module)
 - `add(a: i64, b: i64) -> i64`
 - `sub(a: i64, b: i64) -> i64`

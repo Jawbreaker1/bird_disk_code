@@ -38,6 +38,15 @@ Modules (BirdDisk)
   - status(response) -> i64
   - headers(response) -> string
   - body(response) -> string
+- std::web
+  - build_response(status_code, reason, content_type, body) -> string
+  - request_method(request_line) -> string
+  - route_path(request_line) -> string
+  - route_file(path) -> string
+  - route_code(path) -> i64
+  - route_file_from_code(code) -> string
+  - content_type_for_file(file_name) -> string
+  - is_threaded_candidate(method, path) -> bool
 
 Runtime modules (implemented in Rust)
 - std::string
