@@ -134,7 +134,6 @@ rule main() -> i64:
 
   set served: i64 = 0.
   set running: bool = true.
-  set failed: bool = false.
 
   when threaded_mode:
     set pending_threads: Thread[] = array(worker_cap).
@@ -150,8 +149,8 @@ rule main() -> i64:
         put queue_head = (queue_head + 1) % worker_cap.
         put pending_count = pending_count - 1.
         when joined_done <= 0:
-          put failed = true.
-          put running = false.
+          std::io::print(std::string::concat("serve failed path: ", joined_path)).
+          std::io::print("\n").
         otherwise:
           put served = served + 1.
           std::io::print(std::string::concat("served path: ", joined_path)).
@@ -187,8 +186,8 @@ rule main() -> i64:
         otherwise:
           set outcome: i64 = serve_request_inline(stream, method, path, served).
           when outcome <= 0:
-            put failed = true.
-            put running = false.
+            std::io::print(std::string::concat("serve failed path: ", path)).
+            std::io::print("\n").
           otherwise:
             put served = served + 1.
             std::io::print(std::string::concat("served path: ", path)).
@@ -209,7 +208,8 @@ rule main() -> i64:
       put queue_head = (queue_head + 1) % worker_cap.
       put pending_count = pending_count - 1.
       when drained_done <= 0:
-        put failed = true.
+        std::io::print(std::string::concat("serve failed path: ", drained_path)).
+        std::io::print("\n").
       otherwise:
         put served = served + 1.
         std::io::print(std::string::concat("served path: ", drained_path)).
@@ -237,8 +237,8 @@ rule main() -> i64:
       set path_single: string = std::web::route_path(request_line_single).
       set outcome_single: i64 = serve_request_inline(stream_single, method_single, path_single, served).
       when outcome_single <= 0:
-        put failed = true.
-        put running = false.
+        std::io::print(std::string::concat("serve failed path: ", path_single)).
+        std::io::print("\n").
       otherwise:
         put served = served + 1.
         std::io::print(std::string::concat("served path: ", path_single)).
@@ -255,10 +255,5 @@ rule main() -> i64:
   std::net::close_listener(listener).
   std::io::print(std::string::concat("served total: ", std::string::from_i64(served))).
   std::io::print("\n").
-
-  when failed:
-    yield -1.
-  otherwise:
-    yield served.
-  end
+  yield served.
 end
