@@ -1,5 +1,6 @@
 use crate::rt_core::*;
 use std::io::{Read, Write};
+use std::io::ErrorKind;
 use std::net::Shutdown;
 use std::time::Duration;
 
@@ -260,9 +261,18 @@ pub extern "C-unwind" fn bd_net_read_line(rt: *mut Runtime, stream: u64) -> u64 
                 }
                 bytes.push(byte[0]);
             }
-            Err(err) => {
-                net_error(rt, format!("std::net::read_line failed: {err}"));
-                return 0;
+            Err(err) => match err.kind() {
+                // Peer closed/reset mid-read: treat as EOF for line-oriented callers.
+                ErrorKind::ConnectionReset
+                | ErrorKind::ConnectionAborted
+                | ErrorKind::BrokenPipe
+                | ErrorKind::UnexpectedEof
+                | ErrorKind::NotConnected => break,
+                ErrorKind::Interrupted => continue,
+                _ => {
+                    net_error(rt, format!("std::net::read_line failed: {err}"));
+                    return 0;
+                }
             }
         }
     }
