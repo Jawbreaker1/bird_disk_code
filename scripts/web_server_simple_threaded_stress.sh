@@ -72,6 +72,13 @@ if [[ "$ready" -ne 1 ]]; then
   exit 1
 fi
 
+listen_line="$(awk '/web server listening on http:\/\//{print; exit}' "$LOG" || true)"
+if [[ -n "${listen_line:-}" ]]; then
+  echo "$listen_line"
+else
+  echo "web server listening on $base"
+fi
+
 pids=""
 req_id=0
 

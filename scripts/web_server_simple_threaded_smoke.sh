@@ -60,6 +60,13 @@ if ! curl -fsS "$base/health" >/dev/null 2>&1; then
   exit 1
 fi
 
+listen_line="$(awk '/web server listening on http:\/\//{print; exit}' "$LOG" || true)"
+if [[ -n "${listen_line:-}" ]]; then
+  echo "$listen_line"
+else
+  echo "web server listening on $base"
+fi
+
 # Issue concurrent requests to exercise threaded stream workers.
 pids=""
 for i in $(seq 1 24); do

@@ -45,6 +45,13 @@ if ! curl -fsS "$base/health" >/tmp/web_server_simple_health.out 2>/dev/null; th
   exit 1
 fi
 
+listen_line="$(awk '/web server listening on http:\/\//{print; exit}' "$LOG" || true)"
+if [[ -n "${listen_line:-}" ]]; then
+  echo "$listen_line"
+else
+  echo "web server listening on $base"
+fi
+
 expect_status() {
   local method="$1"
   local path="$2"
