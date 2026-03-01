@@ -594,6 +594,13 @@ mod tests {
     }
 
     #[test]
+    fn eval_std_webfiles_helpers() {
+        let source = "import std::webfiles.\nimport std::string.\n\nrule main() -> i64:\n  set root0: string = std::webfiles::example_root_from_cwd(\"/repo/examples/web_server_simple\").\n  set root1: string = std::webfiles::example_root_from_cwd(\"/repo/examples\").\n  set root2: string = std::webfiles::example_root_from_cwd(\"/repo\").\n  set conf: string = std::webfiles::config_path_from_example_root(\"examples/web_server_simple/\").\n  set pub: string = std::webfiles::public_root_from_example_root(\"examples/web_server_simple/\").\n  set file_path: string = std::webfiles::public_file_path_from_example_root(\"examples/web_server_simple/\", \"index.html\").\n  when std::string::eq(root0, \"\") && std::string::eq(root1, \"web_server_simple/\") && std::string::eq(root2, \"examples/web_server_simple/\") && std::string::eq(conf, \"examples/web_server_simple/web_server_simple.conf\") && std::string::eq(pub, \"examples/web_server_simple/public/\") && std::string::eq(file_path, \"examples/web_server_simple/public/index.html\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_module_source(source, "webfiles_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn eval_std_http_timeout_errors() {
         let Some((port, server)) = spawn_tcp_server_once(|stream| {
             std::thread::sleep(Duration::from_millis(120));

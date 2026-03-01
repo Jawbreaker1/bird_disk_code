@@ -695,6 +695,15 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_std_webfiles_import_via_module_resolution() {
+        let source = "import std::webfiles.\nimport std::string.\n\nrule main() -> i64:\n  set root: string = std::webfiles::example_root_from_cwd(\"/repo\").\n  set public: string = std::webfiles::public_root_from_example_root(root).\n  when std::string::contains(public, \"examples/web_server_simple/public/\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_webfiles", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn typecheck_accepts_std_thread_spawn_join() {
         let diags = check(
             "import std::thread.\nrule worker(value: i64) -> i64:\n  yield value + 1.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 2).\n  yield std::thread::join(t).\nend\n",

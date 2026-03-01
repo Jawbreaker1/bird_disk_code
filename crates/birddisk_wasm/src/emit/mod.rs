@@ -706,6 +706,16 @@ mod tests {
     }
 
     #[test]
+    fn wasm_runs_std_webfiles_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::webfiles.\nimport std::string.\n\nrule main() -> i64:\n  set root: string = std::webfiles::example_root_from_cwd(\"/repo/examples\").\n  set pub: string = std::webfiles::public_root_from_example_root(\"examples/web_server_simple/\").\n  set conf: string = std::webfiles::config_path_from_example_root(\"examples/web_server_simple/\").\n  when std::string::eq(root, \"web_server_simple/\") && std::string::eq(pub, \"examples/web_server_simple/public/\") && std::string::eq(conf, \"examples/web_server_simple/web_server_simple.conf\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_webfiles_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn wasm_runs_enum_match() {
         let result = compile_and_run(
             "enum Choice:\n  case One.\n  case Two(value: i64).\nend\n\nrule main() -> i64:\n  set value: Choice = Choice::Two(9).\n  match value:\n    case Choice::One:\n      yield 1.\n    case Choice::Two(v):\n      yield v + 1.\n    otherwise:\n      yield 0.\n  end\nend\n",

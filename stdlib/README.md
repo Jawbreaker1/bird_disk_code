@@ -57,6 +57,17 @@ Modules (BirdDisk)
   - max_requests(text) -> i64
   - mode(text) -> string
   - workers(text) -> i64
+- std::webfiles
+  - example_root_from_cwd(cwd) -> string
+  - example_root() -> string
+  - public_root_from_example_root(root) -> string
+  - config_path_from_example_root(root) -> string
+  - public_file_path_from_example_root(root, file_name) -> string
+  - public_root() -> string
+  - config_path() -> string
+  - config_text() -> string
+  - public_file_path(file_name) -> string
+  - read_public_file(file_name) -> string
 
 Runtime modules (implemented in Rust)
 - std::string

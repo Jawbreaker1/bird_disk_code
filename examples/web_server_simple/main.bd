@@ -1,39 +1,10 @@
-import std::env.
-import std::fs.
 import std::io.
 import std::net.
 import std::string.
 import std::thread.
 import std::web.
 import std::webconfig.
-
-rule example_root() -> string:
-  set cwd: string = std::env::cwd().
-  when std::string::contains(cwd, "/examples/web_server_simple"):
-    yield "".
-  otherwise:
-    when std::string::contains(cwd, "/examples"):
-      yield "web_server_simple/".
-    otherwise:
-      yield "examples/web_server_simple/".
-    end
-  end
-end
-
-rule public_root() -> string:
-  yield std::string::concat(example_root(), "public/").
-end
-
-rule config_text() -> string:
-  set path: string = std::string::concat(example_root(), "web_server_simple.conf").
-  yield std::fs::read_text(path).
-end
-
-rule read_public_file(file_name: string) -> string:
-  set base: string = public_root().
-  set full: string = std::string::concat(base, file_name).
-  yield std::fs::read_text(full).
-end
+import std::webfiles.
 
 rule serve_static_route_stream(stream: TcpStream, route: i64) -> i64:
   set status: i64 = 200.
@@ -51,7 +22,7 @@ rule serve_static_route_stream(stream: TcpStream, route: i64) -> i64:
 
   set body: string = "".
   try:
-    put body = read_public_file(file_name).
+    put body = std::webfiles::read_public_file(file_name).
   catch read_error:
     put status = 500.
     put reason = "Internal Server Error".
@@ -96,7 +67,7 @@ rule serve_request_inline(stream: TcpStream, method: string, path: string, serve
           when std::string::len(file_name) > 0:
             try:
               put content_type = std::web::content_type_for_file(file_name).
-              put body = read_public_file(file_name).
+              put body = std::webfiles::read_public_file(file_name).
             catch read_error:
               put status = 500.
               put reason = "Internal Server Error".
@@ -108,7 +79,7 @@ rule serve_request_inline(stream: TcpStream, method: string, path: string, serve
             put reason = "Not Found".
             put content_type = "text/html; charset=utf-8".
             try:
-              put body = read_public_file("404.html").
+              put body = std::webfiles::read_public_file("404.html").
             catch missing_error:
               put content_type = "text/plain; charset=utf-8".
               put body = "not found\n".
@@ -140,7 +111,7 @@ rule serve_request_inline(stream: TcpStream, method: string, path: string, serve
 end
 
 rule main() -> i64:
-  set cfg: string = config_text().
+  set cfg: string = std::webfiles::config_text().
   set host: string = std::webconfig::host(cfg).
   set port: i64 = std::webconfig::port(cfg).
   set max_requests: i64 = std::webconfig::max_requests(cfg).

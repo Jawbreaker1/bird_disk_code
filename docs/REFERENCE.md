@@ -339,6 +339,21 @@ See `docs/DIAGNOSTICS.md` for full error list.
   - Provides defaults for `mode` (`single`) and `workers` (`4`).
   - Validates that `mode` is `single|threaded` and `workers > 0`.
 
+### std::webfiles (BirdDisk module)
+- `example_root_from_cwd(cwd: string) -> string`
+- `example_root() -> string`
+- `public_root_from_example_root(root: string) -> string`
+- `config_path_from_example_root(root: string) -> string`
+- `public_file_path_from_example_root(root: string, file_name: string) -> string`
+- `public_root() -> string`
+- `config_path() -> string`
+- `config_text() -> string`
+- `public_file_path(file_name: string) -> string`
+- `read_public_file(file_name: string) -> string`
+- Current scope:
+  - Shared path and file-loading helpers for the native/VM web server example.
+  - Adapts paths based on current working directory conventions used in this repository.
+
 ### std::math (BirdDisk module)
 - `add(a: i64, b: i64) -> i64`
 - `sub(a: i64, b: i64) -> i64`

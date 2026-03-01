@@ -1,0 +1,58 @@
+import std::env.
+import std::fs.
+import std::string.
+
+rule example_root_from_cwd(cwd: string) -> string:
+  when std::string::contains(cwd, "/examples/web_server_simple"):
+    yield "".
+  otherwise:
+    when std::string::contains(cwd, "/examples"):
+      yield "web_server_simple/".
+    otherwise:
+      yield "examples/web_server_simple/".
+    end
+  end
+end
+
+rule example_root() -> string:
+  set cwd: string = std::env::cwd().
+  yield example_root_from_cwd(cwd).
+end
+
+rule public_root_from_example_root(root: string) -> string:
+  yield std::string::concat(root, "public/").
+end
+
+rule config_path_from_example_root(root: string) -> string:
+  yield std::string::concat(root, "web_server_simple.conf").
+end
+
+rule public_file_path_from_example_root(root: string, file_name: string) -> string:
+  set base: string = public_root_from_example_root(root).
+  yield std::string::concat(base, file_name).
+end
+
+rule public_root() -> string:
+  set root: string = example_root().
+  yield public_root_from_example_root(root).
+end
+
+rule config_path() -> string:
+  set root: string = example_root().
+  yield config_path_from_example_root(root).
+end
+
+rule config_text() -> string:
+  set path: string = config_path().
+  yield std::fs::read_text(path).
+end
+
+rule public_file_path(file_name: string) -> string:
+  set root: string = example_root().
+  yield public_file_path_from_example_root(root, file_name).
+end
+
+rule read_public_file(file_name: string) -> string:
+  set path: string = public_file_path(file_name).
+  yield std::fs::read_text(path).
+end
