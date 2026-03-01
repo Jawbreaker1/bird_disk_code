@@ -1,0 +1,15 @@
+rule read_text(path: string) -> string:
+  yield std::fs::host_read_text(path).
+end
+
+rule write_text(path: string, text: string) -> i64:
+  yield std::fs::host_write_text(path, text).
+end
+
+rule read_bytes(path: string) -> u8[]:
+  yield std::fs::host_read_bytes(path).
+end
+
+rule write_bytes(path: string, bytes: u8[]) -> i64:
+  yield std::fs::host_write_bytes(path, bytes).
+end

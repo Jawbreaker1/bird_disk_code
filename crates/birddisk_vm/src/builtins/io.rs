@@ -9,7 +9,7 @@ impl<'a> Vm<'a> {
         args: &[Value],
     ) -> Result<Option<Value>, RuntimeError> {
         match name {
-            "std::io::print" => {
+            "std::io::print" | "std::io::host_print" => {
                 if args.len() != 1 {
                     return Err(runtime_error("E0400", "std::io::print expects 1 argument"));
                 }
@@ -25,7 +25,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::io::read_line" => {
+            "std::io::read_line" | "std::io::host_read_line" => {
                 if !args.is_empty() {
                     return Err(runtime_error(
                         "E0400",

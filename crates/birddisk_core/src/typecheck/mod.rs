@@ -7,6 +7,7 @@ mod stmt;
 use crate::ast::{Program, Stmt, Type};
 use crate::diagnostics::{diagnostic, Diagnostic, Edit, FixIt, Position, Span};
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Ty {
@@ -89,6 +90,7 @@ struct Checker<'a> {
     enums: HashMap<String, EnumInfo>,
     scopes: Vec<HashMap<String, Ty>>,
     current_return: Ty,
+    current_function_file: String,
 }
 
 impl<'a> Checker<'a> {
@@ -102,6 +104,7 @@ impl<'a> Checker<'a> {
             enums: HashMap::new(),
             scopes: Vec::new(),
             current_return: Ty::Unknown,
+            current_function_file: file.to_string(),
         }
     }
 
@@ -190,6 +193,11 @@ impl<'a> Checker<'a> {
         self.scopes.clear();
         self.push_scope();
         self.current_return = self.type_from_ast(function.return_type.clone());
+        self.current_function_file = if function.file.is_empty() {
+            self.file.to_string()
+        } else {
+            function.file.clone()
+        };
 
         for param in &function.params {
             if self.scopes[0].contains_key(&param.name) {
@@ -246,6 +254,26 @@ impl<'a> Checker<'a> {
 
     fn pop_scope(&mut self) {
         self.scopes.pop();
+    }
+
+    fn current_file_path(&self) -> &str {
+        if self.current_function_file.is_empty() {
+            self.file
+        } else {
+            &self.current_function_file
+        }
+    }
+
+    fn current_file_is_stdlib(&self) -> bool {
+        is_stdlib_module_file(self.current_file_path())
+    }
+
+    fn is_host_bridge_call(name: &str) -> bool {
+        let mut parts = name.split("::");
+        matches!(
+            (parts.next(), parts.next(), parts.next(), parts.next()),
+            (Some("std"), Some(_module), Some(symbol), None) if symbol.starts_with("host_")
+        )
     }
 
     fn current_scope_mut(&mut self) -> &mut HashMap<String, Ty> {
@@ -358,6 +386,11 @@ impl<'a> Checker<'a> {
         }
         self.validate_value_type(ty, span);
     }
+}
+
+fn is_stdlib_module_file(file: &str) -> bool {
+    let normalized = Path::new(file).to_string_lossy().replace('\\', "/");
+    normalized.starts_with("stdlib/std/") || normalized.contains("/stdlib/std/")
 }
 
 fn type_mismatch(file: &str, span: Span, expected: Ty, actual: Ty) -> Diagnostic {
@@ -473,7 +506,7 @@ fn stmt_always_yields(stmt: &Stmt) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{lexer, parse_and_typecheck, parser};
+    use crate::parse_and_typecheck;
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -481,9 +514,13 @@ mod tests {
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     fn check(source: &str) -> Vec<Diagnostic> {
-        let tokens = lexer::lex(source).unwrap();
-        let program = parser::parse(&tokens).unwrap();
-        typecheck(&program, "test.bd")
+        let path = write_repo_temp("typecheck_inline", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        match result {
+            Ok(_) => Vec::new(),
+            Err(diags) => diags,
+        }
     }
 
     fn fixture_path(rel: &str) -> PathBuf {
@@ -500,6 +537,15 @@ mod tests {
         path.push(format!("tmp_{name}_{}_{}.bd", std::process::id(), id));
         fs::write(&path, source).unwrap();
         path
+    }
+
+    fn write_stdlib_temp(name: &str, source: &str) -> (String, PathBuf) {
+        let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let module_name = format!("tmp_{name}_{}_{}", std::process::id(), id);
+        let mut path = fixture_path("stdlib/std");
+        path.push(format!("{module_name}.bd"));
+        fs::write(&path, source).unwrap();
+        (module_name, path)
     }
 
     #[test]
@@ -677,6 +723,32 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_rejects_host_bridge_calls_in_user_modules() {
+        let diags = check(
+            "import std::env.\n\nrule main() -> i64:\n  set value: string = std::env::host_get(\"HOME\").\n  yield 0.\nend\n",
+        );
+        assert!(diags.iter().any(|d| {
+            d.code == "E0303" && d.message.contains("internal to stdlib modules")
+        }));
+    }
+
+    #[test]
+    fn typecheck_allows_host_bridge_calls_inside_stdlib_modules() {
+        let (module_name, module_path) = write_stdlib_temp(
+            "host_bridge_allowed",
+            "import std::env.\n\nrule bridge_ok() -> i64:\n  set ignored: string = std::env::host_get(\"HOME\").\n  yield 1.\nend\n",
+        );
+        let source = format!(
+            "import std::{module_name}.\n\nrule main() -> i64:\n  yield std::{module_name}::bridge_ok().\nend\n"
+        );
+        let entry_path = write_repo_temp("host_bridge_allowed_entry", &source);
+        let result = parse_and_typecheck(entry_path.to_str().unwrap());
+        fs::remove_file(entry_path).ok();
+        fs::remove_file(module_path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn typecheck_accepts_std_web_import_via_module_resolution() {
         let source = "import std::web.\nimport std::string.\n\nrule main() -> i64:\n  set req: string = \"GET /features HTTP/1.1\".\n  set path: string = std::web::route_path(req).\n  set file: string = std::web::route_file(path).\n  set response: string = std::web::build_response(200, \"OK\", \"text/plain; charset=utf-8\", \"hi\").\n  when std::string::eq(file, \"features.html\") && std::string::contains(response, \"HTTP/1.1 200 OK\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
         let path = write_repo_temp("typecheck_std_web", source);
@@ -707,6 +779,69 @@ mod tests {
     fn typecheck_accepts_std_path_import_via_module_resolution() {
         let source = "import std::path.\nimport std::string.\n\nrule main() -> i64:\n  set joined: string = std::path::join(\"alpha\", \"beta\").\n  set norm: string = std::path::normalize(\"alpha/./beta/../gamma\").\n  set base: string = std::path::basename(norm).\n  set dir: string = std::path::dirname(joined).\n  when std::string::eq(base, \"gamma\") && std::string::eq(dir, \"alpha\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
         let path = write_repo_temp("typecheck_std_path", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_fs_import_via_module_resolution() {
+        let source = "import std::fs.\nimport std::string.\n\nrule main() -> i64:\n  set text: string = std::fs::read_text(\"tests/stdlib/fs_text.txt\").\n  when std::string::eq(text, \"BirdDisk\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_fs", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_rand_import_via_module_resolution() {
+        let source = "import std::rand.\n\nrule main() -> i64:\n  std::rand::seed(123).\n  set value: i64 = std::rand::range(0, 10).\n  when value >= 0 && value < 10:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_rand", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_time_import_via_module_resolution() {
+        let source = "import std::time.\n\nrule main() -> i64:\n  set before: i64 = std::time::now_ms().\n  set slept: i64 = std::time::sleep_ms(0).\n  set after: i64 = std::time::now_ms().\n  when slept == 0 && after >= before:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_time", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_profiler_import_via_module_resolution() {
+        let source = "import std::profiler.\n\nrule main() -> i64:\n  set up: i64 = std::profiler::uptime_ms().\n  set allocs: i64 = std::profiler::alloc_count().\n  when up >= 0 && allocs >= 0:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_profiler", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_io_import_via_module_resolution() {
+        let source = "import std::io.\n\nrule main() -> i64:\n  std::io::print(\"ok\").\n  yield 1.\nend\n";
+        let path = write_repo_temp("typecheck_std_io_mod", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_env_import_via_module_resolution() {
+        let source = "import std::env.\nimport std::string.\n\nrule main() -> i64:\n  set ignored: i64 = std::env::set_var(\"BIRDDISK_TYPECHECK_ENV\", \"ok\").\n  set value: string = std::env::get(\"BIRDDISK_TYPECHECK_ENV\").\n  when ignored == 1 && std::string::eq(value, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_env", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn typecheck_accepts_std_net_import_via_module_resolution() {
+        let source = "import std::net.\n\nrule main() -> i64:\n  set listener: TcpListener = std::net::listen(\"127.0.0.1:0\").\n  set addr: string = std::net::listener_addr(listener).\n  set client: TcpStream = std::net::connect(addr).\n  set server: TcpStream = std::net::accept(listener).\n  std::net::close_stream(client).\n  std::net::close_stream(server).\n  std::net::close_listener(listener).\n  yield 1.\nend\n";
+        let path = write_repo_temp("typecheck_std_net_mod", source);
         let result = parse_and_typecheck(path.to_str().unwrap());
         fs::remove_file(path).ok();
         assert!(result.is_ok());

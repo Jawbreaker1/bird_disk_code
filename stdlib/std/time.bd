@@ -1,0 +1,7 @@
+rule now_ms() -> i64:
+  yield std::time::host_now_ms().
+end
+
+rule sleep_ms(ms: i64) -> i64:
+  yield std::time::host_sleep_ms(ms).
+end

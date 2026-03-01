@@ -92,53 +92,61 @@ impl<'a> Checker<'a> {
             self.insert_function("std::bytes::contains", vec![bytes, Ty::U8], Ty::Bool);
         }
         if has_std_io {
-            self.insert_function("std::io::print", vec![Ty::String], Ty::Void);
-            self.insert_function("std::io::read_line", Vec::new(), Ty::String);
+            self.insert_function("std::io::host_print", vec![Ty::String], Ty::Void);
+            self.insert_function("std::io::host_read_line", Vec::new(), Ty::String);
         }
         if has_std_time {
-            self.insert_function("std::time::now_ms", Vec::new(), Ty::I64);
-            self.insert_function("std::time::sleep_ms", vec![Ty::I64], Ty::I64);
+            self.insert_function("std::time::host_now_ms", Vec::new(), Ty::I64);
+            self.insert_function("std::time::host_sleep_ms", vec![Ty::I64], Ty::I64);
         }
         if has_std_profiler {
-            self.insert_function("std::profiler::uptime_ms", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::alloc_count", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::bytes_allocated", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::bytes_in_use", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::peak_bytes_in_use", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::gc_runs", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::last_freed", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::last_live", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::last_freed_bytes", Vec::new(), Ty::I64);
-            self.insert_function("std::profiler::last_live_bytes", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_uptime_ms", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_alloc_count", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_bytes_allocated", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_bytes_in_use", Vec::new(), Ty::I64);
+            self.insert_function(
+                "std::profiler::host_peak_bytes_in_use",
+                Vec::new(),
+                Ty::I64,
+            );
+            self.insert_function("std::profiler::host_gc_runs", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_last_freed", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_last_live", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_last_freed_bytes", Vec::new(), Ty::I64);
+            self.insert_function("std::profiler::host_last_live_bytes", Vec::new(), Ty::I64);
         }
         if has_std_fs {
-            self.insert_function("std::fs::read_text", vec![Ty::String], Ty::String);
-            self.insert_function("std::fs::write_text", vec![Ty::String, Ty::String], Ty::I64);
+            self.insert_function("std::fs::host_read_text", vec![Ty::String], Ty::String);
             self.insert_function(
-                "std::fs::read_bytes",
+                "std::fs::host_write_text",
+                vec![Ty::String, Ty::String],
+                Ty::I64,
+            );
+            self.insert_function(
+                "std::fs::host_read_bytes",
                 vec![Ty::String],
                 Ty::Array(Box::new(Ty::U8)),
             );
             self.insert_function(
-                "std::fs::write_bytes",
+                "std::fs::host_write_bytes",
                 vec![Ty::String, Ty::Array(Box::new(Ty::U8))],
                 Ty::I64,
             );
         }
         if has_std_env {
             self.insert_function(
-                "std::env::args",
+                "std::env::host_args",
                 Vec::new(),
                 Ty::Array(Box::new(Ty::String)),
             );
-            self.insert_function("std::env::get", vec![Ty::String], Ty::String);
-            self.insert_function("std::env::set_var", vec![Ty::String, Ty::String], Ty::I64);
-            self.insert_function("std::env::cwd", Vec::new(), Ty::String);
-            self.insert_function("std::env::set_cwd", vec![Ty::String], Ty::I64);
+            self.insert_function("std::env::host_get", vec![Ty::String], Ty::String);
+            self.insert_function("std::env::host_set_var", vec![Ty::String, Ty::String], Ty::I64);
+            self.insert_function("std::env::host_cwd", Vec::new(), Ty::String);
+            self.insert_function("std::env::host_set_cwd", vec![Ty::String], Ty::I64);
         }
         if has_std_rand {
-            self.insert_function("std::rand::seed", vec![Ty::I64], Ty::Void);
-            self.insert_function("std::rand::range", vec![Ty::I64, Ty::I64], Ty::I64);
+            self.insert_function("std::rand::host_seed", vec![Ty::I64], Ty::Void);
+            self.insert_function("std::rand::host_range", vec![Ty::I64, Ty::I64], Ty::I64);
         }
         if has_std_channel {
             self.register_channel_stdlib();
@@ -250,72 +258,72 @@ impl<'a> Checker<'a> {
             );
         }
         self.insert_function(
-            "std::net::connect",
+            "std::net::host_connect",
             vec![Ty::String],
             Ty::Book("TcpStream".to_string()),
         );
         self.insert_function(
-            "std::net::listen",
+            "std::net::host_listen",
             vec![Ty::String],
             Ty::Book("TcpListener".to_string()),
         );
         self.insert_function(
-            "std::net::listener_addr",
+            "std::net::host_listener_addr",
             vec![Ty::Book("TcpListener".to_string())],
             Ty::String,
         );
         self.insert_function(
-            "std::net::accept",
+            "std::net::host_accept",
             vec![Ty::Book("TcpListener".to_string())],
             Ty::Book("TcpStream".to_string()),
         );
         self.insert_function(
-            "std::net::write_text",
+            "std::net::host_write_text",
             vec![Ty::Book("TcpStream".to_string()), Ty::String],
             Ty::I64,
         );
         self.insert_function(
-            "std::net::read_line",
+            "std::net::host_read_line",
             vec![Ty::Book("TcpStream".to_string())],
             Ty::String,
         );
         self.insert_function(
-            "std::net::read_exact",
+            "std::net::host_read_exact",
             vec![Ty::Book("TcpStream".to_string()), Ty::I64],
             Ty::String,
         );
         self.insert_function(
-            "std::net::read_to_end",
+            "std::net::host_read_to_end",
             vec![Ty::Book("TcpStream".to_string())],
             Ty::String,
         );
         self.insert_function(
-            "std::net::set_read_timeout_ms",
+            "std::net::host_set_read_timeout_ms",
             vec![Ty::Book("TcpStream".to_string()), Ty::I64],
             Ty::I64,
         );
         self.insert_function(
-            "std::net::close_stream",
+            "std::net::host_close_stream",
             vec![Ty::Book("TcpStream".to_string())],
             Ty::Void,
         );
         self.insert_function(
-            "std::net::close_listener",
+            "std::net::host_close_listener",
             vec![Ty::Book("TcpListener".to_string())],
             Ty::Void,
         );
         self.insert_function(
-            "std::net::pool",
+            "std::net::host_pool",
             vec![Ty::String, Ty::I64],
             Ty::Book("TcpPool".to_string()),
         );
         self.insert_function(
-            "std::net::pool_get",
+            "std::net::host_pool_get",
             vec![Ty::Book("TcpPool".to_string())],
             Ty::Book("TcpStream".to_string()),
         );
         self.insert_function(
-            "std::net::pool_put",
+            "std::net::host_pool_put",
             vec![
                 Ty::Book("TcpPool".to_string()),
                 Ty::Book("TcpStream".to_string()),
@@ -323,7 +331,7 @@ impl<'a> Checker<'a> {
             Ty::Bool,
         );
         self.insert_function(
-            "std::net::pool_close",
+            "std::net::host_pool_close",
             vec![Ty::Book("TcpPool".to_string())],
             Ty::Void,
         );

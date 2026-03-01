@@ -9,7 +9,7 @@ impl<'a> Vm<'a> {
         args: &[Value],
     ) -> Result<Option<Value>, RuntimeError> {
         match name {
-            "std::time::now_ms" => {
+            "std::time::now_ms" | "std::time::host_now_ms" => {
                 if !args.is_empty() {
                     return Err(runtime_error(
                         "E0400",
@@ -18,7 +18,7 @@ impl<'a> Vm<'a> {
                 }
                 Ok(Some(Value::I64(self.now_ms())))
             }
-            "std::time::sleep_ms" => {
+            "std::time::sleep_ms" | "std::time::host_sleep_ms" => {
                 if args.len() != 1 {
                     return Err(runtime_error(
                         "E0400",

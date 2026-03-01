@@ -726,6 +726,67 @@ mod tests {
     }
 
     #[test]
+    fn wasm_runs_std_fs_helpers_module() {
+        let path = repo_root().join("tests/stdlib/fs_text.txt");
+        let path = path.to_string_lossy().replace('\\', "\\\\");
+        let source = format!(
+            "import std::fs.\nimport std::string.\n\nrule main() -> i64:\n  set text: string = std::fs::read_text(\"{path}\").\n  when std::string::eq(text, \"BirdDisk\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+        );
+        let result = compile_and_run_module(&source, "wasm_fs_helpers").unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_rand_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::rand.\n\nrule main() -> i64:\n  std::rand::seed(123).\n  set a: i64 = std::rand::range(0, 10).\n  set b: i64 = std::rand::range(-5, 5).\n  when a == 5 && b == 1:\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n",
+            "wasm_rand_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_time_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::time.\n\nrule main() -> i64:\n  set before: i64 = std::time::now_ms().\n  set slept: i64 = std::time::sleep_ms(0).\n  set after: i64 = std::time::now_ms().\n  when slept == 0 && after >= before:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_time_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_profiler_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::profiler.\n\nrule main() -> i64:\n  set up: i64 = std::profiler::uptime_ms().\n  set allocs: i64 = std::profiler::alloc_count().\n  when up >= 0 && allocs >= 0:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_profiler_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_io_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::io.\n\nrule main() -> i64:\n  std::io::print(\"ok\").\n  yield 1.\nend\n",
+            "wasm_io_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn wasm_runs_std_env_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::env.\nimport std::string.\n\nrule main() -> i64:\n  set ignored: i64 = std::env::set_var(\"BIRDDISK_STD_ENV_WASM\", \"ok\").\n  set value: string = std::env::get(\"BIRDDISK_STD_ENV_WASM\").\n  when ignored == 1 && std::string::eq(value, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_env_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn wasm_runs_std_test_helpers_module() {
         let result = compile_and_run_module(
             "import std::test.\nimport std::string.\n\nrule main() -> i64:\n  std::test::assert(true, \"expected true\").\n  std::test::assert_eq_i64(2 + 3, 5, \"i64 match\").\n  std::test::assert_eq_bool(true, true, \"bool match\").\n  set left: string = \"hi\".\n  set right: string = std::string::concat(\"h\", \"i\").\n  std::test::assert_eq_string(left, right, \"string match\").\n  yield 1.\nend\n",

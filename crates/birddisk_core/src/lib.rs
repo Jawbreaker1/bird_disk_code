@@ -198,15 +198,9 @@ fn is_builtin_std_module(path: &[String]) -> bool {
             if root == "std"
                 && (module == "string"
                     || module == "bytes"
-                    || module == "io"
-                    || module == "time"
-                    || module == "profiler"
-                    || module == "rand"
-                    || module == "fs"
-                    || module == "env"
                     || module == "thread"
                     || module == "channel"
-                    || module == "net")
+                    )
     )
 }
 
@@ -224,6 +218,18 @@ fn stdlib_root_from(start: &Path) -> Option<PathBuf> {
         current = dir.parent();
     }
     None
+}
+
+fn project_root_from_cwd() -> Option<PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| project_root_from_entry(&cwd))
+}
+
+fn stdlib_root_from_cwd() -> Option<PathBuf> {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| stdlib_root_from(&cwd))
 }
 
 fn stdlib_import_diagnostic(file: &str, span: Span, message: impl Into<String>) -> Diagnostic {
@@ -365,7 +371,8 @@ impl<'a> ModuleLoader<'a> {
         let project_root = config
             .project_root
             .clone()
-            .or_else(|| project_root_from_entry(entry_path));
+            .or_else(|| project_root_from_entry(entry_path))
+            .or_else(project_root_from_cwd);
         Self {
             entry_file,
             entry_path,
@@ -373,7 +380,8 @@ impl<'a> ModuleLoader<'a> {
             stdlib_root: project_root
                 .as_deref()
                 .and_then(stdlib_root_from)
-                .or_else(|| stdlib_root_from(entry_path)),
+                .or_else(|| stdlib_root_from(entry_path))
+                .or_else(stdlib_root_from_cwd),
             dep_roots: config.dep_roots.clone(),
             loaded: HashSet::new(),
             enums: Vec::new(),

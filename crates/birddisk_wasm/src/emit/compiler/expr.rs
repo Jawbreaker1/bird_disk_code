@@ -901,7 +901,7 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_io_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
-            "std::io::print" => {
+            "std::io::print" | "std::io::host_print" => {
                 if args.len() != 1 {
                     return Err(wasm_error("E0400", "std::io::print expects 1 argument"));
                 }
@@ -911,7 +911,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_io_print");
                 Ok(true)
             }
-            "std::io::read_line" => {
+            "std::io::read_line" | "std::io::host_read_line" => {
                 if !args.is_empty() {
                     return Err(wasm_error(
                         "E0400",
@@ -927,14 +927,14 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_time_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
-            "std::time::now_ms" => {
+            "std::time::now_ms" | "std::time::host_now_ms" => {
                 if !args.is_empty() {
                     return Err(wasm_error("E0400", "std::time::now_ms expects 0 arguments"));
                 }
                 self.push_line("call $bd_time_now_ms");
                 Ok(true)
             }
-            "std::time::sleep_ms" => {
+            "std::time::sleep_ms" | "std::time::host_sleep_ms" => {
                 if args.len() != 1 {
                     return Err(wasm_error(
                         "E0400",
@@ -962,20 +962,36 @@ impl<'a> FuncCompiler<'a> {
             ));
         }
         match name {
-            "std::profiler::uptime_ms" => self.push_line("call $bd_profiler_uptime_ms"),
-            "std::profiler::alloc_count" => self.push_line("call $bd_profiler_alloc_count"),
-            "std::profiler::bytes_allocated" => self.push_line("call $bd_profiler_bytes_allocated"),
-            "std::profiler::bytes_in_use" => self.push_line("call $bd_profiler_bytes_in_use"),
-            "std::profiler::peak_bytes_in_use" => {
+            "std::profiler::uptime_ms" | "std::profiler::host_uptime_ms" => {
+                self.push_line("call $bd_profiler_uptime_ms")
+            }
+            "std::profiler::alloc_count" | "std::profiler::host_alloc_count" => {
+                self.push_line("call $bd_profiler_alloc_count")
+            }
+            "std::profiler::bytes_allocated" | "std::profiler::host_bytes_allocated" => {
+                self.push_line("call $bd_profiler_bytes_allocated")
+            }
+            "std::profiler::bytes_in_use" | "std::profiler::host_bytes_in_use" => {
+                self.push_line("call $bd_profiler_bytes_in_use")
+            }
+            "std::profiler::peak_bytes_in_use" | "std::profiler::host_peak_bytes_in_use" => {
                 self.push_line("call $bd_profiler_peak_bytes_in_use")
             }
-            "std::profiler::gc_runs" => self.push_line("call $bd_profiler_gc_runs"),
-            "std::profiler::last_freed" => self.push_line("call $bd_profiler_last_freed"),
-            "std::profiler::last_live" => self.push_line("call $bd_profiler_last_live"),
-            "std::profiler::last_freed_bytes" => {
+            "std::profiler::gc_runs" | "std::profiler::host_gc_runs" => {
+                self.push_line("call $bd_profiler_gc_runs")
+            }
+            "std::profiler::last_freed" | "std::profiler::host_last_freed" => {
+                self.push_line("call $bd_profiler_last_freed")
+            }
+            "std::profiler::last_live" | "std::profiler::host_last_live" => {
+                self.push_line("call $bd_profiler_last_live")
+            }
+            "std::profiler::last_freed_bytes" | "std::profiler::host_last_freed_bytes" => {
                 self.push_line("call $bd_profiler_last_freed_bytes")
             }
-            "std::profiler::last_live_bytes" => self.push_line("call $bd_profiler_last_live_bytes"),
+            "std::profiler::last_live_bytes" | "std::profiler::host_last_live_bytes" => {
+                self.push_line("call $bd_profiler_last_live_bytes")
+            }
             _ => return Ok(false),
         }
         Ok(true)
@@ -983,7 +999,7 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_rand_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
-            "std::rand::seed" => {
+            "std::rand::seed" | "std::rand::host_seed" => {
                 if args.len() != 1 {
                     return Err(wasm_error("E0400", "std::rand::seed expects 1 argument"));
                 }
@@ -993,7 +1009,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_rand_seed");
                 Ok(true)
             }
-            "std::rand::range" => {
+            "std::rand::range" | "std::rand::host_range" => {
                 if args.len() != 2 {
                     return Err(wasm_error("E0400", "std::rand::range expects 2 arguments"));
                 }
@@ -1097,7 +1113,7 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_fs_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
-            "std::fs::read_text" => {
+            "std::fs::read_text" | "std::fs::host_read_text" => {
                 if args.len() != 1 {
                     return Err(wasm_error("E0400", "std::fs::read_text expects 1 argument"));
                 }
@@ -1107,7 +1123,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_fs_read_text");
                 Ok(true)
             }
-            "std::fs::write_text" => {
+            "std::fs::write_text" | "std::fs::host_write_text" => {
                 if args.len() != 2 {
                     return Err(wasm_error(
                         "E0400",
@@ -1121,7 +1137,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_fs_write_text");
                 Ok(true)
             }
-            "std::fs::read_bytes" => {
+            "std::fs::read_bytes" | "std::fs::host_read_bytes" => {
                 if args.len() != 1 {
                     return Err(wasm_error(
                         "E0400",
@@ -1134,7 +1150,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_fs_read_bytes");
                 Ok(true)
             }
-            "std::fs::write_bytes" => {
+            "std::fs::write_bytes" | "std::fs::host_write_bytes" => {
                 if args.len() != 2 {
                     return Err(wasm_error(
                         "E0400",
@@ -1339,14 +1355,14 @@ impl<'a> FuncCompiler<'a> {
 
     fn emit_env_call(&mut self, name: &str, args: &[Expr]) -> Result<bool, WasmError> {
         match name {
-            "std::env::args" => {
+            "std::env::args" | "std::env::host_args" => {
                 if !args.is_empty() {
                     return Err(wasm_error("E0400", "std::env::args expects 0 arguments"));
                 }
                 self.push_line("call $bd_env_args");
                 Ok(true)
             }
-            "std::env::get" => {
+            "std::env::get" | "std::env::host_get" => {
                 if args.len() != 1 {
                     return Err(wasm_error("E0400", "std::env::get expects 1 argument"));
                 }
@@ -1356,7 +1372,7 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_env_get");
                 Ok(true)
             }
-            "std::env::set_var" => {
+            "std::env::set_var" | "std::env::host_set_var" => {
                 if args.len() != 2 {
                     return Err(wasm_error("E0400", "std::env::set_var expects 2 arguments"));
                 }
@@ -1367,14 +1383,14 @@ impl<'a> FuncCompiler<'a> {
                 self.push_line("call $bd_env_set");
                 Ok(true)
             }
-            "std::env::cwd" => {
+            "std::env::cwd" | "std::env::host_cwd" => {
                 if !args.is_empty() {
                     return Err(wasm_error("E0400", "std::env::cwd expects 0 arguments"));
                 }
                 self.push_line("call $bd_env_cwd");
                 Ok(true)
             }
-            "std::env::set_cwd" => {
+            "std::env::set_cwd" | "std::env::host_set_cwd" => {
                 if args.len() != 1 {
                     return Err(wasm_error("E0400", "std::env::set_cwd expects 1 argument"));
                 }
@@ -1581,34 +1597,59 @@ impl<'a> FuncCompiler<'a> {
             "std::bytes::index_of" => Some(Type::I64),
             "std::bytes::contains" => Some(Type::Bool),
             "std::io::print" => Some(Type::Void),
+            "std::io::host_print" => Some(Type::Void),
             "std::io::read_line" => Some(Type::String),
+            "std::io::host_read_line" => Some(Type::String),
             "std::time::now_ms" => Some(Type::I64),
+            "std::time::host_now_ms" => Some(Type::I64),
             "std::time::sleep_ms" => Some(Type::I64),
+            "std::time::host_sleep_ms" => Some(Type::I64),
             "std::profiler::uptime_ms" => Some(Type::I64),
+            "std::profiler::host_uptime_ms" => Some(Type::I64),
             "std::profiler::alloc_count" => Some(Type::I64),
+            "std::profiler::host_alloc_count" => Some(Type::I64),
             "std::profiler::bytes_allocated" => Some(Type::I64),
+            "std::profiler::host_bytes_allocated" => Some(Type::I64),
             "std::profiler::bytes_in_use" => Some(Type::I64),
+            "std::profiler::host_bytes_in_use" => Some(Type::I64),
             "std::profiler::peak_bytes_in_use" => Some(Type::I64),
+            "std::profiler::host_peak_bytes_in_use" => Some(Type::I64),
             "std::profiler::gc_runs" => Some(Type::I64),
+            "std::profiler::host_gc_runs" => Some(Type::I64),
             "std::profiler::last_freed" => Some(Type::I64),
+            "std::profiler::host_last_freed" => Some(Type::I64),
             "std::profiler::last_live" => Some(Type::I64),
+            "std::profiler::host_last_live" => Some(Type::I64),
             "std::profiler::last_freed_bytes" => Some(Type::I64),
+            "std::profiler::host_last_freed_bytes" => Some(Type::I64),
             "std::profiler::last_live_bytes" => Some(Type::I64),
+            "std::profiler::host_last_live_bytes" => Some(Type::I64),
             "std::rand::seed" => Some(Type::Void),
+            "std::rand::host_seed" => Some(Type::Void),
             "std::rand::range" => Some(Type::I64),
+            "std::rand::host_range" => Some(Type::I64),
             "std::test::assert" => Some(Type::Void),
             "std::test::assert_eq_i64" => Some(Type::Void),
             "std::test::assert_eq_bool" => Some(Type::Void),
             "std::test::assert_eq_string" => Some(Type::Void),
             "std::fs::read_text" => Some(Type::String),
+            "std::fs::host_read_text" => Some(Type::String),
             "std::fs::write_text" => Some(Type::I64),
+            "std::fs::host_write_text" => Some(Type::I64),
             "std::fs::read_bytes" => Some(Type::Array(Box::new(Type::U8))),
+            "std::fs::host_read_bytes" => Some(Type::Array(Box::new(Type::U8))),
             "std::fs::write_bytes" => Some(Type::I64),
+            "std::fs::host_write_bytes" => Some(Type::I64),
             "std::env::args" => Some(Type::Array(Box::new(Type::String))),
+            "std::env::host_args" => Some(Type::Array(Box::new(Type::String))),
             "std::env::get" => Some(Type::String),
+            "std::env::host_get" => Some(Type::String),
             "std::env::set_var" => Some(Type::I64),
+            "std::env::host_set_var" => Some(Type::I64),
             "std::env::cwd" => Some(Type::String),
+            "std::env::host_cwd" => Some(Type::String),
             "std::env::set_cwd" => Some(Type::I64),
+            "std::env::host_set_cwd" => Some(Type::I64),
             "std::path::join" => Some(Type::String),
             "std::path::normalize" => Some(Type::String),
             "std::path::basename" => Some(Type::String),

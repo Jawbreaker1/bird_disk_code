@@ -1,0 +1,39 @@
+rule uptime_ms() -> i64:
+  yield std::profiler::host_uptime_ms().
+end
+
+rule alloc_count() -> i64:
+  yield std::profiler::host_alloc_count().
+end
+
+rule bytes_allocated() -> i64:
+  yield std::profiler::host_bytes_allocated().
+end
+
+rule bytes_in_use() -> i64:
+  yield std::profiler::host_bytes_in_use().
+end
+
+rule peak_bytes_in_use() -> i64:
+  yield std::profiler::host_peak_bytes_in_use().
+end
+
+rule gc_runs() -> i64:
+  yield std::profiler::host_gc_runs().
+end
+
+rule last_freed() -> i64:
+  yield std::profiler::host_last_freed().
+end
+
+rule last_live() -> i64:
+  yield std::profiler::host_last_live().
+end
+
+rule last_freed_bytes() -> i64:
+  yield std::profiler::host_last_freed_bytes().
+end
+
+rule last_live_bytes() -> i64:
+  yield std::profiler::host_last_live_bytes().
+end

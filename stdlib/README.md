@@ -73,6 +73,53 @@ Modules (BirdDisk)
   - normalize(path: string) -> string
   - basename(path: string) -> string
   - dirname(path: string) -> string
+- std::fs
+  - read_text(path: string) -> string
+  - write_text(path: string, text: string) -> i64
+  - read_bytes(path: string) -> u8[]
+  - write_bytes(path: string, bytes: u8[]) -> i64
+- std::env
+  - args() -> string[]
+  - get(name: string) -> string
+  - set_var(name: string, value: string) -> i64
+  - cwd() -> string
+  - set_cwd(path: string) -> i64
+- std::rand
+  - seed(seed: i64) -> void
+  - range(min: i64, max: i64) -> i64
+- std::time
+  - now_ms() -> i64
+  - sleep_ms(ms: i64) -> i64
+- std::io
+  - print(text: string) -> void
+  - read_line() -> string
+- std::net
+  - connect(addr: string) -> TcpStream
+  - listen(addr: string) -> TcpListener
+  - listener_addr(listener: TcpListener) -> string
+  - accept(listener: TcpListener) -> TcpStream
+  - write_text(stream: TcpStream, text: string) -> i64
+  - read_line(stream: TcpStream) -> string
+  - read_exact(stream: TcpStream, len: i64) -> string
+  - read_to_end(stream: TcpStream) -> string
+  - set_read_timeout_ms(stream: TcpStream, timeout_ms: i64) -> i64
+  - close_stream(stream: TcpStream) -> void
+  - close_listener(listener: TcpListener) -> void
+  - pool(addr: string, max_size: i64) -> TcpPool
+  - pool_get(pool: TcpPool) -> TcpStream
+  - pool_put(pool: TcpPool, stream: TcpStream) -> bool
+  - pool_close(pool: TcpPool) -> void
+- std::profiler
+  - uptime_ms() -> i64
+  - alloc_count() -> i64
+  - bytes_allocated() -> i64
+  - bytes_in_use() -> i64
+  - peak_bytes_in_use() -> i64
+  - gc_runs() -> i64
+  - last_freed() -> i64
+  - last_live() -> i64
+  - last_freed_bytes() -> i64
+  - last_live_bytes() -> i64
 - std::test
   - assert(cond: bool, msg: string) -> void
   - assert_eq_i64(a: i64, b: i64, msg: string) -> void
@@ -105,37 +152,9 @@ Runtime modules (implemented in Rust)
   - slice(bytes: u8[], start: i64, len: i64) -> u8[]
   - index_of(bytes: u8[], needle: u8) -> i64
   - contains(bytes: u8[], needle: u8) -> bool
-- std::io
-- std::time
-  - now_ms() -> i64
-  - sleep_ms(ms: i64) -> i64
-- std::profiler
-  - uptime_ms() -> i64
-  - alloc_count() -> i64
-  - bytes_allocated() -> i64
-  - bytes_in_use() -> i64
-  - peak_bytes_in_use() -> i64
-  - gc_runs() -> i64
-  - last_freed() -> i64
-  - last_live() -> i64
-  - last_freed_bytes() -> i64
-  - last_live_bytes() -> i64
-- std::rand
-  - seed(seed: i64) -> void
-  - range(min: i64, max: i64) -> i64
-- std::fs
-  - read_text(path: string) -> string
-  - write_text(path: string, text: string) -> i64
-  - read_bytes(path: string) -> u8[]
-  - write_bytes(path: string, bytes: u8[]) -> i64
-- std::env
-  - args() -> string[]
-  - get(name: string) -> string
-  - set_var(name: string, value: string) -> i64
-  - cwd() -> string
-  - set_cwd(path: string) -> i64
 Notes
-- std::string, std::bytes, std::io, std::time, std::profiler, std::fs, and std::env are still implemented in Rust.
+- std::string and std::bytes are implemented in Rust.
+- std::fs, std::env, std::rand, std::time, std::io, std::net, and std::profiler are BirdDisk modules that delegate to host builtins.
 - BirdDisk stdlib modules can import Rust-hosted std modules.
 - Stdlib versioning is tied to the compiler version during v0.x.
 - For now, array utilities take the array length explicitly.

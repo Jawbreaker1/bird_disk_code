@@ -5,24 +5,6 @@ use crate::{Diagnostic, Span};
 const SHORT_NAME_ALLOWLIST: &[&str] = &["i", "j", "k"];
 
 pub fn lint_program(program: &Program) -> Vec<Diagnostic> {
-    let mut import_usage = program
-        .imports
-        .iter()
-        .map(|import| ImportUsage {
-            path: import.path.clone(),
-            span: import.span,
-            used: false,
-        })
-        .collect::<Vec<_>>();
-    let mut diagnostics = Vec::new();
-    for func in &program.functions {
-        lint_function(func, &mut import_usage, &mut diagnostics);
-    }
-    for book in &program.books {
-        for method in &book.methods {
-            lint_function(method, &mut import_usage, &mut diagnostics);
-        }
-    }
     let module_file = program
         .functions
         .first()
@@ -34,6 +16,32 @@ pub fn lint_program(program: &Program) -> Vec<Diagnostic> {
                 .and_then(|book| book.methods.first().map(|m| m.file.as_str()))
         })
         .unwrap_or("<module>");
+    let mut import_usage = program
+        .imports
+        .iter()
+        .map(|import| ImportUsage {
+            path: import.path.clone(),
+            span: import.span,
+            used: false,
+        })
+        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+    for func in &program.functions {
+        if func.file == module_file {
+            lint_function(func, &mut import_usage, &mut diagnostics);
+        } else {
+            lint_function(func, &mut [], &mut diagnostics);
+        }
+    }
+    for book in &program.books {
+        for method in &book.methods {
+            if method.file == module_file {
+                lint_function(method, &mut import_usage, &mut diagnostics);
+            } else {
+                lint_function(method, &mut [], &mut diagnostics);
+            }
+        }
+    }
     for import in &import_usage {
         if !import.used {
             diagnostics.push(warn_with_fix(
@@ -527,12 +535,18 @@ fn remove_span_fix(file: &str, span: Span, title: &str) -> Vec<FixIt> {
 mod tests {
     use super::lint_program;
     use crate::parse_and_typecheck;
-    use std::env;
     use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
     fn write_temp(source: &str, name: &str) -> String {
-        let mut path = env::temp_dir();
-        path.push(format!("birddisk_lint_{name}_{}.bd", std::process::id()));
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        let id = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        path.push(format!("tmp_lint_{name}_{}_{}.bd", std::process::id(), id));
         fs::write(&path, source).expect("write temp file");
         path.to_string_lossy().to_string()
     }

@@ -668,16 +668,19 @@ impl<'a> Vm<'a> {
         let state = self
             .threads
             .remove(&id)
-            .ok_or_else(|| runtime_error("E0405", "Thread handle is invalid."))?;
+            .ok_or_else(|| runtime_error("E0405", format!("Thread handle is invalid (id={id}).")))?;
         match state.status {
             ThreadStatus::Running => {
                 self.threads.insert(id, state);
-                Err(runtime_error("E0405", "Thread is still running."))
+                Err(runtime_error(
+                    "E0405",
+                    format!("Thread is still running (id={id})."),
+                ))
             }
             ThreadStatus::RunningHost(join) => {
                 let result = match join.join() {
                     Ok(result) => result,
-                    Err(_) => Err(runtime_error("E0405", "Thread panicked.")),
+                    Err(_) => Err(runtime_error("E0405", format!("Thread panicked (id={id})."))),
                 };
                 self.threads.insert(
                     id,
@@ -703,7 +706,10 @@ impl<'a> Vm<'a> {
                         status: ThreadStatus::Joined,
                     },
                 );
-                Err(runtime_error("E0405", "Thread has already been joined."))
+                Err(runtime_error(
+                    "E0405",
+                    format!("Thread has already been joined (id={id})."),
+                ))
             }
         }
     }

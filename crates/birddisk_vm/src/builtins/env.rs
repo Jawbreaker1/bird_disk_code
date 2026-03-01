@@ -9,14 +9,14 @@ impl<'a> Vm<'a> {
         args: &[Value],
     ) -> Result<Option<Value>, RuntimeError> {
         match name {
-            "std::env::args" => {
+            "std::env::args" | "std::env::host_args" => {
                 if !args.is_empty() {
                     return Err(runtime_error("E0400", "std::env::args expects 0 arguments"));
                 }
                 let values = self.alloc_env_args()?;
                 Ok(Some(values))
             }
-            "std::env::get" => {
+            "std::env::get" | "std::env::host_get" => {
                 if args.len() != 1 {
                     return Err(runtime_error("E0400", "std::env::get expects 1 argument"));
                 }
@@ -38,7 +38,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::env::set_var" => {
+            "std::env::set_var" | "std::env::host_set_var" => {
                 if args.len() != 2 {
                     return Err(runtime_error(
                         "E0400",
@@ -64,7 +64,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::env::cwd" => {
+            "std::env::cwd" | "std::env::host_cwd" => {
                 if !args.is_empty() {
                     return Err(runtime_error("E0400", "std::env::cwd expects 0 arguments"));
                 }
@@ -75,7 +75,7 @@ impl<'a> Vm<'a> {
                 })?;
                 Ok(Some(self.alloc_string(cwd)))
             }
-            "std::env::set_cwd" => {
+            "std::env::set_cwd" | "std::env::host_set_cwd" => {
                 if args.len() != 1 {
                     return Err(runtime_error(
                         "E0400",

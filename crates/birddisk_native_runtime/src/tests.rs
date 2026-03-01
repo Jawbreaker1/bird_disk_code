@@ -63,3 +63,21 @@ fn thread_registry_join_bookkeeping() {
         Err(ThreadJoinError::Missing)
     ));
 }
+
+#[test]
+fn thread_api_reports_invalid_join_handle() {
+    let mut rt = Runtime::new();
+    crate::bd_thread_join(&mut rt as *mut Runtime, 9_999);
+    let err = rt.take_error().expect("thread join error");
+    assert_eq!(err.code, "E0405");
+    assert!(err.message.contains("invalid"));
+}
+
+#[test]
+fn channel_api_reports_invalid_close_handle() {
+    let mut rt = Runtime::new();
+    crate::bd_channel_close_i64(&mut rt as *mut Runtime, 9_999);
+    let err = rt.take_error().expect("channel close error");
+    assert_eq!(err.code, "E0406");
+    assert!(err.message.contains("invalid") || err.message.contains("missing"));
+}

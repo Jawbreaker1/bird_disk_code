@@ -227,7 +227,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::Void,
         }),
+        "std::io::host_print" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Void,
+        }),
         "std::io::read_line" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::String,
+        }),
+        "std::io::host_read_line" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::String,
         }),
@@ -235,7 +243,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::I64,
         }),
+        "std::time::host_now_ms" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::time::sleep_ms" => Some(FunctionSig {
+            params: vec![Type::I64],
+            return_type: Type::I64,
+        }),
+        "std::time::host_sleep_ms" => Some(FunctionSig {
             params: vec![Type::I64],
             return_type: Type::I64,
         }),
@@ -243,7 +259,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::I64,
         }),
+        "std::profiler::host_uptime_ms" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::profiler::alloc_count" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::host_alloc_count" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::I64,
         }),
@@ -251,7 +275,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::I64,
         }),
+        "std::profiler::host_bytes_allocated" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::profiler::bytes_in_use" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::host_bytes_in_use" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::I64,
         }),
@@ -259,7 +291,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::I64,
         }),
+        "std::profiler::host_peak_bytes_in_use" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::profiler::gc_runs" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::host_gc_runs" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::I64,
         }),
@@ -267,7 +307,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::I64,
         }),
+        "std::profiler::host_last_freed" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::profiler::last_live" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::host_last_live" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::I64,
         }),
@@ -275,7 +323,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::I64,
         }),
+        "std::profiler::host_last_freed_bytes" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
         "std::profiler::last_live_bytes" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::I64,
+        }),
+        "std::profiler::host_last_live_bytes" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::I64,
         }),
@@ -283,7 +339,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::I64],
             return_type: Type::Void,
         }),
+        "std::rand::host_seed" => Some(FunctionSig {
+            params: vec![Type::I64],
+            return_type: Type::Void,
+        }),
         "std::rand::range" => Some(FunctionSig {
+            params: vec![Type::I64, Type::I64],
+            return_type: Type::I64,
+        }),
+        "std::rand::host_range" => Some(FunctionSig {
             params: vec![Type::I64, Type::I64],
             return_type: Type::I64,
         }),
@@ -307,7 +371,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::String,
         }),
+        "std::fs::host_read_text" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
         "std::fs::write_text" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::I64,
+        }),
+        "std::fs::host_write_text" => Some(FunctionSig {
             params: vec![Type::String, Type::String],
             return_type: Type::I64,
         }),
@@ -315,7 +387,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::Array(Box::new(Type::U8)),
         }),
+        "std::fs::host_read_bytes" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Array(Box::new(Type::U8)),
+        }),
         "std::fs::write_bytes" => Some(FunctionSig {
+            params: vec![Type::String, Type::Array(Box::new(Type::U8))],
+            return_type: Type::I64,
+        }),
+        "std::fs::host_write_bytes" => Some(FunctionSig {
             params: vec![Type::String, Type::Array(Box::new(Type::U8))],
             return_type: Type::I64,
         }),
@@ -339,7 +419,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: Vec::new(),
             return_type: Type::Array(Box::new(Type::String)),
         }),
+        "std::env::host_args" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::Array(Box::new(Type::String)),
+        }),
         "std::env::get" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::String,
+        }),
+        "std::env::host_get" => Some(FunctionSig {
             params: vec![Type::String],
             return_type: Type::String,
         }),
@@ -347,11 +435,23 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String, Type::String],
             return_type: Type::I64,
         }),
+        "std::env::host_set_var" => Some(FunctionSig {
+            params: vec![Type::String, Type::String],
+            return_type: Type::I64,
+        }),
         "std::env::cwd" => Some(FunctionSig {
             params: Vec::new(),
             return_type: Type::String,
         }),
+        "std::env::host_cwd" => Some(FunctionSig {
+            params: Vec::new(),
+            return_type: Type::String,
+        }),
         "std::env::set_cwd" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::I64,
+        }),
+        "std::env::host_set_cwd" => Some(FunctionSig {
             params: vec![Type::String],
             return_type: Type::I64,
         }),
@@ -411,7 +511,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::String],
             return_type: Type::Book("TcpStream".to_string()),
         }),
+        "std::net::host_connect" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Book("TcpStream".to_string()),
+        }),
         "std::net::listen" => Some(FunctionSig {
+            params: vec![Type::String],
+            return_type: Type::Book("TcpListener".to_string()),
+        }),
+        "std::net::host_listen" => Some(FunctionSig {
             params: vec![Type::String],
             return_type: Type::Book("TcpListener".to_string()),
         }),
@@ -419,7 +527,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::Book("TcpListener".to_string())],
             return_type: Type::String,
         }),
+        "std::net::host_listener_addr" => Some(FunctionSig {
+            params: vec![Type::Book("TcpListener".to_string())],
+            return_type: Type::String,
+        }),
         "std::net::accept" => Some(FunctionSig {
+            params: vec![Type::Book("TcpListener".to_string())],
+            return_type: Type::Book("TcpStream".to_string()),
+        }),
+        "std::net::host_accept" => Some(FunctionSig {
             params: vec![Type::Book("TcpListener".to_string())],
             return_type: Type::Book("TcpStream".to_string()),
         }),
@@ -427,7 +543,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::Book("TcpStream".to_string()), Type::String],
             return_type: Type::I64,
         }),
+        "std::net::host_write_text" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string()), Type::String],
+            return_type: Type::I64,
+        }),
         "std::net::read_line" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string())],
+            return_type: Type::String,
+        }),
+        "std::net::host_read_line" => Some(FunctionSig {
             params: vec![Type::Book("TcpStream".to_string())],
             return_type: Type::String,
         }),
@@ -435,7 +559,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::Book("TcpStream".to_string()), Type::I64],
             return_type: Type::String,
         }),
+        "std::net::host_read_exact" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string()), Type::I64],
+            return_type: Type::String,
+        }),
         "std::net::read_to_end" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string())],
+            return_type: Type::String,
+        }),
+        "std::net::host_read_to_end" => Some(FunctionSig {
             params: vec![Type::Book("TcpStream".to_string())],
             return_type: Type::String,
         }),
@@ -443,7 +575,15 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::Book("TcpStream".to_string()), Type::I64],
             return_type: Type::I64,
         }),
+        "std::net::host_set_read_timeout_ms" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string()), Type::I64],
+            return_type: Type::I64,
+        }),
         "std::net::close_stream" => Some(FunctionSig {
+            params: vec![Type::Book("TcpStream".to_string())],
+            return_type: Type::Void,
+        }),
+        "std::net::host_close_stream" => Some(FunctionSig {
             params: vec![Type::Book("TcpStream".to_string())],
             return_type: Type::Void,
         }),
@@ -451,11 +591,23 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             params: vec![Type::Book("TcpListener".to_string())],
             return_type: Type::Void,
         }),
+        "std::net::host_close_listener" => Some(FunctionSig {
+            params: vec![Type::Book("TcpListener".to_string())],
+            return_type: Type::Void,
+        }),
         "std::net::pool" => Some(FunctionSig {
             params: vec![Type::String, Type::I64],
             return_type: Type::Book("TcpPool".to_string()),
         }),
+        "std::net::host_pool" => Some(FunctionSig {
+            params: vec![Type::String, Type::I64],
+            return_type: Type::Book("TcpPool".to_string()),
+        }),
         "std::net::pool_get" => Some(FunctionSig {
+            params: vec![Type::Book("TcpPool".to_string())],
+            return_type: Type::Book("TcpStream".to_string()),
+        }),
+        "std::net::host_pool_get" => Some(FunctionSig {
             params: vec![Type::Book("TcpPool".to_string())],
             return_type: Type::Book("TcpStream".to_string()),
         }),
@@ -466,7 +618,18 @@ pub(crate) fn stdlib_signature(name: &str) -> Option<FunctionSig> {
             ],
             return_type: Type::Bool,
         }),
+        "std::net::host_pool_put" => Some(FunctionSig {
+            params: vec![
+                Type::Book("TcpPool".to_string()),
+                Type::Book("TcpStream".to_string()),
+            ],
+            return_type: Type::Bool,
+        }),
         "std::net::pool_close" => Some(FunctionSig {
+            params: vec![Type::Book("TcpPool".to_string())],
+            return_type: Type::Void,
+        }),
+        "std::net::host_pool_close" => Some(FunctionSig {
             params: vec![Type::Book("TcpPool".to_string())],
             return_type: Type::Void,
         }),

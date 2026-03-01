@@ -327,7 +327,8 @@ fn native_thread_join_twice_errors() {
     let source = "import std::thread.\nrule worker() -> i64:\n  yield 3.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\").\n  set first: i64 = std::thread::join(t).\n  set second: i64 = std::thread::join(t).\n  yield first + second.\nend\n";
     let err = run_source_error(source);
     assert_eq!(err.code, Some("E0405"));
-    assert_eq!(err.message, "Thread has already been joined.");
+    assert!(err.message.contains("already been joined"));
+    assert!(err.message.contains("id="));
 }
 
 #[test]
@@ -535,6 +536,52 @@ fn native_std_http_build_request_uses_crlf_and_exact_post_length() {
 fn native_std_path_helpers_module() {
     let source = "import std::path.\nimport std::string.\n\nrule main() -> i64:\n  set joined: string = std::path::join(\"alpha\", \"beta\").\n  set norm: string = std::path::normalize(\"alpha/./beta/../gamma\").\n  set base: string = std::path::basename(norm).\n  set dir: string = std::path::dirname(joined).\n  when std::string::eq(base, \"gamma\") && std::string::eq(dir, \"alpha\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
     let result = run_module_source(source, "path_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_fs_helpers_module() {
+    let path = repo_root().join("tests/stdlib/fs_text.txt");
+    let path = path.to_string_lossy().replace('\\', "\\\\");
+    let source = format!(
+        "import std::fs.\nimport std::string.\n\nrule main() -> i64:\n  set text: string = std::fs::read_text(\"{path}\").\n  when std::string::eq(text, \"BirdDisk\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+    );
+    let result = run_module_source(&source, "fs_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_rand_helpers_module() {
+    let source = "import std::rand.\n\nrule main() -> i64:\n  std::rand::seed(123).\n  set a: i64 = std::rand::range(0, 10).\n  set b: i64 = std::rand::range(-5, 5).\n  when a == 5 && b == 1:\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n";
+    let result = run_module_source(source, "rand_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_time_helpers_module() {
+    let source = "import std::time.\n\nrule main() -> i64:\n  set before: i64 = std::time::now_ms().\n  set slept: i64 = std::time::sleep_ms(0).\n  set after: i64 = std::time::now_ms().\n  when slept == 0 && after >= before:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+    let result = run_module_source(source, "time_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_profiler_helpers_module() {
+    let source = "import std::profiler.\n\nrule main() -> i64:\n  set up: i64 = std::profiler::uptime_ms().\n  set allocs: i64 = std::profiler::alloc_count().\n  when up >= 0 && allocs >= 0:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+    let result = run_module_source(source, "profiler_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_io_helpers_module() {
+    let source = "import std::io.\n\nrule main() -> i64:\n  std::io::print(\"ok\").\n  yield 1.\nend\n";
+    let result = run_module_source(source, "io_helpers_native");
+    assert_eq!(result, 1);
+}
+
+#[test]
+fn native_std_env_helpers_module() {
+    let source = "import std::env.\nimport std::string.\n\nrule main() -> i64:\n  set ignored: i64 = std::env::set_var(\"BIRDDISK_STD_ENV_NATIVE\", \"ok\").\n  set value: string = std::env::get(\"BIRDDISK_STD_ENV_NATIVE\").\n  when ignored == 1 && std::string::eq(value, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+    let result = run_module_source(source, "env_helpers_native");
     assert_eq!(result, 1);
 }
 

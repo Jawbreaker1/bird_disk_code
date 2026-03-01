@@ -13,21 +13,43 @@ impl<'a> Vm<'a> {
         args: &[Value],
     ) -> Result<Option<Value>, RuntimeError> {
         match name {
-            "std::net::connect" => self.eval_net_connect(args).map(Some),
-            "std::net::listen" => self.eval_net_listen(args).map(Some),
-            "std::net::listener_addr" => self.eval_net_listener_addr(args).map(Some),
-            "std::net::accept" => self.eval_net_accept(args).map(Some),
-            "std::net::write_text" => self.eval_net_write_text(args).map(Some),
-            "std::net::read_line" => self.eval_net_read_line(args).map(Some),
-            "std::net::read_exact" => self.eval_net_read_exact(args).map(Some),
-            "std::net::read_to_end" => self.eval_net_read_to_end(args).map(Some),
-            "std::net::set_read_timeout_ms" => self.eval_net_set_read_timeout_ms(args).map(Some),
-            "std::net::close_stream" => self.eval_net_close_stream(args).map(Some),
-            "std::net::close_listener" => self.eval_net_close_listener(args).map(Some),
-            "std::net::pool" => self.eval_net_pool(args).map(Some),
-            "std::net::pool_get" => self.eval_net_pool_get(args).map(Some),
-            "std::net::pool_put" => self.eval_net_pool_put(args).map(Some),
-            "std::net::pool_close" => self.eval_net_pool_close(args).map(Some),
+            "std::net::connect" | "std::net::host_connect" => self.eval_net_connect(args).map(Some),
+            "std::net::listen" | "std::net::host_listen" => self.eval_net_listen(args).map(Some),
+            "std::net::listener_addr" | "std::net::host_listener_addr" => {
+                self.eval_net_listener_addr(args).map(Some)
+            }
+            "std::net::accept" | "std::net::host_accept" => self.eval_net_accept(args).map(Some),
+            "std::net::write_text" | "std::net::host_write_text" => {
+                self.eval_net_write_text(args).map(Some)
+            }
+            "std::net::read_line" | "std::net::host_read_line" => {
+                self.eval_net_read_line(args).map(Some)
+            }
+            "std::net::read_exact" | "std::net::host_read_exact" => {
+                self.eval_net_read_exact(args).map(Some)
+            }
+            "std::net::read_to_end" | "std::net::host_read_to_end" => {
+                self.eval_net_read_to_end(args).map(Some)
+            }
+            "std::net::set_read_timeout_ms" | "std::net::host_set_read_timeout_ms" => {
+                self.eval_net_set_read_timeout_ms(args).map(Some)
+            }
+            "std::net::close_stream" | "std::net::host_close_stream" => {
+                self.eval_net_close_stream(args).map(Some)
+            }
+            "std::net::close_listener" | "std::net::host_close_listener" => {
+                self.eval_net_close_listener(args).map(Some)
+            }
+            "std::net::pool" | "std::net::host_pool" => self.eval_net_pool(args).map(Some),
+            "std::net::pool_get" | "std::net::host_pool_get" => {
+                self.eval_net_pool_get(args).map(Some)
+            }
+            "std::net::pool_put" | "std::net::host_pool_put" => {
+                self.eval_net_pool_put(args).map(Some)
+            }
+            "std::net::pool_close" | "std::net::host_pool_close" => {
+                self.eval_net_pool_close(args).map(Some)
+            }
             _ => Ok(None),
         }
     }

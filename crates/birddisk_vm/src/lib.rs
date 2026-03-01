@@ -366,6 +366,16 @@ mod tests {
         let err = eval(&program).unwrap_err();
         assert_eq!(err.code, "E0405");
         assert!(err.message.contains("already been joined"));
+        assert!(err.message.contains("id="));
+    }
+
+    #[test]
+    fn eval_thread_join_propagates_child_runtime_error() {
+        let source = "import std::thread.\n\nrule worker() -> i64:\n  yield 1 / 0.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\").\n  yield std::thread::join(t).\nend\n";
+        let program = parse_program(source);
+        let err = eval(&program).unwrap_err();
+        assert_eq!(err.code, "E0402");
+        assert!(err.trace.iter().any(|frame| frame.function == "worker"));
     }
 
     #[test]
@@ -583,6 +593,52 @@ mod tests {
     fn eval_std_path_helpers_module() {
         let source = "import std::path.\nimport std::string.\n\nrule main() -> i64:\n  set joined: string = std::path::join(\"alpha\", \"beta\").\n  set norm: string = std::path::normalize(\"alpha/./beta/../gamma\").\n  set base: string = std::path::basename(norm).\n  set dir: string = std::path::dirname(joined).\n  when std::string::eq(base, \"gamma\") && std::string::eq(dir, \"alpha\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
         let result = eval_module_source(source, "path_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_fs_helpers_module() {
+        let fs_path = fixture_path("tests/stdlib/fs_text.txt");
+        let fs_path = fs_path.to_string_lossy().replace('\\', "\\\\");
+        let source = format!(
+            "import std::fs.\nimport std::string.\n\nrule main() -> i64:\n  set text: string = std::fs::read_text(\"{fs_path}\").\n  when std::string::eq(text, \"BirdDisk\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n"
+        );
+        let result = eval_module_source(&source, "fs_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_rand_helpers_module() {
+        let source = "import std::rand.\n\nrule main() -> i64:\n  std::rand::seed(123).\n  set a: i64 = std::rand::range(0, 10).\n  set b: i64 = std::rand::range(-5, 5).\n  when a == 5 && b == 1:\n    yield 1.\n  otherwise:\n    yield 0.\n  end\nend\n";
+        let result = eval_module_source(source, "rand_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_time_helpers_module() {
+        let source = "import std::time.\n\nrule main() -> i64:\n  set before: i64 = std::time::now_ms().\n  set slept: i64 = std::time::sleep_ms(0).\n  set after: i64 = std::time::now_ms().\n  when slept == 0 && after >= before:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_module_source(source, "time_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_profiler_helpers_module() {
+        let source = "import std::profiler.\n\nrule main() -> i64:\n  set up: i64 = std::profiler::uptime_ms().\n  set allocs: i64 = std::profiler::alloc_count().\n  when up >= 0 && allocs >= 0:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_module_source(source, "profiler_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_io_helpers_module() {
+        let source = "import std::io.\n\nrule main() -> i64:\n  std::io::print(\"ok\").\n  yield 1.\nend\n";
+        let result = eval_module_source(source, "io_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn eval_std_env_helpers_module() {
+        let source = "import std::env.\nimport std::string.\n\nrule main() -> i64:\n  set ignored: i64 = std::env::set_var(\"BIRDDISK_STD_ENV_VM\", \"ok\").\n  set value: string = std::env::get(\"BIRDDISK_STD_ENV_VM\").\n  when ignored == 1 && std::string::eq(value, \"ok\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_module_source(source, "env_helpers_vm");
         assert_eq!(result, 1);
     }
 

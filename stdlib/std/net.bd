@@ -1,0 +1,59 @@
+rule connect(addr: string) -> TcpStream:
+  yield std::net::host_connect(addr).
+end
+
+rule listen(addr: string) -> TcpListener:
+  yield std::net::host_listen(addr).
+end
+
+rule listener_addr(listener: TcpListener) -> string:
+  yield std::net::host_listener_addr(listener).
+end
+
+rule accept(listener: TcpListener) -> TcpStream:
+  yield std::net::host_accept(listener).
+end
+
+rule write_text(stream: TcpStream, text: string) -> i64:
+  yield std::net::host_write_text(stream, text).
+end
+
+rule read_line(stream: TcpStream) -> string:
+  yield std::net::host_read_line(stream).
+end
+
+rule read_exact(stream: TcpStream, len: i64) -> string:
+  yield std::net::host_read_exact(stream, len).
+end
+
+rule read_to_end(stream: TcpStream) -> string:
+  yield std::net::host_read_to_end(stream).
+end
+
+rule set_read_timeout_ms(stream: TcpStream, timeout_ms: i64) -> i64:
+  yield std::net::host_set_read_timeout_ms(stream, timeout_ms).
+end
+
+rule close_stream(stream: TcpStream) -> void:
+  std::net::host_close_stream(stream).
+end
+
+rule close_listener(listener: TcpListener) -> void:
+  std::net::host_close_listener(listener).
+end
+
+rule pool(addr: string, max_size: i64) -> TcpPool:
+  yield std::net::host_pool(addr, max_size).
+end
+
+rule pool_get(pool: TcpPool) -> TcpStream:
+  yield std::net::host_pool_get(pool).
+end
+
+rule pool_put(pool: TcpPool, stream: TcpStream) -> bool:
+  yield std::net::host_pool_put(pool, stream).
+end
+
+rule pool_close(pool: TcpPool) -> void:
+  std::net::host_pool_close(pool).
+end

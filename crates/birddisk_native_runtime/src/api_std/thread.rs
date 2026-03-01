@@ -6,13 +6,11 @@ type EntryI64_1 = extern "C-unwind" fn(i64, i64) -> i64;
 type EntryI64_2 = extern "C-unwind" fn(i64, i64, i64) -> i64;
 
 fn thread_handle_value(rt: &Runtime, raw: u64, op: &'static str) -> Option<HeapHandle> {
-    let handle = heap_handle(rt, raw)?;
-    let header = heap_header(rt, handle)?;
-    if header.kind() != HeapKind::Object {
+    if raw > u32::MAX as u64 {
         thread_error(rt, op);
         return None;
     }
-    Some(handle)
+    Some(HeapHandle::from_u32(raw as u32))
 }
 
 fn run_thread_entry<F>(layout: Vec<Vec<usize>>, trace_frames: Vec<TraceFrame>, call: F) -> ThreadOutcome
@@ -184,34 +182,39 @@ pub extern "C-unwind" fn bd_thread_join(rt: *mut Runtime, handle: u64) -> i64 {
     if rt.has_error() {
         return 0;
     }
-    let handle = match heap_handle(rt, handle) {
-        Some(value) => value,
-        None => return 0,
-    };
-    let header = match heap_header(rt, handle) {
-        Some(value) => value,
-        None => return 0,
-    };
-    if header.kind() != HeapKind::Object {
-        thread_error(rt, "std::thread::join expects a Thread handle.");
+    let raw_handle = handle;
+    if raw_handle > u32::MAX as u64 {
+        set_error(
+            rt,
+            "E0405",
+            format!("Thread handle is invalid (raw={raw_handle})."),
+            None,
+        );
         return 0;
     }
+    let handle = HeapHandle::from_u32(raw_handle as u32);
+    let id = handle.as_u32();
     match rt.join_thread_handle(handle) {
         Ok(value) => value,
         Err(ThreadJoinError::Missing) => {
-            thread_error(rt, "Thread handle is invalid.");
+            set_error(rt, "E0405", format!("Thread handle is invalid (id={id})."), None);
             0
         }
         Err(ThreadJoinError::Running) => {
-            thread_error(rt, "Thread is still running.");
+            set_error(rt, "E0405", format!("Thread is still running (id={id})."), None);
             0
         }
         Err(ThreadJoinError::AlreadyJoined) => {
-            thread_error(rt, "Thread has already been joined.");
+            set_error(
+                rt,
+                "E0405",
+                format!("Thread has already been joined (id={id})."),
+                None,
+            );
             0
         }
         Err(ThreadJoinError::Panicked) => {
-            thread_error(rt, "Thread panicked.");
+            set_error(rt, "E0405", format!("Thread panicked (id={id})."), None);
             0
         }
         Err(ThreadJoinError::Trap(trap)) => {

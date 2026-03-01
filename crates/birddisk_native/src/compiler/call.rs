@@ -448,54 +448,60 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 self.runtime.bytes_contains,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::io::print" => {
+            "std::io::print" | "std::io::host_print" => {
                 self.call_runtime_void(self.runtime.io_print, &[self.rt_ptr, arg_vals[0]]);
                 None
             }
-            "std::io::read_line" => {
+            "std::io::read_line" | "std::io::host_read_line" => {
                 Some(self.call_runtime_value(self.runtime.io_read_line, &[self.rt_ptr]))
             }
-            "std::time::now_ms" => {
+            "std::time::now_ms" | "std::time::host_now_ms" => {
                 Some(self.call_runtime_value(self.runtime.time_now_ms, &[self.rt_ptr]))
             }
-            "std::time::sleep_ms" => Some(
+            "std::time::sleep_ms" | "std::time::host_sleep_ms" => Some(
                 self.call_runtime_value(self.runtime.time_sleep_ms, &[self.rt_ptr, arg_vals[0]]),
             ),
-            "std::profiler::uptime_ms" => {
+            "std::profiler::uptime_ms" | "std::profiler::host_uptime_ms" => {
                 Some(self.call_runtime_value(self.runtime.profiler_uptime_ms, &[self.rt_ptr]))
             }
-            "std::profiler::alloc_count" => {
+            "std::profiler::alloc_count" | "std::profiler::host_alloc_count" => {
                 Some(self.call_runtime_value(self.runtime.profiler_alloc_count, &[self.rt_ptr]))
             }
-            "std::profiler::bytes_allocated" => {
+            "std::profiler::bytes_allocated" | "std::profiler::host_bytes_allocated" => {
                 Some(self.call_runtime_value(self.runtime.profiler_bytes_allocated, &[self.rt_ptr]))
             }
-            "std::profiler::bytes_in_use" => {
+            "std::profiler::bytes_in_use" | "std::profiler::host_bytes_in_use" => {
                 Some(self.call_runtime_value(self.runtime.profiler_bytes_in_use, &[self.rt_ptr]))
             }
-            "std::profiler::peak_bytes_in_use" => Some(
-                self.call_runtime_value(self.runtime.profiler_peak_bytes_in_use, &[self.rt_ptr]),
-            ),
-            "std::profiler::gc_runs" => {
+            "std::profiler::peak_bytes_in_use" | "std::profiler::host_peak_bytes_in_use" => {
+                Some(self.call_runtime_value(
+                    self.runtime.profiler_peak_bytes_in_use,
+                    &[self.rt_ptr],
+                ))
+            }
+            "std::profiler::gc_runs" | "std::profiler::host_gc_runs" => {
                 Some(self.call_runtime_value(self.runtime.profiler_gc_runs, &[self.rt_ptr]))
             }
-            "std::profiler::last_freed" => {
+            "std::profiler::last_freed" | "std::profiler::host_last_freed" => {
                 Some(self.call_runtime_value(self.runtime.profiler_last_freed, &[self.rt_ptr]))
             }
-            "std::profiler::last_live" => {
+            "std::profiler::last_live" | "std::profiler::host_last_live" => {
                 Some(self.call_runtime_value(self.runtime.profiler_last_live, &[self.rt_ptr]))
             }
-            "std::profiler::last_freed_bytes" => Some(
-                self.call_runtime_value(self.runtime.profiler_last_freed_bytes, &[self.rt_ptr]),
-            ),
-            "std::profiler::last_live_bytes" => {
+            "std::profiler::last_freed_bytes" | "std::profiler::host_last_freed_bytes" => {
+                Some(self.call_runtime_value(
+                    self.runtime.profiler_last_freed_bytes,
+                    &[self.rt_ptr],
+                ))
+            }
+            "std::profiler::last_live_bytes" | "std::profiler::host_last_live_bytes" => {
                 Some(self.call_runtime_value(self.runtime.profiler_last_live_bytes, &[self.rt_ptr]))
             }
-            "std::rand::seed" => {
+            "std::rand::seed" | "std::rand::host_seed" => {
                 self.call_runtime_void(self.runtime.rand_seed, &[self.rt_ptr, arg_vals[0]]);
                 None
             }
-            "std::rand::range" => Some(self.call_runtime_value(
+            "std::rand::range" | "std::rand::host_range" => Some(self.call_runtime_value(
                 self.runtime.rand_range,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
@@ -527,17 +533,17 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                 );
                 None
             }
-            "std::fs::read_text" => Some(
+            "std::fs::read_text" | "std::fs::host_read_text" => Some(
                 self.call_runtime_value(self.runtime.fs_read_text, &[self.rt_ptr, arg_vals[0]]),
             ),
-            "std::fs::write_text" => Some(self.call_runtime_value(
+            "std::fs::write_text" | "std::fs::host_write_text" => Some(self.call_runtime_value(
                 self.runtime.fs_write_text,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::fs::read_bytes" => Some(
+            "std::fs::read_bytes" | "std::fs::host_read_bytes" => Some(
                 self.call_runtime_value(self.runtime.fs_read_bytes, &[self.rt_ptr, arg_vals[0]]),
             ),
-            "std::fs::write_bytes" => Some(self.call_runtime_value(
+            "std::fs::write_bytes" | "std::fs::host_write_bytes" => Some(self.call_runtime_value(
                 self.runtime.fs_write_bytes,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
@@ -554,18 +560,20 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             "std::path::dirname" => Some(
                 self.call_runtime_value(self.runtime.path_dirname, &[self.rt_ptr, arg_vals[0]]),
             ),
-            "std::env::args" => {
+            "std::env::args" | "std::env::host_args" => {
                 Some(self.call_runtime_value(self.runtime.env_args, &[self.rt_ptr]))
             }
-            "std::env::get" => {
+            "std::env::get" | "std::env::host_get" => {
                 Some(self.call_runtime_value(self.runtime.env_get, &[self.rt_ptr, arg_vals[0]]))
             }
-            "std::env::set_var" => Some(self.call_runtime_value(
+            "std::env::set_var" | "std::env::host_set_var" => Some(self.call_runtime_value(
                 self.runtime.env_set,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::env::cwd" => Some(self.call_runtime_value(self.runtime.env_cwd, &[self.rt_ptr])),
-            "std::env::set_cwd" => {
+            "std::env::cwd" | "std::env::host_cwd" => {
+                Some(self.call_runtime_value(self.runtime.env_cwd, &[self.rt_ptr]))
+            }
+            "std::env::set_cwd" | "std::env::host_set_cwd" => {
                 Some(self.call_runtime_value(self.runtime.env_set_cwd, &[self.rt_ptr, arg_vals[0]]))
             }
             "std::json::encode_i64" => Some(
@@ -595,7 +603,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
             "std::thread::join" => {
                 Some(self.call_runtime_value(self.runtime.thread_join, &[self.rt_ptr, arg_vals[0]]))
             }
-            "std::net::connect" => {
+            "std::net::connect" | "std::net::host_connect" => {
                 let layout = self
                     .books
                     .get("TcpStream")
@@ -606,7 +614,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     &[self.rt_ptr, arg_vals[0], book_id],
                 ))
             }
-            "std::net::listen" => {
+            "std::net::listen" | "std::net::host_listen" => {
                 let layout = self
                     .books
                     .get("TcpListener")
@@ -617,11 +625,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     &[self.rt_ptr, arg_vals[0], book_id],
                 ))
             }
-            "std::net::listener_addr" => Some(self.call_runtime_value(
+            "std::net::listener_addr" | "std::net::host_listener_addr" => Some(self.call_runtime_value(
                 self.runtime.net_listener_addr,
                 &[self.rt_ptr, arg_vals[0]],
             )),
-            "std::net::accept" => {
+            "std::net::accept" | "std::net::host_accept" => {
                 let layout = self
                     .books
                     .get("TcpStream")
@@ -632,36 +640,36 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     &[self.rt_ptr, arg_vals[0], stream_book_id],
                 ))
             }
-            "std::net::write_text" => Some(self.call_runtime_value(
+            "std::net::write_text" | "std::net::host_write_text" => Some(self.call_runtime_value(
                 self.runtime.net_write_text,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::net::read_line" => Some(
+            "std::net::read_line" | "std::net::host_read_line" => Some(
                 self.call_runtime_value(self.runtime.net_read_line, &[self.rt_ptr, arg_vals[0]]),
             ),
-            "std::net::read_exact" => Some(self.call_runtime_value(
+            "std::net::read_exact" | "std::net::host_read_exact" => Some(self.call_runtime_value(
                 self.runtime.net_read_exact,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::net::read_to_end" => Some(
+            "std::net::read_to_end" | "std::net::host_read_to_end" => Some(
                 self.call_runtime_value(self.runtime.net_read_to_end, &[self.rt_ptr, arg_vals[0]]),
             ),
-            "std::net::set_read_timeout_ms" => Some(self.call_runtime_value(
+            "std::net::set_read_timeout_ms" | "std::net::host_set_read_timeout_ms" => Some(self.call_runtime_value(
                 self.runtime.net_set_read_timeout_ms,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::net::close_stream" => {
+            "std::net::close_stream" | "std::net::host_close_stream" => {
                 self.call_runtime_void(self.runtime.net_close_stream, &[self.rt_ptr, arg_vals[0]]);
                 None
             }
-            "std::net::close_listener" => {
+            "std::net::close_listener" | "std::net::host_close_listener" => {
                 self.call_runtime_void(
                     self.runtime.net_close_listener,
                     &[self.rt_ptr, arg_vals[0]],
                 );
                 None
             }
-            "std::net::pool" => {
+            "std::net::pool" | "std::net::host_pool" => {
                 let layout = self
                     .books
                     .get("TcpPool")
@@ -672,7 +680,7 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     &[self.rt_ptr, arg_vals[0], arg_vals[1], pool_book_id],
                 ))
             }
-            "std::net::pool_get" => {
+            "std::net::pool_get" | "std::net::host_pool_get" => {
                 let layout = self
                     .books
                     .get("TcpStream")
@@ -683,11 +691,11 @@ impl<'a, 'b, M: Module> NativeCompiler<'a, 'b, M> {
                     &[self.rt_ptr, arg_vals[0], stream_book_id],
                 ))
             }
-            "std::net::pool_put" => Some(self.call_runtime_value(
+            "std::net::pool_put" | "std::net::host_pool_put" => Some(self.call_runtime_value(
                 self.runtime.net_pool_put,
                 &[self.rt_ptr, arg_vals[0], arg_vals[1]],
             )),
-            "std::net::pool_close" => {
+            "std::net::pool_close" | "std::net::host_pool_close" => {
                 self.call_runtime_void(self.runtime.net_pool_close, &[self.rt_ptr, arg_vals[0]]);
                 None
             }

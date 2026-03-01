@@ -9,7 +9,7 @@ impl<'a> Vm<'a> {
         args: &[Value],
     ) -> Result<Option<Value>, RuntimeError> {
         match name {
-            "std::rand::seed" => {
+            "std::rand::seed" | "std::rand::host_seed" => {
                 if args.len() != 1 {
                     return Err(runtime_error("E0400", "std::rand::seed expects 1 argument"));
                 }
@@ -24,7 +24,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::rand::range" => {
+            "std::rand::range" | "std::rand::host_range" => {
                 if args.len() != 2 {
                     return Err(runtime_error(
                         "E0400",

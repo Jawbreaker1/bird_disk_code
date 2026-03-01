@@ -25,23 +25,34 @@ fn channel_state<'a>(
     handle: u64,
     kind: ChannelKind,
 ) -> Option<&'a mut ChannelState> {
-    let handle = match heap_handle(rt, handle) {
-        Some(value) => value,
-        None => return None,
-    };
+    if handle > u32::MAX as u64 {
+        channel_error(rt, "Channel handle is invalid.");
+        return None;
+    }
+    let handle = HeapHandle::from_u32(handle as u32);
     let key = handle.as_u32();
     let mismatch = {
         let state = match rt.channels.get(&key) {
             Some(value) => value,
             None => {
-                channel_error(rt, "Channel state missing at runtime.");
+                set_error(
+                    rt,
+                    "E0406",
+                    format!("Channel state missing at runtime (id={key})."),
+                    None,
+                );
                 return None;
             }
         };
         state.kind != kind
     };
     if mismatch {
-        channel_error(rt, "Channel kind mismatch at runtime.");
+        set_error(
+            rt,
+            "E0406",
+            format!("Channel kind mismatch at runtime (id={key})."),
+            None,
+        );
         return None;
     }
     rt.channels.get_mut(&key)

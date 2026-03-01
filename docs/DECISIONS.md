@@ -429,3 +429,114 @@ Questions:
 - HTTP client/server layer timing (after `std::net`)?
 - TLS support vs host-provided TLS?
 - WASM networking support (host imports vs compile error)?
+
+---
+
+## 16) Threading + channel reliability plan (server workloads)
+status: proposed
+date: 2026-03-01
+decision: Keep public API stable, harden execution and diagnostics in phases, then add optional throughput optimizations after correctness gates pass.
+rationale: Server workloads need predictable behavior under load first; API churn and premature optimization increase risk.
+impact: VM/native runtime, typechecker guards, stdlib (`std::thread`, `std::channel`, `std::net`), diagnostics, stress tests, docs
+
+Decision A: Public API strategy
+- Option 1: Keep `std::thread`/`std::channel` public API stable in v0.x.
+  - Pros:
+    - No migration cost for existing examples and demos.
+    - Easier to compare behavior across VM/native.
+  - Cons:
+    - Preserves some rough edges (typed channels, spawn restrictions).
+- Option 2: Redesign API now (new spawn/join/channel signatures).
+  - Pros:
+    - Can clean up API shape early.
+  - Cons:
+    - High breakage risk and slower progress on reliability.
+Recommendation: Option 1.
+
+Decision B: Native execution model
+- Option 1: OS-thread-per-supported-spawn signature (current baseline).
+  - Pros:
+    - Simple mental model, lower implementation risk.
+    - Uses host scheduler and mature primitives.
+  - Cons:
+    - Less control under high thread counts.
+    - Nondeterministic behavior remains expected in native mode.
+- Option 2: Runtime-managed worker pool for all spawns.
+  - Pros:
+    - Better bounded-resource control and potential throughput gains.
+  - Cons:
+    - Larger runtime complexity and higher correctness risk.
+Recommendation: Option 1 for Sprint 24; revisit pool after stress gates pass.
+
+Decision C: Spawn argument transfer semantics
+- Option 1: Strict ownership transfer for supported sendable values only.
+  - Pros:
+    - Minimizes race conditions and aliasing bugs.
+    - Clear compile-time story.
+  - Cons:
+    - Some use-cases need message-passing refactors.
+- Option 2: Shared object/array references across threads.
+  - Pros:
+    - More ergonomic for shared state patterns.
+  - Cons:
+    - Requires synchronization primitives + memory model guarantees.
+Recommendation: Option 1 in v0.x.
+
+Decision D: Join + failure semantics
+- Option 1: `join` remains mandatory for result propagation; runtime errors return explicit thread diagnostics.
+  - Pros:
+    - Failures are visible and debuggable.
+    - Keeps behavior explicit for production services.
+  - Cons:
+    - Requires structured shutdown logic in long-running apps.
+- Option 2: Detached threads by default, no strict join discipline.
+  - Pros:
+    - Less boilerplate in simple apps.
+  - Cons:
+    - Failure visibility and lifecycle control degrade.
+Recommendation: Option 1.
+
+Decision E: Channel behavior under load
+- Option 1: Keep unbounded FIFO channels, add stronger runtime checks + diagnostics.
+  - Pros:
+    - Preserves compatibility and simple semantics.
+  - Cons:
+    - Potential unbounded memory growth if producers outrun consumers.
+- Option 2: Replace with bounded channels now.
+  - Pros:
+    - Backpressure built in.
+  - Cons:
+    - Breaking semantic shift and more migration burden.
+Recommendation: Option 1 now; evaluate bounded channel variant as additive API.
+
+Decision F: Reliability validation strategy
+- Option 1: Unit tests only.
+  - Pros:
+    - Fastest to run.
+  - Cons:
+    - Misses race/timing/pathological scheduling issues.
+- Option 2: Unit + deterministic VM fixtures + native stress harnesses + TCP server/client soak tests.
+  - Pros:
+    - Captures real concurrency failure modes.
+    - Provides measurable confidence before feature expansion.
+  - Cons:
+    - Longer CI runtime.
+Recommendation: Option 2.
+
+Planned implementation phases:
+1. Guardrails:
+   - Enforce host-bridge privacy (`host_*` not callable from app modules).
+   - Tighten thread/channel misuse diagnostics.
+2. Runtime hardening:
+   - Add join lifecycle and close-path correctness checks for long-running server threads.
+   - Add stronger channel invalid-handle/kind mismatch coverage.
+3. Validation:
+   - Add deterministic VM concurrency fixtures for ordering and shutdown paths.
+   - Add native TCP multi-client stress/soak tests with pass/fail thresholds.
+4. Throughput iteration:
+   - Profile and optimize only after reliability gates stay green.
+
+Questions:
+- Should bounded channels be added as `std::channel::bounded_*` in v0.x?
+- Should a detached-thread API be added as an explicit opt-in (`spawn_detached`)?
+- What CI duration budget is acceptable for native stress/soak tests?

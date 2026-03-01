@@ -9,7 +9,7 @@ impl<'a> Vm<'a> {
         args: &[Value],
     ) -> Result<Option<Value>, RuntimeError> {
         match name {
-            "std::fs::read_text" => {
+            "std::fs::read_text" | "std::fs::host_read_text" => {
                 if args.len() != 1 {
                     return Err(runtime_error(
                         "E0400",
@@ -29,7 +29,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::fs::write_text" => {
+            "std::fs::write_text" | "std::fs::host_write_text" => {
                 if args.len() != 2 {
                     return Err(runtime_error(
                         "E0400",
@@ -50,7 +50,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::fs::read_bytes" => {
+            "std::fs::read_bytes" | "std::fs::host_read_bytes" => {
                 if args.len() != 1 {
                     return Err(runtime_error(
                         "E0400",
@@ -70,7 +70,7 @@ impl<'a> Vm<'a> {
                     )),
                 }
             }
-            "std::fs::write_bytes" => {
+            "std::fs::write_bytes" | "std::fs::host_write_bytes" => {
                 if args.len() != 2 {
                     return Err(runtime_error(
                         "E0400",

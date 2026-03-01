@@ -1,0 +1,7 @@
+rule seed(seed: i64) -> void:
+  std::rand::host_seed(seed).
+end
+
+rule range(min: i64, max: i64) -> i64:
+  yield std::rand::host_range(min, max).
+end

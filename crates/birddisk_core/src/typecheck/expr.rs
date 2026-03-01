@@ -484,6 +484,23 @@ impl<'a> Checker<'a> {
     }
 
     pub(super) fn check_call(&mut self, span: Span, name: &str, args: &[Expr]) -> Ty {
+        if Self::is_host_bridge_call(name) && !self.current_file_is_stdlib() {
+            for arg in args {
+                self.check_expr(arg);
+            }
+            self.diagnostics.push(diagnostic(
+                "E0303",
+                "error",
+                format!("Host bridge function '{name}' is internal to stdlib modules."),
+                self.file,
+                span,
+                vec!["Use the public stdlib API instead of `host_*` functions.".to_string()],
+                vec!["SPEC.md#14-stdlib-layout".to_string()],
+                Vec::new(),
+                None,
+            ));
+            return Ty::Unknown;
+        }
         if name == "std::thread::spawn" {
             return self.check_thread_spawn(span, args);
         }

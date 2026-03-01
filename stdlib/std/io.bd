@@ -1,0 +1,7 @@
+rule print(text: string) -> void:
+  std::io::host_print(text).
+end
+
+rule read_line() -> string:
+  yield std::io::host_read_line().
+end
