@@ -47,6 +47,14 @@ Modules (BirdDisk)
   - route_file_from_code(code) -> string
   - content_type_for_file(file_name) -> string
   - is_threaded_candidate(method, path) -> bool
+- std::webconfig
+  - value(text, key) -> string
+  - value_or(text, key, fallback) -> string
+  - host(text) -> string
+  - port(text) -> i64
+  - max_requests(text) -> i64
+  - mode(text) -> string
+  - workers(text) -> i64
 
 Runtime modules (implemented in Rust)
 - std::string

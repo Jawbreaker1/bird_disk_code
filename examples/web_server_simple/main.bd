@@ -5,6 +5,7 @@ import std::net.
 import std::string.
 import std::thread.
 import std::web.
+import std::webconfig.
 
 rule trim_trailing_cr(line: string) -> string:
   set n: i64 = std::string::len(line).
@@ -43,77 +44,6 @@ end
 rule config_text() -> string:
   set path: string = std::string::concat(example_root(), "web_server_simple.conf").
   yield std::fs::read_text(path).
-end
-
-rule config_value(text: string, key: string) -> string:
-  set needle: string = std::string::concat(key, " ").
-  set idx: i64 = std::string::index_of(text, needle).
-  when idx == -1:
-    throw std::string::concat("Missing config key: ", key).
-  otherwise:
-    set value_start: i64 = idx + std::string::len(needle).
-    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
-    set line_end: i64 = std::string::index_of(tail, "\n").
-    set line: string = "".
-    when line_end == -1:
-      put line = tail.
-    otherwise:
-      put line = std::string::slice(tail, 0, line_end).
-    end
-    yield trim_trailing_cr(line).
-  end
-end
-
-rule config_value_or(text: string, key: string, fallback: string) -> string:
-  set needle: string = std::string::concat(key, " ").
-  set idx: i64 = std::string::index_of(text, needle).
-  when idx == -1:
-    yield fallback.
-  otherwise:
-    set value_start: i64 = idx + std::string::len(needle).
-    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
-    set line_end: i64 = std::string::index_of(tail, "\n").
-    set line: string = "".
-    when line_end == -1:
-      put line = tail.
-    otherwise:
-      put line = std::string::slice(tail, 0, line_end).
-    end
-    yield trim_trailing_cr(line).
-  end
-end
-
-rule config_host(text: string) -> string:
-  yield config_value(text, "host").
-end
-
-rule config_port(text: string) -> i64:
-  set port_text: string = config_value(text, "port").
-  yield std::string::to_i64(port_text).
-end
-
-rule config_max_requests(text: string) -> i64:
-  set raw: string = config_value(text, "max_requests").
-  yield std::string::to_i64(raw).
-end
-
-rule config_mode(text: string) -> string:
-  set mode: string = config_value_or(text, "mode", "single").
-  when std::string::eq(mode, "single") || std::string::eq(mode, "threaded"):
-    yield mode.
-  otherwise:
-    throw std::string::concat("Invalid mode: ", mode).
-  end
-end
-
-rule config_workers(text: string) -> i64:
-  set raw: string = config_value_or(text, "workers", "4").
-  set value: i64 = std::string::to_i64(raw).
-  when value > 0:
-    yield value.
-  otherwise:
-    throw "Invalid workers: must be > 0".
-  end
 end
 
 rule read_public_file(file_name: string) -> string:
@@ -228,11 +158,11 @@ end
 
 rule main() -> i64:
   set cfg: string = config_text().
-  set host: string = config_host(cfg).
-  set port: i64 = config_port(cfg).
-  set max_requests: i64 = config_max_requests(cfg).
-  set mode: string = config_mode(cfg).
-  set workers: i64 = config_workers(cfg).
+  set host: string = std::webconfig::host(cfg).
+  set port: i64 = std::webconfig::port(cfg).
+  set max_requests: i64 = std::webconfig::max_requests(cfg).
+  set mode: string = std::webconfig::mode(cfg).
+  set workers: i64 = std::webconfig::workers(cfg).
 
   set threaded_mode: bool = std::string::eq(mode, "threaded").
   set worker_cap: i64 = 1.

@@ -587,6 +587,13 @@ mod tests {
     }
 
     #[test]
+    fn eval_std_webconfig_helpers() {
+        let source = "import std::webconfig.\nimport std::string.\n\nrule main() -> i64:\n  set cfg: string = \"host 127.0.0.1\\nport 18080\\nmax_requests 25\\nmode threaded\\nworkers 8\\n\".\n  set default_cfg: string = \"host 127.0.0.1\\nport 18080\\nmax_requests 2\\n\".\n  set host: string = std::webconfig::host(cfg).\n  set port: i64 = std::webconfig::port(cfg).\n  set max_requests: i64 = std::webconfig::max_requests(cfg).\n  set mode: string = std::webconfig::mode(cfg).\n  set workers: i64 = std::webconfig::workers(cfg).\n  set default_mode: string = std::webconfig::mode(default_cfg).\n  set default_workers: i64 = std::webconfig::workers(default_cfg).\n  when std::string::eq(host, \"127.0.0.1\") && port == 18080 && max_requests == 25 && std::string::eq(mode, \"threaded\") && workers == 8 && std::string::eq(default_mode, \"single\") && default_workers == 4:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let result = eval_module_source(source, "webconfig_helpers_vm");
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn eval_std_http_timeout_errors() {
         let Some((port, server)) = spawn_tcp_server_once(|stream| {
             std::thread::sleep(Duration::from_millis(120));

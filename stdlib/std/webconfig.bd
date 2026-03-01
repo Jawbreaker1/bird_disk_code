@@ -1,0 +1,89 @@
+import std::string.
+
+rule trim_trailing_cr(line: string) -> string:
+  set n: i64 = std::string::len(line).
+  set cr_bytes: u8[] = array(1).
+  put cr_bytes[0] = 13.
+  set cr: string = std::string::from_bytes(cr_bytes).
+  when n <= 0:
+    yield line.
+  otherwise:
+    set last: string = std::string::slice(line, n - 1, 1).
+    when std::string::eq(last, cr):
+      yield std::string::slice(line, 0, n - 1).
+    otherwise:
+      yield line.
+    end
+  end
+end
+
+rule value(text: string, key: string) -> string:
+  set needle: string = std::string::concat(key, " ").
+  set idx: i64 = std::string::index_of(text, needle).
+  when idx == -1:
+    throw std::string::concat("Missing config key: ", key).
+  otherwise:
+    set value_start: i64 = idx + std::string::len(needle).
+    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
+    set line_end: i64 = std::string::index_of(tail, "\n").
+    set line: string = "".
+    when line_end == -1:
+      put line = tail.
+    otherwise:
+      put line = std::string::slice(tail, 0, line_end).
+    end
+    yield trim_trailing_cr(line).
+  end
+end
+
+rule value_or(text: string, key: string, fallback: string) -> string:
+  set needle: string = std::string::concat(key, " ").
+  set idx: i64 = std::string::index_of(text, needle).
+  when idx == -1:
+    yield fallback.
+  otherwise:
+    set value_start: i64 = idx + std::string::len(needle).
+    set tail: string = std::string::slice(text, value_start, std::string::len(text) - value_start).
+    set line_end: i64 = std::string::index_of(tail, "\n").
+    set line: string = "".
+    when line_end == -1:
+      put line = tail.
+    otherwise:
+      put line = std::string::slice(tail, 0, line_end).
+    end
+    yield trim_trailing_cr(line).
+  end
+end
+
+rule host(text: string) -> string:
+  yield value(text, "host").
+end
+
+rule port(text: string) -> i64:
+  set port_text: string = value(text, "port").
+  yield std::string::to_i64(port_text).
+end
+
+rule max_requests(text: string) -> i64:
+  set raw: string = value(text, "max_requests").
+  yield std::string::to_i64(raw).
+end
+
+rule mode(text: string) -> string:
+  set parsed: string = value_or(text, "mode", "single").
+  when std::string::eq(parsed, "single") || std::string::eq(parsed, "threaded"):
+    yield parsed.
+  otherwise:
+    throw std::string::concat("Invalid mode: ", parsed).
+  end
+end
+
+rule workers(text: string) -> i64:
+  set raw: string = value_or(text, "workers", "4").
+  set parsed: i64 = std::string::to_i64(raw).
+  when parsed > 0:
+    yield parsed.
+  otherwise:
+    throw "Invalid workers: must be > 0".
+  end
+end

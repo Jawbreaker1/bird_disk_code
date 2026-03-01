@@ -686,6 +686,15 @@ mod tests {
     }
 
     #[test]
+    fn typecheck_accepts_std_webconfig_import_via_module_resolution() {
+        let source = "import std::webconfig.\nimport std::string.\n\nrule main() -> i64:\n  set cfg: string = \"host 127.0.0.1\\nport 18080\\nmax_requests 2\\n\".\n  set host: string = std::webconfig::host(cfg).\n  set mode: string = std::webconfig::mode(cfg).\n  set workers: i64 = std::webconfig::workers(cfg).\n  when std::string::eq(host, \"127.0.0.1\") && std::string::eq(mode, \"single\") && workers == 4:\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n";
+        let path = write_repo_temp("typecheck_std_webconfig", source);
+        let result = parse_and_typecheck(path.to_str().unwrap());
+        fs::remove_file(path).ok();
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn typecheck_accepts_std_thread_spawn_join() {
         let diags = check(
             "import std::thread.\nrule worker(value: i64) -> i64:\n  yield value + 1.\nend\n\nrule main() -> i64:\n  set t: Thread = std::thread::spawn(\"worker\", 2).\n  yield std::thread::join(t).\nend\n",

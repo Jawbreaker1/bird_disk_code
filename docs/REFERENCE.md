@@ -323,6 +323,19 @@ See `docs/DIAGNOSTICS.md` for full error list.
   - Route mapping covers `/`, `/hello`, `/features`, `/about`, `/style.css`, `/app.js`.
   - `is_threaded_candidate` currently allows threaded serving only for static GET routes (excludes `/api/status`, `/health`, `/shutdown`).
 
+### std::webconfig (BirdDisk module)
+- `value(text: string, key: string) -> string`
+- `value_or(text: string, key: string, fallback: string) -> string`
+- `host(text: string) -> string`
+- `port(text: string) -> i64`
+- `max_requests(text: string) -> i64`
+- `mode(text: string) -> string`
+- `workers(text: string) -> i64`
+- Current scope:
+  - Parses line-based `key value` web server configuration text.
+  - Provides defaults for `mode` (`single`) and `workers` (`4`).
+  - Validates that `mode` is `single|threaded` and `workers > 0`.
+
 ### std::math (BirdDisk module)
 - `add(a: i64, b: i64) -> i64`
 - `sub(a: i64, b: i64) -> i64`
