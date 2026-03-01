@@ -31,8 +31,17 @@ rule serve_static_route_stream(stream: TcpStream, route: i64) -> i64:
   end
 
   set response: string = std::web::build_response(status, reason, content_type, body).
-  set wrote: i64 = std::net::write_text(stream, response).
-  std::net::close_stream(stream).
+  set wrote: i64 = -1.
+  try:
+    put wrote = std::net::write_text(stream, response).
+  catch write_error:
+    put wrote = -1.
+  end
+  try:
+    std::net::close_stream(stream).
+  catch close_error:
+    set ignore_close: i64 = 0.
+  end
 
   when wrote > 0:
     yield 1.
@@ -96,8 +105,17 @@ rule serve_request_inline(stream: TcpStream, method: string, path: string, serve
   end
 
   set response: string = std::web::build_response(status, reason, content_type, body).
-  set wrote: i64 = std::net::write_text(stream, response).
-  std::net::close_stream(stream).
+  set wrote: i64 = -1.
+  try:
+    put wrote = std::net::write_text(stream, response).
+  catch write_error:
+    put wrote = -1.
+  end
+  try:
+    std::net::close_stream(stream).
+  catch close_error:
+    set ignore_close: i64 = 0.
+  end
 
   when wrote <= 0:
     yield -1.
