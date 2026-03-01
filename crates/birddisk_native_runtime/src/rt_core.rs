@@ -2,7 +2,7 @@ use birddisk_core::runtime as abi;
 use birddisk_core::TraceFrame;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, Write};
+use std::io::BufRead;
 use std::net::{TcpListener, TcpStream};
 use std::time::Instant;
 
@@ -604,7 +604,6 @@ impl Runtime {
     pub(crate) fn push_output(&mut self, value: &str) {
         if self.stdout_live {
             print!("{value}");
-            let _ = std::io::stdout().flush();
         }
         self.output.push_str(value);
     }
