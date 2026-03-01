@@ -518,12 +518,14 @@ Goal:
 
 Implement:
 - [ ] Define and document a strict host-kernel boundary (what stays Rust: GC/memory ABI + IO/net/thread/fs/time host syscalls only)
+- [x] Enforce host-bridge privacy for stdlib internals (disallow app calls to `std::<module>::host_*` from non-stdlib code)
 - [ ] Move selected high-level stdlib APIs from Rust to BirdDisk modules (phase 1 target set)
 - [ ] Extract reusable BirdDisk-native web helpers from the webserver example into stdlib modules (response helpers, route helpers, config parsing)
 - [ ] Update examples to prefer BirdDisk-native stdlib modules over inline app-local helpers
 
 Add tests:
 - [ ] VM/native parity tests for each migrated API
+- [x] Typecheck guard tests: `host_*` calls error in user modules, allowed inside `stdlib/std/*.bd`
 - [ ] WASM compatibility checks for migrated non-host-dependent APIs
 - [ ] End-to-end demo test proving the web app still works while using migrated BirdDisk-native libs
 
@@ -534,13 +536,14 @@ Acceptance:
 
 ## Sprint 24 — Parallel server throughput
 Implement:
+- [x] Approve threading/channel reliability decisions in `docs/DECISIONS.md` (section "16) Threading + channel reliability plan")
 - [ ] True per-connection parallel execution model for server workloads (native + VM parity plan)
 - [ ] Thread-safe shared state/message patterns for server handlers
 - [ ] Server template demonstrating concurrent request handling under load
 
 Add tests:
-- [ ] Multi-client parallel stress tests with deterministic pass criteria
-- [ ] Join/error-path diagnostics for long-running server threads
+- [x] Multi-client parallel stress tests with deterministic pass criteria (`scripts/web_server_simple_threaded_stress.sh`)
+- [x] Join/error-path diagnostics for long-running server threads
 
 Acceptance:
 - Concurrent clients are handled reliably with measured throughput gain over single-loop mode.
