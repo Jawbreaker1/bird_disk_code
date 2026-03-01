@@ -152,6 +152,7 @@ rule main() -> i64:
 
   set served: i64 = 0.
   set running: bool = true.
+  set read_timeout_ms: i64 = 40.
 
   when threaded_mode:
     set pending_threads: Thread[] = array(worker_cap).
@@ -177,7 +178,7 @@ rule main() -> i64:
       otherwise:
         set stream: TcpStream = std::net::accept(listener).
         try:
-          set timeout_applied: i64 = std::net::set_read_timeout_ms(stream, 2000).
+          set timeout_applied: i64 = std::net::set_read_timeout_ms(stream, read_timeout_ms).
         catch timeout_error:
           set timeout_noop: i64 = 0.
         end
@@ -192,53 +193,28 @@ rule main() -> i64:
         end
 
         when request_ready && std::string::len(request_line) > 0:
-          set reading: bool = true.
-          set header_read_ok: bool = true.
-          repeat while reading && header_read_ok:
-            try:
-              set line_raw: string = std::net::read_line(stream).
-              set line: string = std::web::trim_trailing_cr(line_raw).
-              when std::string::len(line) == 0:
-                put reading = false.
-              otherwise:
-                put reading = true.
-              end
-            catch header_error:
-              put header_read_ok = false.
-              put reading = false.
-            end
-          end
+          set method: string = std::web::request_method(request_line).
+          set path: string = std::web::route_path(request_line).
+          set thread_candidate: bool = std::web::is_threaded_candidate(method, path).
 
-          when header_read_ok:
-            set method: string = std::web::request_method(request_line).
-            set path: string = std::web::route_path(request_line).
-            set thread_candidate: bool = std::web::is_threaded_candidate(method, path).
-
-            when thread_candidate:
-              set route: i64 = std::web::route_code(path).
-              set t: Thread = std::thread::spawn("serve_static_route_stream", stream, route).
-              put pending_threads[queue_tail] = t.
-              put pending_paths[queue_tail] = path.
-              put queue_tail = (queue_tail + 1) % worker_cap.
-              put pending_count = pending_count + 1.
-            otherwise:
-              set outcome: i64 = serve_request_inline(stream, method, path, served).
-              when outcome <= 0:
-                std::io::print(std::string::concat("serve failed path: ", path)).
-                std::io::print("\n").
-              otherwise:
-                put served = served + 1.
-                std::io::print(std::string::concat("served path: ", path)).
-                std::io::print("\n").
-                set keep_after_outcome: bool = running && outcome != 2.
-                put running = keep_after_outcome.
-              end
-            end
+          when thread_candidate:
+            set route: i64 = std::web::route_code(path).
+            set t: Thread = std::thread::spawn("serve_static_route_stream", stream, route).
+            put pending_threads[queue_tail] = t.
+            put pending_paths[queue_tail] = path.
+            put queue_tail = (queue_tail + 1) % worker_cap.
+            put pending_count = pending_count + 1.
           otherwise:
-            try:
-              std::net::close_stream(stream).
-            catch close_on_header_error:
-              set close_header_noop: i64 = 0.
+            set outcome: i64 = serve_request_inline(stream, method, path, served).
+            when outcome <= 0:
+              std::io::print(std::string::concat("serve failed path: ", path)).
+              std::io::print("\n").
+            otherwise:
+              put served = served + 1.
+              std::io::print(std::string::concat("served path: ", path)).
+              std::io::print("\n").
+              set keep_after_outcome: bool = running && outcome != 2.
+              put running = keep_after_outcome.
             end
           end
         otherwise:
@@ -272,7 +248,7 @@ rule main() -> i64:
     repeat while running:
       set stream_single: TcpStream = std::net::accept(listener).
       try:
-        set timeout_applied_single: i64 = std::net::set_read_timeout_ms(stream_single, 2000).
+        set timeout_applied_single: i64 = std::net::set_read_timeout_ms(stream_single, read_timeout_ms).
       catch timeout_error_single:
         set timeout_single_noop: i64 = 0.
       end
@@ -287,43 +263,18 @@ rule main() -> i64:
       end
 
       when request_ready_single && std::string::len(request_line_single) > 0:
-        set reading_single: bool = true.
-        set header_read_ok_single: bool = true.
-        repeat while reading_single && header_read_ok_single:
-          try:
-            set line_single_raw: string = std::net::read_line(stream_single).
-            set line_single: string = std::web::trim_trailing_cr(line_single_raw).
-            when std::string::len(line_single) == 0:
-              put reading_single = false.
-            otherwise:
-              put reading_single = true.
-            end
-          catch header_error_single:
-            put header_read_ok_single = false.
-            put reading_single = false.
-          end
-        end
-
-        when header_read_ok_single:
-          set method_single: string = std::web::request_method(request_line_single).
-          set path_single: string = std::web::route_path(request_line_single).
-          set outcome_single: i64 = serve_request_inline(stream_single, method_single, path_single, served).
-          when outcome_single <= 0:
-            std::io::print(std::string::concat("serve failed path: ", path_single)).
-            std::io::print("\n").
-          otherwise:
-            put served = served + 1.
-            std::io::print(std::string::concat("served path: ", path_single)).
-            std::io::print("\n").
-            set keep_after_outcome_single: bool = running && outcome_single != 2.
-            put running = keep_after_outcome_single.
-          end
+        set method_single: string = std::web::request_method(request_line_single).
+        set path_single: string = std::web::route_path(request_line_single).
+        set outcome_single: i64 = serve_request_inline(stream_single, method_single, path_single, served).
+        when outcome_single <= 0:
+          std::io::print(std::string::concat("serve failed path: ", path_single)).
+          std::io::print("\n").
         otherwise:
-          try:
-            std::net::close_stream(stream_single).
-          catch close_on_header_error_single:
-            set close_header_single_noop: i64 = 0.
-          end
+          put served = served + 1.
+          std::io::print(std::string::concat("served path: ", path_single)).
+          std::io::print("\n").
+          set keep_after_outcome_single: bool = running && outcome_single != 2.
+          put running = keep_after_outcome_single.
         end
       otherwise:
         try:
