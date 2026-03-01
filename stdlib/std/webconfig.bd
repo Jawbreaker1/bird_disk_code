@@ -1,21 +1,5 @@
 import std::string.
-
-rule trim_trailing_cr(line: string) -> string:
-  set n: i64 = std::string::len(line).
-  set cr_bytes: u8[] = array(1).
-  put cr_bytes[0] = 13.
-  set cr: string = std::string::from_bytes(cr_bytes).
-  when n <= 0:
-    yield line.
-  otherwise:
-    set last: string = std::string::slice(line, n - 1, 1).
-    when std::string::eq(last, cr):
-      yield std::string::slice(line, 0, n - 1).
-    otherwise:
-      yield line.
-    end
-  end
-end
+import std::web.
 
 rule value(text: string, key: string) -> string:
   set needle: string = std::string::concat(key, " ").
@@ -32,7 +16,7 @@ rule value(text: string, key: string) -> string:
     otherwise:
       put line = std::string::slice(tail, 0, line_end).
     end
-    yield trim_trailing_cr(line).
+    yield std::web::trim_trailing_cr(line).
   end
 end
 
@@ -51,7 +35,7 @@ rule value_or(text: string, key: string, fallback: string) -> string:
     otherwise:
       put line = std::string::slice(tail, 0, line_end).
     end
-    yield trim_trailing_cr(line).
+    yield std::web::trim_trailing_cr(line).
   end
 end
 

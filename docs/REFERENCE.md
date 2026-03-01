@@ -310,6 +310,7 @@ See `docs/DIAGNOSTICS.md` for full error list.
   - If neither `Content-Length` nor chunked transfer encoding is present, falls back to exact EOF body reads.
 
 ### std::web (BirdDisk module)
+- `trim_trailing_cr(line: string) -> string`
 - `build_response(status_code: i64, reason: string, content_type: string, body: string) -> string`
 - `request_method(request_line: string) -> string`
 - `canonical_path(path: string) -> string`

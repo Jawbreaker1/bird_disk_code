@@ -7,23 +7,6 @@ import std::thread.
 import std::web.
 import std::webconfig.
 
-rule trim_trailing_cr(line: string) -> string:
-  set n: i64 = std::string::len(line).
-  set cr_bytes: u8[] = array(1).
-  put cr_bytes[0] = 13.
-  set cr: string = std::string::from_bytes(cr_bytes).
-  when n <= 0:
-    yield line.
-  otherwise:
-    set last: string = std::string::slice(line, n - 1, 1).
-    when std::string::eq(last, cr):
-      yield std::string::slice(line, 0, n - 1).
-    otherwise:
-      yield line.
-    end
-  end
-end
-
 rule example_root() -> string:
   set cwd: string = std::env::cwd().
   when std::string::contains(cwd, "/examples/web_server_simple"):
@@ -206,12 +189,12 @@ rule main() -> i64:
       otherwise:
         set stream: TcpStream = std::net::accept(listener).
         set request_line_raw: string = std::net::read_line(stream).
-        set request_line: string = trim_trailing_cr(request_line_raw).
+        set request_line: string = std::web::trim_trailing_cr(request_line_raw).
 
         set reading: bool = true.
         repeat while reading:
           set line_raw: string = std::net::read_line(stream).
-          set line: string = trim_trailing_cr(line_raw).
+          set line: string = std::web::trim_trailing_cr(line_raw).
           when std::string::len(line) == 0:
             put reading = false.
           otherwise:
@@ -266,12 +249,12 @@ rule main() -> i64:
     repeat while running:
       set stream_single: TcpStream = std::net::accept(listener).
       set request_line_single_raw: string = std::net::read_line(stream_single).
-      set request_line_single: string = trim_trailing_cr(request_line_single_raw).
+      set request_line_single: string = std::web::trim_trailing_cr(request_line_single_raw).
 
       set reading_single: bool = true.
       repeat while reading_single:
         set line_single_raw: string = std::net::read_line(stream_single).
-        set line_single: string = trim_trailing_cr(line_single_raw).
+        set line_single: string = std::web::trim_trailing_cr(line_single_raw).
         when std::string::len(line_single) == 0:
           put reading_single = false.
         otherwise:

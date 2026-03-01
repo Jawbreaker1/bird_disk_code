@@ -39,6 +39,7 @@ Modules (BirdDisk)
   - headers(response) -> string
   - body(response) -> string
 - std::web
+  - trim_trailing_cr(line) -> string
   - build_response(status_code, reason, content_type, body) -> string
   - request_method(request_line) -> string
   - canonical_path(path) -> string
