@@ -51,6 +51,35 @@ impl<'a> FuncCompiler<'a> {
                         ));
                     }
                 }
+                if self.emit_enum_constructor(name, args)? {
+                    return Ok(());
+                }
+                if let Some(sig) = self.functions.get(name) {
+                    if sig.params.len() != args.len() {
+                        return Err(wasm_error(
+                            "E0400",
+                            format!(
+                                "Wrong number of arguments for '{name}': expected {}, got {}.",
+                                sig.params.len(),
+                                args.len()
+                            ),
+                        ));
+                    }
+                    let arg_locals = self.emit_call_args(args, &sig.params)?;
+                    for local in arg_locals {
+                        self.push_line(format!("local.get {local}"));
+                    }
+                    self.push_line(format!("call ${name}"));
+                    if matches!(sig.return_type, Type::Void) {
+                        self.emit_error_check();
+                        return Ok(());
+                    }
+                    let ret_local = self.temp_local(sig.return_type.clone());
+                    self.emit_local_set(ret_local, &sig.return_type);
+                    self.emit_error_check();
+                    self.push_line(format!("local.get {ret_local}"));
+                    return Ok(());
+                }
                 if self.emit_string_call(name, args)? {
                     return Ok(());
                 }
@@ -85,35 +114,6 @@ impl<'a> FuncCompiler<'a> {
                     return Ok(());
                 }
                 if self.emit_channel_call(name, args)? {
-                    return Ok(());
-                }
-                if self.emit_enum_constructor(name, args)? {
-                    return Ok(());
-                }
-                if let Some(sig) = self.functions.get(name) {
-                    if sig.params.len() != args.len() {
-                        return Err(wasm_error(
-                            "E0400",
-                            format!(
-                                "Wrong number of arguments for '{name}': expected {}, got {}.",
-                                sig.params.len(),
-                                args.len()
-                            ),
-                        ));
-                    }
-                    let arg_locals = self.emit_call_args(args, &sig.params)?;
-                    for local in arg_locals {
-                        self.push_line(format!("local.get {local}"));
-                    }
-                    self.push_line(format!("call ${name}"));
-                    if matches!(sig.return_type, Type::Void) {
-                        self.emit_error_check();
-                        return Ok(());
-                    }
-                    let ret_local = self.temp_local(sig.return_type.clone());
-                    self.emit_local_set(ret_local, &sig.return_type);
-                    self.emit_error_check();
-                    self.push_line(format!("local.get {ret_local}"));
                     return Ok(());
                 }
                 if let Some((base, method)) = name.split_once("::") {

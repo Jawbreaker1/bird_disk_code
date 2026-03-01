@@ -22,9 +22,6 @@ impl<'a> Checker<'a> {
         let has_std_fs = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "fs"
         });
-        let has_std_path = program.imports.iter().any(|import| {
-            import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "path"
-        });
         let has_std_env = program.imports.iter().any(|import| {
             import.path.len() == 2 && import.path[0] == "std" && import.path[1] == "env"
         });
@@ -133,12 +130,6 @@ impl<'a> Checker<'a> {
                 vec![Ty::String, Ty::Array(Box::new(Ty::U8))],
                 Ty::I64,
             );
-        }
-        if has_std_path {
-            self.insert_function("std::path::join", vec![Ty::String, Ty::String], Ty::String);
-            self.insert_function("std::path::normalize", vec![Ty::String], Ty::String);
-            self.insert_function("std::path::basename", vec![Ty::String], Ty::String);
-            self.insert_function("std::path::dirname", vec![Ty::String], Ty::String);
         }
         if has_std_env {
             self.insert_function(

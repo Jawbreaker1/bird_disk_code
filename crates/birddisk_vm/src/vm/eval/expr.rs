@@ -17,11 +17,11 @@ impl<'a> Vm<'a> {
                     if let Some(value) = self.eval_enum_constructor(name, &values)? {
                         return Ok(value);
                     }
-                    if let Some(value) = self.eval_builtin_call(name, &values)? {
-                        return Ok(value);
-                    }
                     if let Some(function) = self.functions.get(name).copied() {
                         return self.eval_function(function, &values);
+                    }
+                    if let Some(value) = self.eval_builtin_call(name, &values)? {
+                        return Ok(value);
                     }
                     if let Some((base, method)) = name.split_once("::") {
                         if base == "std" {

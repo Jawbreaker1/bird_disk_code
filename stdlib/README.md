@@ -68,6 +68,11 @@ Modules (BirdDisk)
   - config_text() -> string
   - public_file_path(file_name) -> string
   - read_public_file(file_name) -> string
+- std::path
+  - join(left: string, right: string) -> string
+  - normalize(path: string) -> string
+  - basename(path: string) -> string
+  - dirname(path: string) -> string
 
 Runtime modules (implemented in Rust)
 - std::string
@@ -111,11 +116,6 @@ Runtime modules (implemented in Rust)
   - write_text(path: string, text: string) -> i64
   - read_bytes(path: string) -> u8[]
   - write_bytes(path: string, bytes: u8[]) -> i64
-- std::path
-  - join(left: string, right: string) -> string
-  - normalize(path: string) -> string
-  - basename(path: string) -> string
-  - dirname(path: string) -> string
 - std::env
   - args() -> string[]
   - get(name: string) -> string
@@ -131,7 +131,7 @@ Runtime modules (implemented in Rust)
   - decode_string(text: string) -> string
 
 Notes
-- std::string, std::bytes, std::io, std::time, std::profiler, std::fs, std::path, std::env, and std::json are still implemented in Rust.
+- std::string, std::bytes, std::io, std::time, std::profiler, std::fs, std::env, and std::json are still implemented in Rust.
 - BirdDisk stdlib modules can import Rust-hosted std modules.
 - Stdlib versioning is tied to the compiler version during v0.x.
 - For now, array utilities take the array length explicitly.

@@ -716,6 +716,16 @@ mod tests {
     }
 
     #[test]
+    fn wasm_runs_std_path_helpers_module() {
+        let result = compile_and_run_module(
+            "import std::path.\nimport std::string.\n\nrule main() -> i64:\n  set joined: string = std::path::join(\"alpha\", \"beta\").\n  set norm: string = std::path::normalize(\"alpha/./beta/../gamma\").\n  set base: string = std::path::basename(norm).\n  set dir: string = std::path::dirname(joined).\n  when std::string::eq(base, \"gamma\") && std::string::eq(dir, \"alpha\"):\n    yield 1.\n  otherwise:\n    yield -1.\n  end\nend\n",
+            "wasm_path_helpers",
+        )
+        .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
     fn wasm_runs_enum_match() {
         let result = compile_and_run(
             "enum Choice:\n  case One.\n  case Two(value: i64).\nend\n\nrule main() -> i64:\n  set value: Choice = Choice::Two(9).\n  match value:\n    case Choice::One:\n      yield 1.\n    case Choice::Two(v):\n      yield v + 1.\n    otherwise:\n      yield 0.\n  end\nend\n",

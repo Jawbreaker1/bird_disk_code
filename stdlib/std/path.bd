@@ -1,0 +1,255 @@
+import std::string.
+
+rule starts_with(text: string, prefix: string) -> bool:
+  when std::string::len(prefix) > std::string::len(text):
+    yield false.
+  otherwise:
+    yield std::string::eq(std::string::slice(text, 0, std::string::len(prefix)), prefix).
+  end
+end
+
+rule ends_with(text: string, suffix: string) -> bool:
+  set n_text: i64 = std::string::len(text).
+  set n_suffix: i64 = std::string::len(suffix).
+  when n_suffix > n_text:
+    yield false.
+  otherwise:
+    set start: i64 = n_text - n_suffix.
+    yield std::string::eq(std::string::slice(text, start, n_suffix), suffix).
+  end
+end
+
+rule last_index_of(text: string, needle: string) -> i64:
+  set offset: i64 = 0.
+  set found: i64 = -1.
+  set n_text: i64 = std::string::len(text).
+  repeat while offset <= n_text:
+    set tail: string = std::string::slice(text, offset, n_text - offset).
+    set idx: i64 = std::string::index_of(tail, needle).
+    when idx == -1:
+      put offset = n_text + 1.
+    otherwise:
+      put found = offset + idx.
+      put offset = found + 1.
+    end
+  end
+  yield found.
+end
+
+rule trim_trailing_slashes_keep_root(path: string) -> string:
+  set out: string = path.
+  set trimming: bool = true.
+  repeat while trimming:
+    set n: i64 = std::string::len(out).
+    when n > 1:
+      set last: string = std::string::slice(out, n - 1, 1).
+      when std::string::eq(last, "/"):
+        put out = std::string::slice(out, 0, n - 1).
+      otherwise:
+        put trimming = false.
+      end
+    otherwise:
+      put trimming = false.
+    end
+  end
+  yield out.
+end
+
+rule collapse_slashes(path: string) -> string:
+  set idx: i64 = 0.
+  set n: i64 = std::string::len(path).
+  set out: string = "".
+  set prev_slash: bool = false.
+  repeat while idx < n:
+    set ch: string = std::string::slice(path, idx, 1).
+    set is_slash: bool = std::string::eq(ch, "/").
+    when is_slash && prev_slash:
+      set noop: i64 = 0.
+    otherwise:
+      put out = std::string::concat(out, ch).
+    end
+    put prev_slash = is_slash.
+    put idx = idx + 1.
+  end
+  yield out.
+end
+
+rule append_segment(base: string, segment: string) -> string:
+  when std::string::len(base) == 0:
+    yield segment.
+  otherwise:
+    yield std::string::concat(std::string::concat(base, "/"), segment).
+  end
+end
+
+rule last_segment(path: string) -> string:
+  set idx: i64 = last_index_of(path, "/").
+  when idx == -1:
+    yield path.
+  otherwise:
+    yield std::string::slice(path, idx + 1, std::string::len(path) - idx - 1).
+  end
+end
+
+rule drop_last_segment(path: string) -> string:
+  set idx: i64 = last_index_of(path, "/").
+  when idx == -1:
+    yield "".
+  otherwise:
+    yield std::string::slice(path, 0, idx).
+  end
+end
+
+rule join(left: string, right: string) -> string:
+  when std::string::len(left) == 0:
+    yield right.
+  otherwise:
+    when std::string::len(right) == 0:
+      yield left.
+    otherwise:
+      when starts_with(right, "/"):
+        yield right.
+      otherwise:
+        when ends_with(left, "/"):
+          yield std::string::concat(left, right).
+        otherwise:
+          yield std::string::concat(std::string::concat(left, "/"), right).
+        end
+      end
+    end
+  end
+end
+
+rule normalize(path: string) -> string:
+  set raw: string = collapse_slashes(path).
+  set is_abs: bool = starts_with(raw, "/").
+  set out: string = "".
+  set n: i64 = std::string::len(raw).
+  set idx: i64 = 0.
+  repeat while idx <= n:
+    set rest: string = std::string::slice(raw, idx, n - idx).
+    set slash: i64 = std::string::index_of(rest, "/").
+    set segment: string = "".
+    when slash == -1:
+      put segment = rest.
+      put idx = n + 1.
+    otherwise:
+      put segment = std::string::slice(rest, 0, slash).
+      put idx = idx + slash + 1.
+    end
+
+    when std::string::len(segment) == 0 || std::string::eq(segment, "."):
+      set noop: i64 = 0.
+    otherwise:
+      when std::string::eq(segment, ".."):
+        when std::string::len(out) == 0:
+          when !is_abs:
+            put out = append_segment(out, "..").
+          otherwise:
+            set noop2: i64 = 0.
+          end
+        otherwise:
+          set tail: string = last_segment(out).
+          when std::string::eq(tail, ".."):
+            when !is_abs:
+              put out = append_segment(out, "..").
+            otherwise:
+              set noop3: i64 = 0.
+            end
+          otherwise:
+            put out = drop_last_segment(out).
+          end
+        end
+      otherwise:
+        put out = append_segment(out, segment).
+      end
+    end
+  end
+
+  when is_abs:
+    when std::string::len(out) == 0:
+      yield "/".
+    otherwise:
+      yield std::string::concat("/", out).
+    end
+  otherwise:
+    when std::string::len(out) == 0:
+      yield ".".
+    otherwise:
+      yield out.
+    end
+  end
+end
+
+rule basename(path: string) -> string:
+  set raw: string = collapse_slashes(path).
+  when std::string::len(raw) == 0:
+    yield "".
+  otherwise:
+    set trimmed: string = trim_trailing_slashes_keep_root(raw).
+    when std::string::eq(trimmed, "/") || std::string::eq(trimmed, ".") || std::string::eq(trimmed, ".."):
+      yield "".
+    otherwise:
+      set n: i64 = std::string::len(trimmed).
+      when n >= 2 && ends_with(trimmed, "/."):
+        yield basename(std::string::slice(trimmed, 0, n - 2)).
+      otherwise:
+        when n >= 3 && ends_with(trimmed, "/.."):
+          yield "".
+        otherwise:
+          set idx: i64 = last_index_of(trimmed, "/").
+          when idx == -1:
+            yield trimmed.
+          otherwise:
+            yield std::string::slice(trimmed, idx + 1, std::string::len(trimmed) - idx - 1).
+          end
+        end
+      end
+    end
+  end
+end
+
+rule dirname(path: string) -> string:
+  set raw: string = collapse_slashes(path).
+  when std::string::len(raw) == 0:
+    yield ".".
+  otherwise:
+    set trimmed: string = trim_trailing_slashes_keep_root(raw).
+    when std::string::eq(trimmed, "/"):
+      yield "/".
+    otherwise:
+      when std::string::eq(trimmed, ".") || std::string::eq(trimmed, ".."):
+        yield ".".
+      otherwise:
+        set n: i64 = std::string::len(trimmed).
+        when n >= 2 && ends_with(trimmed, "/."):
+          yield dirname(std::string::slice(trimmed, 0, n - 2)).
+        otherwise:
+          when n >= 3 && ends_with(trimmed, "/.."):
+            set base: string = std::string::slice(trimmed, 0, n - 3).
+            when std::string::len(base) == 0:
+              when starts_with(trimmed, "/"):
+                yield "/".
+              otherwise:
+                yield ".".
+              end
+            otherwise:
+              yield base.
+            end
+          otherwise:
+            set idx: i64 = last_index_of(trimmed, "/").
+            when idx == -1:
+              yield ".".
+            otherwise:
+              when idx == 0:
+                yield "/".
+              otherwise:
+                yield std::string::slice(trimmed, 0, idx).
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
